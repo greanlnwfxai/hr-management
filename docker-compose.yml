@@ -1,0 +1,56 @@
+services:
+  web:
+    build: ./apps/web
+    container_name: hr-web
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      NEXT_PUBLIC_API_URL: http://localhost:4002
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build: ./apps/api
+    container_name: hr-api
+    ports:
+      - "4002:4002"
+    environment:
+      PORT: 4002
+      DATABASE_URL: postgresql://hr_user:hr_password@db:5432/hr_management
+      JWT_SECRET: change_me
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  db:
+    image: postgres:16
+    container_name: hr-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: hr_management
+      POSTGRES_USER: hr_user
+      POSTGRES_PASSWORD: hr_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hr_user -d hr_management"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres_data:
+    driver: local
