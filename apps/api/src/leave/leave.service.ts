@@ -156,14 +156,50 @@ export class LeaveService {
       select: { id: true },
     });
 
-    return this.prisma.leaveRequest.update({
-      where: { id },
-      data: {
-        status: LeaveStatus.APPROVED as unknown as PrismaLeaveStatus,
-        approvedAt: new Date(),
-        ...(approverEmp && { approvedById: approverEmp.id }),
+    // Require a matching leave balance record and sufficient remaining days.
+    // Decision: all leave types (SICK/VACATION/PERSONAL/OTHER) require a balance.
+    // If no balance exists, HR must create one via POST /leave-balances first.
+    const leaveYear = record.startDate.getFullYear();
+    const balance = await this.prisma.leaveBalance.findUnique({
+      where: {
+        employeeId_leaveType_year: {
+          employeeId: record.employeeId,
+          leaveType: record.leaveType,
+          year: leaveYear,
+        },
       },
-      select: LEAVE_SELECT,
+    });
+
+    if (!balance) {
+      throw new BadRequestException(
+        `No leave balance found for this employee and leave type in ${leaveYear}. ` +
+          `Create one via POST /leave-balances before approving.`,
+      );
+    }
+
+    const remaining = balance.totalDays - balance.usedDays;
+    if (record.totalDays > remaining) {
+      throw new BadRequestException(
+        `Insufficient leave balance: ${remaining} day(s) remaining, ${record.totalDays} requested`,
+      );
+    }
+
+    // Atomic: deduct balance and approve in a single transaction.
+    return this.prisma.$transaction(async (tx) => {
+      await tx.leaveBalance.update({
+        where: { id: balance.id },
+        data: { usedDays: { increment: record.totalDays } },
+      });
+
+      return tx.leaveRequest.update({
+        where: { id },
+        data: {
+          status: LeaveStatus.APPROVED as unknown as PrismaLeaveStatus,
+          approvedAt: new Date(),
+          ...(approverEmp && { approvedById: approverEmp.id }),
+        },
+        select: LEAVE_SELECT,
+      });
     });
   }
 
