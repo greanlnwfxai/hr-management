@@ -1,0 +1,195 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { AttendanceStatus as PrismaAttendanceStatus } from '@prisma/client';
+import { AttendanceStatus, UserRole } from '../common/enums';
+import { PrismaService } from '../prisma/prisma.service';
+import { ClockInDto } from './dto/clock-in.dto';
+import { ClockOutDto } from './dto/clock-out.dto';
+import { QueryAttendanceDto } from './dto/query-attendance.dto';
+
+const ATTENDANCE_SELECT = {
+  id: true,
+  date: true,
+  checkIn: true,
+  checkOut: true,
+  status: true,
+  note: true,
+  employee: {
+    select: {
+      id: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      department: { select: { id: true, name: true } },
+      position: { select: { id: true, title: true } },
+    },
+  },
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.AttendanceSelect;
+
+@Injectable()
+export class AttendanceService {
+  constructor(private prisma: PrismaService) {}
+
+  async clockIn(userId: string, dto: ClockInDto) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.todayUtc();
+    const now = new Date();
+
+    const existing = await this.prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    if (existing) throw new ConflictException('Already clocked in for today');
+
+    const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+
+    return this.prisma.attendance.create({
+      data: {
+        employeeId,
+        date,
+        checkIn: now,
+        status: status as unknown as PrismaAttendanceStatus,
+        note: dto.note,
+      },
+      select: ATTENDANCE_SELECT,
+    });
+  }
+
+  async clockOut(userId: string, dto: ClockOutDto) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.todayUtc();
+
+    const record = await this.prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    if (!record) throw new NotFoundException('No clock-in found for today');
+    if (record.checkOut) throw new ConflictException('Already clocked out for today');
+
+    return this.prisma.attendance.update({
+      where: { id: record.id },
+      data: {
+        checkOut: new Date(),
+        ...(dto.note !== undefined && { note: dto.note }),
+      },
+      select: ATTENDANCE_SELECT,
+    });
+  }
+
+  async findMyAttendance(userId: string, query: QueryAttendanceDto) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const { page = 1, limit = 20, startDate, endDate } = query;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AttendanceWhereInput = {
+      employeeId,
+      ...this.buildDateFilter(startDate, endDate),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.attendance.findMany({
+        where,
+        skip,
+        take: limit,
+        select: ATTENDANCE_SELECT,
+        orderBy: { date: 'desc' },
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async findAll(query: QueryAttendanceDto) {
+    const { page = 1, limit = 20, startDate, endDate, employeeId, status } = query;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AttendanceWhereInput = {
+      ...(employeeId && { employeeId }),
+      ...(status && { status: status as unknown as PrismaAttendanceStatus }),
+      ...this.buildDateFilter(startDate, endDate),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.attendance.findMany({
+        where,
+        skip,
+        take: limit,
+        select: ATTENDANCE_SELECT,
+        orderBy: { date: 'desc' },
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async findOne(id: string, userId: string, userRole: string) {
+    const record = await this.prisma.attendance.findUnique({
+      where: { id },
+      select: ATTENDANCE_SELECT,
+    });
+    if (!record) throw new NotFoundException(`Attendance ${id} not found`);
+
+    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.HR_ADMIN) {
+      return record;
+    }
+
+    const emp = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!emp || record.employee.id !== emp.id) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    return record;
+  }
+
+  private async requireEmployeeId(userId: string): Promise<string> {
+    const emp = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!emp) {
+      throw new BadRequestException('No employee profile linked to this account');
+    }
+    return emp.id;
+  }
+
+  private todayUtc(): Date {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+
+  // Business rule: LATE if clock-in is strictly after 09:00 Asia/Bangkok.
+  // Timestamps are stored in UTC; only this evaluation uses the Bangkok offset.
+  // Thailand does not observe DST → offset is always UTC+7 (420 min), never changes.
+  // We shift `now` forward by 7 h so that getUTCHours/Minutes yield Bangkok wall-clock time.
+  private isLateInBangkok(now: Date): boolean {
+    const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7, fixed — no DST in Thailand
+    const bangkokWallClock = new Date(now.getTime() + BANGKOK_OFFSET_MS);
+    const hour = bangkokWallClock.getUTCHours();
+    const minute = bangkokWallClock.getUTCMinutes();
+    return hour > 9 || (hour === 9 && minute > 0);
+  }
+
+  private buildDateFilter(
+    startDate?: string,
+    endDate?: string,
+  ): Prisma.AttendanceWhereInput {
+    if (!startDate && !endDate) return {};
+    return {
+      date: {
+        ...(startDate && { gte: new Date(startDate) }),
+        ...(endDate && { lte: new Date(endDate) }),
+      },
+    };
+  }
+}
