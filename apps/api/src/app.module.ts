@@ -4,11 +4,12 @@ import { AuthModule } from './auth/auth.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health.controller';
+import { LeaveModule } from './leave/leave.module';
 import { PositionsModule } from './positions/positions.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, EmployeesModule, DepartmentsModule, PositionsModule, AttendanceModule],
+  imports: [PrismaModule, AuthModule, EmployeesModule, DepartmentsModule, PositionsModule, AttendanceModule, LeaveModule],
   controllers: [HealthController],
 })
 export class AppModule {}
