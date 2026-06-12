@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AttendanceModule } from './attendance/attendance.module';
 import { AuthModule } from './auth/auth.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -11,7 +13,30 @@ import { PositionsModule } from './positions/positions.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, EmployeesModule, DepartmentsModule, PositionsModule, AttendanceModule, LeaveModule, LeaveBalanceModule, DashboardModule],
+  imports: [
+    ThrottlerModule.forRoot([
+      {
+        // Env vars are in seconds; TTL stored as milliseconds (v6 requirement)
+        ttl: parseInt(process.env.THROTTLE_TTL ?? '60') * 1000,
+        limit: parseInt(process.env.THROTTLE_LIMIT ?? '100'),
+      },
+    ]),
+    PrismaModule,
+    AuthModule,
+    EmployeesModule,
+    DepartmentsModule,
+    PositionsModule,
+    AttendanceModule,
+    LeaveModule,
+    LeaveBalanceModule,
+    DashboardModule,
+  ],
   controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}
