@@ -1,0 +1,29 @@
+# docker-compose.prod.yml — Production overlay
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this overlay does:
+#   - Enables trust proxy so X-Forwarded-For is used for rate limiting
+#   - Sets NEXT_PUBLIC_API_URL to the public-facing API path (proxied via /api)
+#
+# ⚠ PORT NOTE — Docker Compose v2 merges port arrays; ports: [] does NOT remove
+#   base ports. Ports 3002, 4002, and 5432 will still be host-bound.
+#   In production, use a server firewall (ufw / security group) to block direct
+#   external access to those ports — only 80 and 443 should be publicly reachable.
+#   The reverse proxy connects to services via the Docker internal network.
+#
+# Prerequisites:
+#   - Firewall: only ports 80 and 443 open to the internet
+#   - A reverse proxy (Caddy or Nginx) on the host routing to web:3002 and api:4002
+#   - All required env vars set in the root .env file
+#   - TLS termination handled by the reverse proxy
+
+services:
+  web:
+    environment:
+      NEXT_PUBLIC_API_URL: ${PUBLIC_APP_URL:-https://app.example.com}/api
+
+  api:
+    environment:
+      TRUST_PROXY: "true"

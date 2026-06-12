@@ -1,0 +1,48 @@
+# deploy/caddy/Caddyfile.example
+#
+# Caddy v2 reverse proxy configuration for HR Management.
+# Copy to your Caddyfile (e.g. /etc/caddy/Caddyfile) and replace placeholders.
+#
+# Assumes Docker Compose services are on the default bridge network named
+# "hr-management_default" (or whatever Docker names it from the project dir).
+# If running Caddy on the host (not in Docker), replace service names with
+# localhost and the host-mapped port (but port mapping is disabled in prod overlay).
+#
+# Single-domain layout: app.example.com
+#   /api/*  → api:4002  (NestJS)
+#   /*      → web:3002  (Next.js)
+#
+# Replace app.example.com with your actual domain.
+
+app.example.com {
+    # Route /api/* to NestJS
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy api:4002
+    }
+
+    # Route everything else to Next.js
+    handle {
+        reverse_proxy web:3002
+    }
+
+    # Caddy handles TLS automatically (Let's Encrypt / ZeroSSL)
+    # No manual cert config needed for public domains.
+
+    # Optional: tighten logging
+    log {
+        output file /var/log/caddy/hr-management.log
+        format json
+    }
+}
+
+# ── Alternative: separate subdomain for API ───────────────────────────────────
+# Uncomment and adjust if you prefer api.example.com instead of /api path prefix.
+#
+# app.example.com {
+#     reverse_proxy web:3002
+# }
+#
+# api.example.com {
+#     reverse_proxy api:4002
+# }
