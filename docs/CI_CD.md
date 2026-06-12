@@ -2,7 +2,7 @@
 
 ## Overview
 
-The project uses **GitHub Actions** for continuous integration. Every push and pull request to `main` triggers an automated validation pipeline that builds the API, builds the web frontend, and validates both Docker Compose configurations.
+The project uses **GitHub Actions** for continuous integration. Every push and pull request to `main` triggers an automated validation pipeline that builds the API, builds the web frontend, validates both Docker Compose configurations, and runs a full runtime integration test against a live PostgreSQL service.
 
 The pipeline does **not** deploy to production or push Docker images to a registry — those are future tasks (see [Future Improvements](#future-improvements)).
 
@@ -83,19 +83,83 @@ fi
 
 ---
 
+### `integration-ci` — Integration: Runtime API Test
+
+**Runner**: `ubuntu-latest`  
+**Depends on**: `api-ci` (runs after a successful build)  
+**Service container**: PostgreSQL 16 (see below)
+
+This job starts a real PostgreSQL database, applies migrations, seeds the admin user, compiles and starts the NestJS API, then runs the full `scripts/api-smoke-test.sh` suite against it. It is the only CI job that makes actual HTTP requests to a running API.
+
+| Step | Command | Notes |
+|------|---------|-------|
+| Checkout | `actions/checkout@v4` | |
+| Setup Node.js 22 | `actions/setup-node@v4` | npm cache keyed to `apps/api/package-lock.json` |
+| Install API deps | `npm ci` | Frozen lockfile install |
+| Generate Prisma client | `npx prisma generate` | Generates `@prisma/client` including enum objects |
+| Run migrations | `npx prisma migrate deploy` | Applies `prisma/migrations/` against CI database |
+| Seed database | `npx prisma db seed` | Creates `admin@hr.local` if not present (idempotent) |
+| Build API | `npm run build` | `nest build` → `dist/` |
+| Start API | `npm run start:prod &` | `node dist/main` on `PORT=4002`, runs in background |
+| Wait for health | `curl --retry 20 …` | Polls `GET /health` until API is ready |
+| Run smoke test | `./scripts/api-smoke-test.sh` | Authenticated test of all v1.0 endpoints |
+
+#### PostgreSQL Service Container
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    env:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hr_management_ci
+    ports:
+      - 5432:5432
+    options: >-
+      --health-cmd "pg_isready -U postgres -d hr_management_ci"
+      --health-interval 10s
+      --health-timeout 5s
+      --health-retries 5
+```
+
+GitHub Actions waits for the health check to pass before running any steps. Steps begin only once `pg_isready` returns successfully.
+
+#### Seed Strategy
+
+The seed script (`apps/api/prisma/seed.ts`) is idempotent — it checks for the `admin@hr.local` user before inserting. Running it twice against the same database is safe and produces no error.
+
+The smoke test expects only:
+- `POST /auth/login` with `admin@hr.local` / `admin1234` succeeds
+- All module list endpoints (`GET /employees`, `/departments`, etc.) return a `meta.total` field (zero is acceptable)
+- `GET /dashboard` returns `timezone: "Asia/Bangkok"` and a `employees.totalEmployees` field
+
+A freshly-migrated and seeded database with a single admin user satisfies all of these.
+
+#### CI Credentials Note
+
+`admin@hr.local` / `admin1234` are dev/CI-only credentials. They are baked into the seed script and smoke test as well-known defaults. Do not use these in production.
+
+---
+
 ## CI Environment Variables
 
 All CI environment variables are safe placeholder values. No real secrets are stored in the workflow file or repository.
 
-| Variable | CI Value | Why needed |
-|----------|----------|-----------|
-| `DATABASE_URL` | `postgresql://postgres:...@localhost:5432/hr_management` | Prisma needs it parseable (not connectable) |
-| `JWT_SECRET` | `ci_test_secret_do_not_use_in_production` | NestJS reads it at module load time |
-| `CORS_ORIGIN` | `http://localhost:3002` | API env var (no CORS requests made in CI) |
-| `POSTGRES_PASSWORD` | `ci_postgres_password` | Required by production compose `:?` validation |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:4002` (api-ci) / `https://hr.example.com/api` (compose-ci) | Next.js build bakes this in |
-| `TRUST_PROXY` | `"true"` | Production compose config validation |
-| `THROTTLE_*` | `60`, `100` | Rate limiter defaults |
+| Variable | Job(s) | CI Value | Why needed |
+|----------|--------|----------|------------|
+| `DATABASE_URL` | api-ci, integration-ci | `postgresql://postgres:...@localhost:5432/...` | Prisma; api-ci uses non-reachable placeholder, integration-ci uses live service |
+| `JWT_SECRET` | api-ci, integration-ci | `ci_jwt_secret_do_not_use_in_production` | NestJS reads at module load time |
+| `CORS_ORIGIN` | api-ci, integration-ci | `http://localhost:3002` | API bootstrap; no CORS requests made in CI |
+| `PORT` | integration-ci | `"4002"` | API listens on this port (matches smoke test default) |
+| `THROTTLE_TTL` | all | `"60"` | Rate limiter window (seconds) |
+| `THROTTLE_LIMIT` | all | `"100"` | Global request limit per window |
+| `LOGIN_THROTTLE_TTL` | all | `"60"` | Login rate limiter window |
+| `LOGIN_THROTTLE_LIMIT` | api-ci, compose-ci | `"5"` | Login attempts per window |
+| `LOGIN_THROTTLE_LIMIT` | integration-ci | `"10"` | Raised to prevent smoke-test retries from triggering throttle |
+| `POSTGRES_PASSWORD` | compose-ci | `ci_postgres_password` | Required by production compose `:?` validation |
+| `NEXT_PUBLIC_API_URL` | web-ci / compose-ci | `http://localhost:4002` / `https://hr.example.com/api` | Next.js bakes this into the JS bundle at build time |
+| `TRUST_PROXY` | compose-ci | `"true"` | Production compose config validation |
 
 ---
 
@@ -103,13 +167,11 @@ All CI environment variables are safe placeholder values. No real secrets are st
 
 | Capability | Status | See |
 |------------|--------|-----|
-| Run automated tests (unit/integration) | Not configured | No test suite exists beyond build validation |
-| Start a real database service | Not configured | Would enable prisma migrate + full API test |
-| Run the API smoke test (`api-smoke-test.sh`) | Not configured | Requires running stack + seeded database |
+| Unit tests (Jest) | Not configured | No test suite wired up yet |
+| Browser E2E tests | Not configured | Future task — Playwright/Cypress against full stack |
 | Build Docker images | Not configured | Slow without registry cache; deferred to future task |
 | Push images to a container registry | Not configured | Future task |
 | Deploy to production | Not configured | Future task — manual deployment via `docker-compose.production.yml` |
-| E2E / browser tests | Not configured | Future task |
 
 ---
 
@@ -136,14 +198,31 @@ All CI environment variables are safe placeholder values. No real secrets are st
 ### `compose-ci` fails at "Confirm no host-bound ports"
 → A change to `docker-compose.production.yml` introduced a `ports: HOST:CONTAINER` mapping. Remove it and use `expose:` instead.
 
+### `integration-ci` — PostgreSQL service health timeout
+→ The `postgres:16` service container failed its `pg_isready` health checks within the allotted retries. This is rare on `ubuntu-latest` but can happen if runner resources are constrained. Re-run the workflow; if it recurs, increase `--health-retries`.
+
+### `integration-ci` fails at "Run Prisma migrations"
+→ `prisma migrate deploy` could not connect to the database (check `DATABASE_URL`) or a migration file has an error. Inspect the Prisma output in the CI log. Do not run `prisma migrate dev` in CI — only `migrate deploy` (which applies existing files without prompting).
+
+### `integration-ci` fails at "Seed database"
+→ `prisma db seed` (runs `apps/api/prisma/seed.ts`) threw an error. Likely a schema mismatch between the migration and the seed's model usage. Check that the migration ran successfully in the previous step.
+
+### `integration-ci` fails at "Wait for API health endpoint"
+→ The API did not respond at `http://localhost:4002/health` within 20 × 2s = ~40 seconds. Check the build step to confirm `dist/` was produced. The most common cause is a runtime startup error — look for NestJS exception output in the step that preceded the wait. If `PORT` is being overridden somewhere, ensure it equals `4002`.
+
+### `integration-ci` fails at "Run API smoke test" — login/auth failure
+→ The admin seed did not run or the admin password changed. Confirm the seed step succeeded and that `admin@hr.local` / `admin1234` are the expected credentials.
+
+### `integration-ci` fails at "Run API smoke test" — 429 Too Many Requests
+→ The smoke test triggered the login rate limiter. `LOGIN_THROTTLE_LIMIT` in `integration-ci` is set to `10` specifically to avoid this. If you added retry logic that calls `POST /auth/login` many times, reduce the retries or increase the limit further in the CI env block only.
+
 ---
 
 ## Future Improvements
 
 ### Short Term
-- **Branch protection rules**: Require all three CI jobs to pass before merging to `main`
+- **Branch protection rules**: Require all four CI jobs to pass before merging to `main`
 - **Unit tests**: Add Jest unit tests for NestJS services and enable `npm test` in `api-ci`
-- **Database service**: Add a PostgreSQL service container in `api-ci` to run `prisma migrate deploy` and `api-smoke-test.sh`
 
 ### Medium Term
 - **Docker image builds**: Add a `docker-build` job that runs `docker compose build api web` using GitHub Actions cache (`type=gha`)
@@ -151,7 +230,7 @@ All CI environment variables are safe placeholder values. No real secrets are st
 - **Staging deployment**: Auto-deploy to a staging server on successful merge using SSH + `docker compose pull && up`
 
 ### Long Term
-- **E2E tests**: Playwright or Cypress tests against a fully running test stack
+- **E2E tests**: Playwright or Cypress tests against a fully running test stack (currently blocked — no browser test framework configured)
 - **Scheduled smoke tests**: Nightly run of `api-smoke-test.sh` against staging
 - **Multi-environment workflows**: Separate pipelines for `staging` and `production` branches
 

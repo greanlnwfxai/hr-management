@@ -140,3 +140,84 @@ jobs:
             exit 1
           fi
           echo "PASS: no host-bound port mappings in docker-compose.production.yml"
+
+  # ── Integration — Runtime API Test ─────────────────────────────────────────
+  # Starts a real PostgreSQL service, runs Prisma migrations, seeds the admin
+  # user, starts the compiled NestJS API, then executes the authenticated
+  # smoke test against it.  Runs after api-ci to ensure the build passes first.
+  integration-ci:
+    name: Integration — Runtime API Test
+    runs-on: ubuntu-latest
+    needs: api-ci
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hr_management_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hr_management_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_management_ci?schema=public
+      JWT_SECRET: ci_jwt_secret_do_not_use_in_production
+      CORS_ORIGIN: http://localhost:3002
+      PORT: "4002"
+      THROTTLE_TTL: "60"
+      THROTTLE_LIMIT: "100"
+      LOGIN_THROTTLE_TTL: "60"
+      # Higher than production default — prevents accidental throttle failures
+      # from the smoke test's single login call plus retry headroom.
+      LOGIN_THROTTLE_LIMIT: "10"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      - name: Run Prisma migrations
+        working-directory: apps/api
+        run: npx prisma migrate deploy
+
+      - name: Seed database (admin user)
+        working-directory: apps/api
+        run: npx prisma db seed
+
+      - name: Build API
+        working-directory: apps/api
+        run: npm run build
+
+      - name: Start API in background
+        working-directory: apps/api
+        run: npm run start:prod &
+
+      - name: Wait for API health endpoint
+        run: |
+          curl -f --retry 20 --retry-delay 2 --retry-all-errors \
+            --max-time 5 http://localhost:4002/health
+
+      - name: Run API smoke test
+        run: ./scripts/api-smoke-test.sh
+        env:
+          API_URL: http://localhost:4002
