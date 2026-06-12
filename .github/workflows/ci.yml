@@ -58,6 +58,11 @@ jobs:
       - name: Validate Prisma schema
         run: npx prisma validate
 
+      # Unit tests mock PrismaService and JwtService — no database connection needed.
+      # JWT_SECRET must be set so JwtStrategy can instantiate without throwing.
+      - name: Run unit tests
+        run: npm test
+
       - name: Build API (nest build)
         run: npm run build
 

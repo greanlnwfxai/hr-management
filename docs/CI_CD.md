@@ -34,11 +34,12 @@ Concurrent runs on the same branch or PR are automatically cancelled to save run
 | Checkout | `actions/checkout@v4` | |
 | Setup Node.js 22 | `actions/setup-node@v4` | npm cache keyed to `apps/api/package-lock.json` |
 | Install deps | `npm ci` | Frozen lockfile install |
-| Generate Prisma client | `npx prisma generate` | Required before TS compilation |
+| Generate Prisma client | `npx prisma generate` | Required before TS compilation and before unit tests |
 | Validate Prisma schema | `npx prisma validate` | Schema-only check; no database connection needed |
+| Run unit tests | `npm test` | Jest — mocked Prisma/JWT, no database needed |
 | Build API | `npm run build` | `nest build` → compiled `dist/` |
 
-**Database note**: The `DATABASE_URL` env var is set to a non-reachable placeholder. `prisma validate` and `nest build` do not connect to a database — they only need the env var to be parseable.
+**Database note**: The `DATABASE_URL` env var is set to a non-reachable placeholder. `prisma validate`, `npm test`, and `nest build` do not connect to a database — they only need the env var to be parseable.
 
 ---
 
@@ -167,7 +168,7 @@ All CI environment variables are safe placeholder values. No real secrets are st
 
 | Capability | Status | See |
 |------------|--------|-----|
-| Unit tests (Jest) | Not configured | No test suite wired up yet |
+| Unit tests (Jest) | **Configured** — runs in `api-ci` | `apps/api/src/**/*.spec.ts` |
 | Browser E2E tests | Not configured | Future task — Playwright/Cypress against full stack |
 | Build Docker images | Not configured | Slow without registry cache; deferred to future task |
 | Push images to a container registry | Not configured | Future task |
@@ -176,6 +177,15 @@ All CI environment variables are safe placeholder values. No real secrets are st
 ---
 
 ## How to Read CI Failures
+
+### `api-ci` fails at "Run unit tests" — Jest mock failure
+→ A service method was added or renamed but the corresponding mock was not updated. Check the failing test file in `apps/api/src/`. Run `cd apps/api && npm test` locally to reproduce. Update the mock return value or spy setup to match the new method signature.
+
+### `api-ci` fails at "Run unit tests" — TypeScript compile error in spec file
+→ A type change in a DTO, service, or enum broke the `.spec.ts` file. Run `cd apps/api && npm test` locally — `ts-jest` will show the exact line. Update the spec to match the new types. Do not cast to `any` to suppress errors unless the cast is intentional.
+
+### `api-ci` fails at "Run unit tests" — bcrypt/JWT mock not applied
+→ `jest.mock('bcrypt')` or `jest.mock('@nestjs/jwt')` must appear at the top of the spec file (before any imports that trigger the module). If the mock is inside a `describe()` block it will be hoisted by Jest but may not apply in time. Move it to the top level.
 
 ### `api-ci` fails at "Install dependencies"
 → `package-lock.json` is out of sync with `package.json`. Run `npm install` locally and commit the updated lockfile.
@@ -237,10 +247,51 @@ Full setup instructions, solo-vs-team policy, emergency bypass guidance, and a v
 
 ---
 
+## Unit Tests
+
+Unit tests run in `api-ci` via `npm test` (Jest + ts-jest). They mock all external dependencies and require no database connection.
+
+### What `npm test` covers
+
+| Module | File | Tests |
+|--------|------|-------|
+| `AuthService` | `src/auth/auth.service.spec.ts` | Valid login, wrong password, unknown user, safe response shape, JWT payload fields |
+| `AuthController` | `src/auth/auth.controller.spec.ts` | Login delegation, `/me` handler |
+| `JwtStrategy` | `src/auth/strategies/jwt.strategy.spec.ts` | Valid payload returns safe user; deleted user throws `UnauthorizedException` |
+| `EmployeesService` | `src/employees/employees.service.spec.ts` | Pagination, findOne, NotFoundException, create, ConflictException, update, soft-delete via remove |
+| `EmployeesController` | `src/employees/employees.controller.spec.ts` | All five CRUD routes delegate correctly to service |
+
+### Mocking strategy
+
+- **PrismaService** — replaced by a typed mock factory in `src/test-utils/prisma.mock.ts`. Methods (`user.findUnique`, `employee.*`, `$transaction`) are all `jest.fn()`.
+- **JwtService** — injected as a plain `{ signAsync: jest.fn() }` object.
+- **bcrypt** — module-level `jest.mock('bcrypt')` replaces `compare` with a controllable `jest.fn()`.
+- **Guards** (`JwtAuthGuard`, `RolesGuard`) — overridden with `{ canActivate: () => true }` in controller tests.
+
+### Running locally
+
+```bash
+cd apps/api
+npm test          # run once
+npm run test:cov  # with coverage report
+npm run test:watch  # watch mode during development
+```
+
+### Unit tests vs integration-ci
+
+| | Unit tests (`api-ci`) | Integration test (`integration-ci`) |
+|---|---|---|
+| Database | None (mocked) | Real PostgreSQL 16 |
+| Speed | Fast (~seconds) | Slow (~1–2 min) |
+| Scope | Service/controller logic | Full HTTP stack + migrations + seed |
+| Failures | Mock setup, type errors | DB schema, auth flow, HTTP routing |
+
+---
+
 ## Future Improvements
 
 ### Short Term
-- **Unit tests**: Add Jest unit tests for NestJS services and enable `npm test` in `api-ci`
+- **Coverage enforcement**: Add `--coverageThreshold` to `jest` config to require minimum coverage on new code
 
 ### Medium Term
 - **Docker image builds**: Add a `docker-build` job that runs `docker compose build api web` using GitHub Actions cache (`type=gha`)
