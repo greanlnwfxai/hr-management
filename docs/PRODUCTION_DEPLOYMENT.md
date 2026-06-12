@@ -2,6 +2,8 @@
 
 This guide covers deploying the HR Management stack to a production Linux server.
 
+> **CI requirement**: Production deployment should only be performed from the `main` branch after all CI checks pass. See [CI_CD.md](CI_CD.md) for the pipeline overview and [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) for how to enforce this via GitHub branch protection rules.
+
 ---
 
 ## Compose File Strategy

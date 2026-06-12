@@ -218,10 +218,28 @@ All CI environment variables are safe placeholder values. No real secrets are st
 
 ---
 
+## Branch Protection
+
+All four CI jobs should be configured as **required status checks** on `main`. This prevents code from merging if any check fails — including the runtime integration test.
+
+Required check names (as they appear in GitHub):
+
+```
+HR Management CI / API — Build & Validate
+HR Management CI / Web — Build & Validate
+HR Management CI / Compose — Config Validation
+HR Management CI / Integration — Runtime API Test
+```
+
+Full setup instructions, solo-vs-team policy, emergency bypass guidance, and a validation checklist are in **[BRANCH_PROTECTION.md](BRANCH_PROTECTION.md)**.
+
+> Production deployment should only be performed from `main` after all CI checks pass. See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md).
+
+---
+
 ## Future Improvements
 
 ### Short Term
-- **Branch protection rules**: Require all four CI jobs to pass before merging to `main`
 - **Unit tests**: Add Jest unit tests for NestJS services and enable `npm test` in `api-ci`
 
 ### Medium Term
@@ -238,6 +256,7 @@ All CI environment variables are safe placeholder values. No real secrets are st
 
 ## Related Docs
 
+- [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) — required status checks and GitHub ruleset setup guide
 - [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) — how to deploy using `docker-compose.production.yml`
 - [AUTH_SECURITY_HARDENING.md](AUTH_SECURITY_HARDENING.md) — rate limiting, Helmet, brute-force protection
 - [PRE_DEPLOYMENT_SECURITY.md](PRE_DEPLOYMENT_SECURITY.md) — JWT, CORS, credentials hardening
