@@ -5,11 +5,35 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearAuth, getUser, type AuthUser } from '@/lib/auth';
 
-const NAV = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/employees', label: 'Employees' },
-  { href: '/leave', label: 'Leave' },
-];
+type NavItem = { href: string; label: string };
+
+function navForRole(role: AuthUser['role']): NavItem[] {
+  switch (role) {
+    case 'SUPER_ADMIN':
+    case 'HR_ADMIN':
+      return [
+        { href: '/dashboard', label: 'Dashboard' },
+        { href: '/employees', label: 'Employees' },
+        { href: '/departments', label: 'Departments' },
+        { href: '/positions', label: 'Positions' },
+        { href: '/attendance', label: 'Attendance' },
+        { href: '/leave', label: 'Leave' },
+      ];
+    case 'MANAGER':
+      return [
+        { href: '/dashboard', label: 'Dashboard' },
+        { href: '/employees', label: 'Employees' },
+        { href: '/attendance', label: 'Attendance' },
+        { href: '/leave', label: 'Leave' },
+      ];
+    case 'EMPLOYEE':
+    default:
+      return [
+        { href: '/attendance', label: 'Attendance' },
+        { href: '/leave', label: 'Leave' },
+      ];
+  }
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -26,15 +50,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     router.push('/login');
   }
 
+  const nav = user ? navForRole(user.role) : [];
+
   return (
     <div className="flex min-h-screen bg-zinc-50">
-      {/* Sidebar */}
+      {/* Sidebar — desktop */}
       <aside className="hidden w-56 flex-col bg-white border-r border-zinc-200 md:flex">
         <div className="flex h-14 items-center border-b border-zinc-200 px-5">
           <span className="text-sm font-semibold text-zinc-800">HR Management</span>
         </div>
         <nav className="flex-1 px-3 py-4">
-          {NAV.map((item) => (
+          {nav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -53,7 +79,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <p className="mb-2 truncate text-xs text-zinc-500" title={user.email}>
               {user.email}
               <span className="ml-1 rounded bg-zinc-100 px-1 py-0.5 text-[10px] uppercase text-zinc-400">
-                {user.role}
+                {user.role.replace('_', ' ')}
               </span>
             </p>
           )}
@@ -82,7 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {menuOpen && (
           <div className="border-b border-zinc-200 bg-white px-4 pb-3 md:hidden">
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

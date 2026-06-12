@@ -140,19 +140,199 @@ export type PaginatedResponse<T> = {
   meta: { total: number; page: number; limit: number; totalPages: number };
 };
 
+export type EmployeeFull = Employee & {
+  phone?: string;
+  dateOfBirth?: string;
+  hireDate: string;
+  manager?: { id: string; firstName: string; lastName: string };
+  createdAt: string;
+};
+
 export function getEmployees(params?: {
   page?: number;
   limit?: number;
   search?: string;
   status?: string;
+  departmentId?: string;
+  positionId?: string;
 }) {
   const qs = new URLSearchParams();
   if (params?.page) qs.set('page', String(params.page));
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.search) qs.set('search', params.search);
   if (params?.status) qs.set('status', params.status);
+  if (params?.departmentId) qs.set('departmentId', params.departmentId);
+  if (params?.positionId) qs.set('positionId', params.positionId);
   const query = qs.toString() ? `?${qs}` : '';
   return apiFetch<PaginatedResponse<Employee>>(`/employees${query}`);
+}
+
+export function getEmployee(id: string) {
+  return apiFetch<EmployeeFull>(`/employees/${id}`);
+}
+
+export function createEmployee(body: {
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  hireDate: string;
+  departmentId: string;
+  positionId: string;
+  phone?: string;
+  dateOfBirth?: string;
+  status?: string;
+}) {
+  return apiFetch<EmployeeFull>('/employees', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateEmployee(id: string, body: Partial<{
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  hireDate: string;
+  departmentId: string;
+  positionId: string;
+  phone: string;
+  dateOfBirth: string;
+  status: string;
+}>) {
+  return apiFetch<EmployeeFull>(`/employees/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function deleteEmployee(id: string) {
+  return apiFetch<EmployeeFull>(`/employees/${id}`, { method: 'DELETE' });
+}
+
+// ── Departments ───────────────────────────────────────────────────────────────
+
+export type Department = {
+  id: string;
+  name: string;
+  description?: string;
+  managerId?: string;
+  manager?: { id: string; firstName: string; lastName: string };
+  _count: { employees: number; positions: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getDepartments(params?: { page?: number; limit?: number; search?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.search) qs.set('search', params.search);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<Department>>(`/departments${query}`);
+}
+
+export function getAllDepartments() {
+  return apiFetch<PaginatedResponse<Department>>('/departments?limit=200');
+}
+
+export function createDepartment(body: { name: string; description?: string }) {
+  return apiFetch<Department>('/departments', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateDepartment(id: string, body: { name?: string; description?: string }) {
+  return apiFetch<Department>(`/departments/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function deleteDepartment(id: string) {
+  return apiFetch<void>(`/departments/${id}`, { method: 'DELETE' });
+}
+
+// ── Positions ─────────────────────────────────────────────────────────────────
+
+export type Position = {
+  id: string;
+  title: string;
+  description?: string;
+  departmentId: string;
+  department?: { id: string; name: string };
+  _count: { employees: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getPositions(params?: { page?: number; limit?: number; search?: string; departmentId?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.search) qs.set('search', params.search);
+  if (params?.departmentId) qs.set('departmentId', params.departmentId);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<Position>>(`/positions${query}`);
+}
+
+export function getAllPositions(departmentId?: string) {
+  const qs = departmentId ? `?limit=200&departmentId=${departmentId}` : '?limit=200';
+  return apiFetch<PaginatedResponse<Position>>(`/positions${qs}`);
+}
+
+export function createPosition(body: { title: string; departmentId: string; description?: string }) {
+  return apiFetch<Position>('/positions', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updatePosition(id: string, body: { title?: string; departmentId?: string; description?: string }) {
+  return apiFetch<Position>(`/positions/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function deletePosition(id: string) {
+  return apiFetch<void>(`/positions/${id}`, { method: 'DELETE' });
+}
+
+// ── Attendance ────────────────────────────────────────────────────────────────
+
+export type AttendanceRecord = {
+  id: string;
+  date: string;
+  checkIn?: string;
+  checkOut?: string;
+  status: string;
+  note?: string;
+  employee?: {
+    id: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+    department?: { id: string; name: string };
+    position?: { id: string; title: string };
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function clockIn(note?: string) {
+  return apiFetch<AttendanceRecord>('/attendance/clock-in', {
+    method: 'POST',
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+export function clockOut(note?: string) {
+  return apiFetch<AttendanceRecord>('/attendance/clock-out', {
+    method: 'POST',
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+export function getMyAttendance(params?: { page?: number; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<AttendanceRecord>>(`/attendance/me${query}`);
+}
+
+export function getAttendance(params?: { page?: number; limit?: number; status?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.status) qs.set('status', params.status);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<AttendanceRecord>>(`/attendance${query}`);
 }
 
 // ── Leave ─────────────────────────────────────────────────────────────────────
