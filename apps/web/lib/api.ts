@@ -318,19 +318,24 @@ export function clockOut(note?: string) {
   });
 }
 
-export function getMyAttendance(params?: { page?: number; limit?: number }) {
+export function getMyAttendance(params?: { page?: number; limit?: number; startDate?: string; endDate?: string }) {
   const qs = new URLSearchParams();
   if (params?.page) qs.set('page', String(params.page));
   if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString() ? `?${qs}` : '';
   return apiFetch<PaginatedResponse<AttendanceRecord>>(`/attendance/me${query}`);
 }
 
-export function getAttendance(params?: { page?: number; limit?: number; status?: string }) {
+export function getAttendance(params?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string; employeeId?: string }) {
   const qs = new URLSearchParams();
   if (params?.page) qs.set('page', String(params.page));
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.status) qs.set('status', params.status);
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
   const query = qs.toString() ? `?${qs}` : '';
   return apiFetch<PaginatedResponse<AttendanceRecord>>(`/attendance${query}`);
 }
@@ -356,13 +361,24 @@ export type LeaveBalance = {
   totalDays: number;
   usedDays: number;
   remainingDays: number;
+  employee?: {
+    id: string;
+    employeeCode?: string;
+    firstName: string;
+    lastName: string;
+    department?: { id: string; name: string };
+    position?: { id: string; title: string };
+  };
+  createdAt?: string;
+  updatedAt?: string;
 };
 
-export function getLeave(params?: { page?: number; limit?: number; status?: string }) {
+export function getLeave(params?: { page?: number; limit?: number; status?: string; employeeId?: string }) {
   const qs = new URLSearchParams();
   if (params?.page) qs.set('page', String(params.page));
   if (params?.limit) qs.set('limit', String(params.limit));
   if (params?.status) qs.set('status', params.status);
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
   const query = qs.toString() ? `?${qs}` : '';
   return apiFetch<PaginatedResponse<LeaveRequest>>(`/leave${query}`);
 }
@@ -399,6 +415,26 @@ export function getMyLeaveBalances() {
   return apiFetch<PaginatedResponse<LeaveBalance>>('/leave-balances/my');
 }
 
-export function getLeaveBalances() {
-  return apiFetch<PaginatedResponse<LeaveBalance>>('/leave-balances');
+export function getLeaveBalances(params?: { employeeId?: string; leaveType?: string; year?: number; page?: number; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
+  if (params?.leaveType) qs.set('leaveType', params.leaveType);
+  if (params?.year) qs.set('year', String(params.year));
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<LeaveBalance>>(`/leave-balances${query}`);
+}
+
+export function createLeaveBalance(body: {
+  employeeId: string;
+  leaveType: string;
+  year: number;
+  entitledDays: number;
+}) {
+  return apiFetch<LeaveBalance>('/leave-balances', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function updateLeaveBalance(id: string, body: { entitledDays?: number; usedDays?: number }) {
+  return apiFetch<LeaveBalance>(`/leave-balances/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }

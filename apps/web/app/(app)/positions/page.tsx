@@ -15,7 +15,9 @@ import {
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
+import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
+import Toast, { type ToastData } from '@/components/Toast';
 
 const INPUT = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
 
@@ -48,9 +50,9 @@ export default function PositionsPage() {
   const [editTarget, setEditTarget] = useState<Position | null>(null);
   const [form, setForm] = useState<PosForm>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
-  const [formSuccess, setFormSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [actionError, setActionError] = useState('');
+
+  const [toast, setToast] = useState<ToastData | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,7 +76,6 @@ export default function PositionsPage() {
   function openCreate() {
     setForm(EMPTY_FORM);
     setFormError('');
-    setFormSuccess('');
     setModal('create');
   }
 
@@ -82,7 +83,6 @@ export default function PositionsPage() {
     setEditTarget(pos);
     setForm({ title: pos.title, departmentId: pos.departmentId, description: pos.description ?? '' });
     setFormError('');
-    setFormSuccess('');
     setModal('edit');
   }
 
@@ -90,7 +90,6 @@ export default function PositionsPage() {
     setModal(null);
     setEditTarget(null);
     setFormError('');
-    setFormSuccess('');
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -107,13 +106,13 @@ export default function PositionsPage() {
       };
       if (modal === 'create') {
         await createPosition(body);
-        setFormSuccess('Position created.');
+        setToast({ message: 'Position created successfully.', type: 'success' });
       } else if (editTarget) {
         await updatePosition(editTarget.id, body);
-        setFormSuccess('Position updated.');
+        setToast({ message: 'Position updated successfully.', type: 'success' });
       }
+      closeModal();
       load();
-      setTimeout(closeModal, 700);
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'Operation failed.');
     } finally {
@@ -123,16 +122,16 @@ export default function PositionsPage() {
 
   async function handleDelete(pos: Position) {
     if (pos._count.employees > 0) {
-      setActionError(`Cannot delete "${pos.title}" — ${pos._count.employees} employee(s) are assigned to it.`);
+      setToast({ message: `Cannot delete "${pos.title}" — ${pos._count.employees} employee(s) are assigned to it.`, type: 'error' });
       return;
     }
     if (!window.confirm(`Delete position "${pos.title}"? This cannot be undone.`)) return;
-    setActionError('');
     try {
       await deletePosition(pos.id);
+      setToast({ message: `Position "${pos.title}" deleted.`, type: 'success' });
       load();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Delete failed.');
+      setToast({ message: err instanceof ApiError ? err.message : 'Delete failed.', type: 'error' });
     }
   }
 
@@ -140,6 +139,8 @@ export default function PositionsPage() {
 
   return (
     <div>
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-zinc-900">Positions</h1>
         <div className="flex items-center gap-3">
@@ -152,7 +153,6 @@ export default function PositionsPage() {
         </div>
       </div>
 
-      {/* Filters */}
       <div className="mb-4 flex flex-wrap gap-3">
         <form onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); setPage(1); }} className="flex gap-2">
           <input
@@ -177,33 +177,31 @@ export default function PositionsPage() {
         </select>
       </div>
 
-      {actionError && <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{actionError}</div>}
-
       {loading && <LoadingState message="Loading positions…" />}
       {!loading && error && <ErrorState message={error.message} status={error.status} onRetry={load} />}
 
       {!loading && !error && result && (
         <>
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-            <table className="min-w-full divide-y divide-zinc-200 text-sm">
-              <thead className="bg-zinc-50">
-                <tr>
-                  {['Title', 'Department', 'Description', 'Employees', 'Created', ...(admin ? ['Actions'] : [])].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {result.data.length === 0 ? (
-                  <tr><td colSpan={admin ? 6 : 5} className="px-4 py-8 text-center text-zinc-400">No positions found.</td></tr>
-                ) : (
-                  result.data.map((pos) => (
+          {result.data.length === 0 ? (
+            <EmptyState message="No positions found." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+              <table className="min-w-full divide-y divide-zinc-200 text-sm">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    {['Title', 'Department', 'Description', 'Employees', 'Created', ...(admin ? ['Actions'] : [])].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {result.data.map((pos) => (
                     <tr key={pos.id} className="hover:bg-zinc-50">
                       <td className="px-4 py-3 font-medium text-zinc-900">{pos.title}</td>
                       <td className="px-4 py-3 text-zinc-600">{pos.department?.name ?? '—'}</td>
-                      <td className="px-4 py-3 text-zinc-500 max-w-xs truncate">{pos.description ?? '—'}</td>
+                      <td className="max-w-xs truncate px-4 py-3 text-zinc-500">{pos.description ?? '—'}</td>
                       <td className="px-4 py-3 text-zinc-600">{pos._count.employees}</td>
-                      <td className="px-4 py-3 text-zinc-400 text-xs">{new Date(pos.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-xs text-zinc-400">{new Date(pos.createdAt).toLocaleDateString()}</td>
                       {admin && (
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
@@ -212,7 +210,7 @@ export default function PositionsPage() {
                               onClick={() => handleDelete(pos)}
                               disabled={pos._count.employees > 0}
                               title={pos._count.employees > 0 ? 'Cannot delete: employees assigned' : ''}
-                              className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                             >
                               Delete
                             </button>
@@ -220,11 +218,11 @@ export default function PositionsPage() {
                         </td>
                       )}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {meta && meta.totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm text-zinc-500">
@@ -241,7 +239,6 @@ export default function PositionsPage() {
       {modal && (
         <Modal title={modal === 'create' ? 'Add Position' : 'Edit Position'} onClose={closeModal}>
           {formError && <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>}
-          {formSuccess && <div className="mb-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{formSuccess}</div>}
           <form onSubmit={handleSubmit} className="space-y-4">
             <Field label="Title *">
               <input type="text" required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className={INPUT} placeholder="e.g. Software Engineer" />

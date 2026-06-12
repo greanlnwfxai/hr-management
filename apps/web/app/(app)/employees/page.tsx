@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
   getEmployees,
   getEmployee,
@@ -19,7 +20,9 @@ import {
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
+import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
+import Toast, { type ToastData } from '@/components/Toast';
 
 const STATUS_OPTIONS = ['', 'ACTIVE', 'INACTIVE', 'RESIGNED'];
 const EMP_STATUS = ['ACTIVE', 'INACTIVE', 'RESIGNED'];
@@ -38,18 +41,10 @@ function statusBadge(status: string) {
 }
 
 type EmpForm = {
-  employeeCode: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  hireDate: string;
-  dateOfBirth: string;
-  departmentId: string;
-  positionId: string;
-  status: string;
+  employeeCode: string; firstName: string; lastName: string; email: string;
+  phone: string; hireDate: string; dateOfBirth: string;
+  departmentId: string; positionId: string; status: string;
 };
-
 const EMPTY_FORM: EmpForm = {
   employeeCode: '', firstName: '', lastName: '', email: '',
   phone: '', hireDate: '', dateOfBirth: '',
@@ -71,6 +66,17 @@ function formFromEmployee(e: EmployeeFull): EmpForm {
   };
 }
 
+const INPUT = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-zinc-600">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 export default function EmployeesPage() {
   const user = getUser();
   const admin = isAdmin(user);
@@ -83,16 +89,14 @@ export default function EmployeesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  // CRUD state
   const [modal, setModal] = useState<'create' | 'edit' | null>(null);
   const [editTarget, setEditTarget] = useState<EmployeeFull | null>(null);
   const [form, setForm] = useState<EmpForm>(EMPTY_FORM);
   const [formError, setFormError] = useState('');
-  const [formSuccess, setFormSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [actionError, setActionError] = useState('');
 
-  // Dropdown data
+  const [toast, setToast] = useState<ToastData | null>(null);
+
   const [departments, setDepartments] = useState<Department[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [positionsFiltered, setPositionsFiltered] = useState<Position[]>([]);
@@ -135,20 +139,18 @@ export default function EmployeesPage() {
   async function openCreate() {
     setForm(EMPTY_FORM);
     setFormError('');
-    setFormSuccess('');
     setModal('create');
   }
 
   async function openEdit(emp: Employee) {
     setFormError('');
-    setFormSuccess('');
     try {
       const full = await getEmployee(emp.id);
       setEditTarget(full);
       setForm(formFromEmployee(full));
       setModal('edit');
     } catch {
-      setActionError('Failed to load employee details.');
+      setToast({ message: 'Failed to load employee details.', type: 'error' });
     }
   }
 
@@ -156,7 +158,6 @@ export default function EmployeesPage() {
     setModal(null);
     setEditTarget(null);
     setFormError('');
-    setFormSuccess('');
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -182,13 +183,13 @@ export default function EmployeesPage() {
       };
       if (modal === 'create') {
         await createEmployee(body);
-        setFormSuccess('Employee created successfully.');
+        setToast({ message: 'Employee created successfully.', type: 'success' });
       } else if (editTarget) {
         await updateEmployee(editTarget.id, body);
-        setFormSuccess('Employee updated successfully.');
+        setToast({ message: 'Employee updated successfully.', type: 'success' });
       }
+      closeModal();
       load();
-      setTimeout(closeModal, 800);
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : 'Operation failed.');
     } finally {
@@ -198,12 +199,12 @@ export default function EmployeesPage() {
 
   async function handleDelete(emp: Employee) {
     if (!window.confirm(`Deactivate ${emp.firstName} ${emp.lastName}? This sets their status to INACTIVE.`)) return;
-    setActionError('');
     try {
       await deleteEmployee(emp.id);
+      setToast({ message: `${emp.firstName} ${emp.lastName} deactivated.`, type: 'success' });
       load();
     } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : 'Delete failed.');
+      setToast({ message: err instanceof ApiError ? err.message : 'Deactivate failed.', type: 'error' });
     }
   }
 
@@ -211,6 +212,8 @@ export default function EmployeesPage() {
 
   return (
     <div>
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-xl font-semibold text-zinc-900">Employees</h1>
         <div className="flex items-center gap-3">
@@ -258,32 +261,32 @@ export default function EmployeesPage() {
         </select>
       </div>
 
-      {actionError && (
-        <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{actionError}</div>
-      )}
-
       {loading && <LoadingState message="Loading employees…" />}
       {!loading && error && <ErrorState message={error.message} status={error.status} onRetry={load} />}
 
       {!loading && !error && result && (
         <>
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-            <table className="min-w-full divide-y divide-zinc-200 text-sm">
-              <thead className="bg-zinc-50">
-                <tr>
-                  {['Code', 'Name', 'Email', 'Department', 'Position', 'Status', ...(admin ? ['Actions'] : [])].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {result.data.length === 0 ? (
-                  <tr><td colSpan={admin ? 7 : 6} className="px-4 py-8 text-center text-zinc-400">No employees found.</td></tr>
-                ) : (
-                  result.data.map((emp) => (
+          {result.data.length === 0 ? (
+            <EmptyState message="No employees found. Try adjusting your search or filters." />
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
+              <table className="min-w-full divide-y divide-zinc-200 text-sm">
+                <thead className="bg-zinc-50">
+                  <tr>
+                    {['Code', 'Name', 'Email', 'Department', 'Position', 'Status', ...(admin ? ['Actions'] : [])].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100">
+                  {result.data.map((emp) => (
                     <tr key={emp.id} className="hover:bg-zinc-50">
                       <td className="px-4 py-3 font-mono text-xs text-zinc-500">{emp.employeeCode}</td>
-                      <td className="px-4 py-3 font-medium text-zinc-900">{emp.firstName} {emp.lastName}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-900">
+                        <Link href={`/employees/${emp.id}`} className="hover:underline hover:text-zinc-600">
+                          {emp.firstName} {emp.lastName}
+                        </Link>
+                      </td>
                       <td className="px-4 py-3 text-zinc-500">{emp.email ?? '—'}</td>
                       <td className="px-4 py-3 text-zinc-600">{emp.department?.name ?? '—'}</td>
                       <td className="px-4 py-3 text-zinc-600">{emp.position?.title ?? '—'}</td>
@@ -308,11 +311,11 @@ export default function EmployeesPage() {
                         </td>
                       )}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {meta && meta.totalPages > 1 && (
             <div className="mt-4 flex items-center justify-between text-sm text-zinc-500">
@@ -330,7 +333,6 @@ export default function EmployeesPage() {
       {modal && (
         <Modal title={modal === 'create' ? 'Add Employee' : 'Edit Employee'} onClose={closeModal} wide>
           {formError && <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>}
-          {formSuccess && <div className="mb-3 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">{formSuccess}</div>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Employee Code *">
               <input type="text" required value={form.employeeCode} onChange={(e) => setForm({ ...form, employeeCode: e.target.value })} className={INPUT} />
@@ -379,17 +381,6 @@ export default function EmployeesPage() {
           </form>
         </Modal>
       )}
-    </div>
-  );
-}
-
-const INPUT = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="mb-1 block text-xs font-medium text-zinc-600">{label}</label>
-      {children}
     </div>
   );
 }
