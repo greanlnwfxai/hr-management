@@ -1,0 +1,125 @@
+# Backend QA Checklist
+
+Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
+
+## 1. Build Verification
+
+- [x] `npm run build` in `apps/api` exits 0
+- [x] No TypeScript compilation errors
+- [x] `npx prisma validate` exits 0
+- [x] `npm run build` in `apps/web` exits 0
+- [x] `./scripts/verify.sh` exits 0
+
+## 2. Docker Health
+
+- [x] `./scripts/docker-verify.sh` exits 0
+- [x] `hr-db` container: healthy
+- [x] `hr-api` container: healthy
+- [x] `hr-web` container: up
+- [x] `GET /health` returns `{"status":"ok"}`
+
+## 3. Auth Smoke Test
+
+- [x] `POST /auth/login` with valid credentials returns `accessToken`
+- [x] `POST /auth/login` with wrong password returns 401
+- [x] `GET /auth/me` returns `{ id, email, role }` (no password hash)
+- [x] `GET /auth/me` without token returns 401
+
+## 4. Module Smoke Test (12 checks via api-smoke-test.sh)
+
+- [x] `GET /health` → status: ok
+- [x] `POST /auth/login` → accessToken
+- [x] `GET /auth/me` → user id
+- [x] `GET /employees` → meta.total
+- [x] `GET /departments` → meta.total
+- [x] `GET /positions` → meta.total
+- [x] `GET /attendance` → meta.total
+- [x] `GET /leave` → meta.total
+- [x] `GET /leave-balances` → meta.total
+- [x] `GET /dashboard` → timezone = Asia/Bangkok
+- [x] `GET /dashboard` → employees.totalEmployees
+- [x] `GET /dashboard` (no token) → 401
+
+## 5. RBAC Checks
+
+- [x] All protected routes require JWT
+- [x] `POST/PATCH/DELETE /employees` — SUPER_ADMIN/HR_ADMIN only
+- [x] `GET /attendance` admin list — SUPER_ADMIN/HR_ADMIN only
+- [x] `PATCH /leave/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN only
+- [x] `GET /dashboard` — EMPLOYEE returns 403
+- [x] Known: MANAGER cannot access `GET /leave` (asymmetry with `/leave-balances`)
+
+## 6. Ownership Checks
+
+- [x] `POST /attendance/clock-in` — bound to own employee
+- [x] `GET /attendance/:id` — ownership enforced in service
+- [x] `POST /leave/request` — bound to own employee
+- [x] `GET /leave/:id` — ownership enforced in service; admin bypass
+- [x] `GET /leave-balances/:id` — ownership enforced; manager/admin bypass
+
+## 7. Error Handling
+
+- [x] Non-existent UUID → 404
+- [x] Invalid UUID format → 400 (ParseUUIDPipe)
+- [x] DTO validation failure → 400 with field details
+- [x] Duplicate email/code → 409
+- [x] Overlapping leave request → 409
+- [x] Delete department with employees → 409
+- [x] No employee linked to user → 400
+- [x] Error messages do not expose password hashes or secrets
+
+## 8. Validation
+
+- [x] `@IsEmail()` on email fields
+- [x] `ParseUUIDPipe` on UUID path params
+- [x] `@IsEnum()` from `src/common/enums.ts` (never from `@prisma/client`)
+- [x] `@IsDateString()` on date fields
+- [x] GlobalValidationPipe: `whitelist: true, transform: true`
+
+## 9. Timezone Checks
+
+- [x] Attendance LATE rule: strictly after 09:00 Bangkok time
+- [x] Bangkok date computed by shifting UTC +7h
+- [x] Dashboard uses `todayBangkok()` with same offset
+- [ ] Known: `todayBangkok()` and `todayUtc()` diverge 17:00–23:59 UTC
+
+## 10. Leave Balance Deduction
+
+- [x] Approval requires matching LeaveBalance record
+- [x] Approval fails if remaining days < requested days
+- [x] Balance deduction + status change are atomic (`$transaction`)
+- [x] Reject does not deduct balance
+- [x] PATCH /leave-balances rejects negative remaining days (422)
+
+## 11. Dashboard
+
+- [x] Returns all sections: generatedAt, timezone, employees, attendance, leave, recent
+- [x] All 19 queries run in parallel via `Promise.all`
+- [x] `lowLeaveBalanceCount` threshold = 3 days, current Bangkok year
+- [x] Recent records capped at 5 each
+- [x] No password or secret fields in response
+- [ ] Known: `todayAbsentCount` counts only explicit ABSENT records
+
+## 12. Known Limitations
+
+| # | Area | Limitation |
+|---|---|---|
+| 1 | LeaveType | ANNUAL and UNPAID not in schema |
+| 2 | LeaveType | UNPAID balance bypass not implemented |
+| 3 | RBAC | MANAGER cannot access `GET /leave` |
+| 4 | Absent | No automatic absent-marking |
+| 5 | rejectReason | Accepted in DTO, not persisted |
+| 6 | Security | JWT_SECRET = "change_me" |
+| 7 | Security | CORS open |
+| 8 | Security | DB credentials plaintext |
+| 9 | Balance | `totalDays` vs `entitledDays` naming |
+| 10 | Concurrency | Balance TOCTOU window |
+| 11 | Frontend | No UI implemented |
+
+## Related Notes
+
+- [[Backend v1 Readiness]]
+- [[Verification Workflow]]
+- [[Current Status]]
+
+#qa #backend-v1
