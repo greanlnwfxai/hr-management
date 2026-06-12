@@ -6,7 +6,7 @@ services:
       - "3002:3002"
     environment:
       PORT: 3002
-      NEXT_PUBLIC_API_URL: http://localhost:4002
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4002}
     depends_on:
       api:
         condition: service_healthy
@@ -19,8 +19,10 @@ services:
       - "4002:4002"
     environment:
       PORT: 4002
-      DATABASE_URL: postgresql://hr_user:hr_password@db:5432/hr_management
-      JWT_SECRET: change_me
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3002}
     depends_on:
       db:
         condition: service_healthy
@@ -38,14 +40,14 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_DB: hr_management
-      POSTGRES_USER: hr_user
-      POSTGRES_PASSWORD: hr_password
+      POSTGRES_DB: ${POSTGRES_DB:-hr_management}
+      POSTGRES_USER: ${POSTGRES_USER:-hr_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hr_user -d hr_management"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5

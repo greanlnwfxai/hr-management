@@ -3,3 +3,8 @@ SESSION.md
 .DS_Store
 **/.DS_Store
 HR-Knowledge/.obsidian/
+
+# Environment files — never commit secrets
+.env
+.env.local
+.env.*.local
