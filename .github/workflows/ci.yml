@@ -1,0 +1,142 @@
+name: HR Management CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs on the same branch/PR to save runner minutes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── API — Build & Validate ──────────────────────────────────────────────────
+  # Installs NestJS dependencies, generates Prisma client, validates schema,
+  # and compiles TypeScript via nest build.
+  # No real database connection is required — prisma validate is schema-only.
+  api-ci:
+    name: API — Build & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    env:
+      # Safe CI placeholder — prisma validate and nest build do not connect to DB.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_management?schema=public
+      JWT_SECRET: ci_test_secret_do_not_use_in_production
+      CORS_ORIGIN: http://localhost:3002
+      THROTTLE_TTL: "60"
+      THROTTLE_LIMIT: "100"
+      LOGIN_THROTTLE_TTL: "60"
+      LOGIN_THROTTLE_LIMIT: "5"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Generate Prisma client from schema — required before TypeScript compilation
+      # because the compiled NestJS code imports @prisma/client types.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Validates the Prisma schema file syntax. Does not require a live database.
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Build API (nest build)
+        run: npm run build
+
+  # ── Web — Build & Validate ──────────────────────────────────────────────────
+  # Installs Next.js dependencies and runs a full production build.
+  # NEXT_PUBLIC_API_URL is baked into the JS bundle at build time (T-032 fix).
+  # A safe placeholder URL is sufficient to validate the build.
+  web-ci:
+    name: Web — Build & Validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:4002
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web (next build)
+        run: npm run build
+
+  # ── Compose — Config Validation ─────────────────────────────────────────────
+  # Validates both compose files render correctly and that the production
+  # standalone compose has no host-bound port mappings.
+  # Does NOT start Docker containers or build images.
+  compose-ci:
+    name: Compose — Config Validation
+    runs-on: ubuntu-latest
+
+    env:
+      # Safe CI placeholders — required by docker-compose.production.yml :? validation.
+      # These values are intentionally non-secret placeholder strings.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ci_postgres_password
+      POSTGRES_DB: hr_management
+      DATABASE_URL: postgresql://postgres:ci_postgres_password@db:5432/hr_management?schema=public
+      JWT_SECRET: ci_jwt_secret_do_not_use_in_production
+      CORS_ORIGIN: https://hr.example.com
+      NEXT_PUBLIC_API_URL: https://hr.example.com/api
+      PUBLIC_APP_URL: https://hr.example.com
+      TRUST_PROXY: "true"
+      THROTTLE_TTL: "60"
+      THROTTLE_LIMIT: "100"
+      LOGIN_THROTTLE_TTL: "60"
+      LOGIN_THROTTLE_LIMIT: "5"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate dev compose config (docker-compose.yml)
+        run: docker compose -f docker-compose.yml config
+
+      - name: Validate production standalone compose config (docker-compose.production.yml)
+        run: docker compose -f docker-compose.production.yml config
+
+      # Confirm the production compose has no host-bound port mappings.
+      # The `published:` field only appears in the rendered config when a host
+      # port binding exists (ports: "HOST:CONTAINER"). expose: never produces it.
+      - name: Confirm no host-bound ports in production compose
+        run: |
+          CONFIG="$(docker compose -f docker-compose.production.yml config)"
+          if echo "$CONFIG" | grep -q "published:"; then
+            echo "FAIL: production compose has host-bound port mappings:"
+            echo "$CONFIG" | grep -B 4 "published:" || true
+            exit 1
+          fi
+          echo "PASS: no host-bound port mappings in docker-compose.production.yml"
