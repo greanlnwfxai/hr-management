@@ -12,6 +12,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Allow the public API URL to be injected at image build time.
+# NEXT_PUBLIC_* vars are baked into the JS bundle during `next build`.
+# Pass via --build-arg or docker-compose build.args; falls back to .env.local.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 

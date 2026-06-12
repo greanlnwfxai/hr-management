@@ -1,0 +1,125 @@
+# docker-compose.production.yml — Standalone production compose
+#
+# RECOMMENDED for production deployments.
+# This file is STANDALONE and does NOT require merging with docker-compose.yml.
+#
+# Usage:
+#   docker compose -f docker-compose.production.yml config        # validate
+#   docker compose -f docker-compose.production.yml up -d --build # start
+#   docker compose -f docker-compose.production.yml ps            # status
+#   docker compose -f docker-compose.production.yml logs -f api   # logs
+#
+# Why standalone instead of the overlay (docker-compose.prod.yml)?
+#   Docker Compose v2 merges array-type fields — ports: [] does NOT remove
+#   ports declared in the base file. The overlay cannot achieve a truly port-free
+#   deployment. This file starts from scratch and never binds host ports.
+#
+# ── Port Exposure Policy ──────────────────────────────────────────────────────
+#   db:  internal only via expose: ["5432"] — NO host port binding
+#   api: internal only via expose: ["4002"] — NO host port binding
+#   web: internal only via expose: ["3002"] — NO host port binding
+#   All public traffic must enter through a reverse proxy on ports 80/443.
+#
+# ── Reverse Proxy Connectivity ────────────────────────────────────────────────
+#   All services join the named network "hr_production".
+#   Connect a Caddy or Nginx container to this network to reach web:3002 / api:4002:
+#     docker network connect hr_production <proxy-container-name>
+#   Or declare it as an external network in the proxy's own compose file:
+#     networks:
+#       hr_production:
+#         external: true
+#   See deploy/caddy/Caddyfile.example and deploy/nginx/hr-management.conf.example.
+#
+# ── Prerequisites ─────────────────────────────────────────────────────────────
+#   1. Copy .env.example to .env, fill in ALL production values.
+#      Required (no defaults — compose will error if unset):
+#        POSTGRES_PASSWORD, DATABASE_URL, JWT_SECRET, CORS_ORIGIN, NEXT_PUBLIC_API_URL
+#   2. Configure reverse proxy and connect it to the hr_production network.
+#   3. Firewall: allow only ports 80 and 443 externally.
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16
+    container_name: hr-db-prod
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hr_management}
+      POSTGRES_USER: ${POSTGRES_USER:-hr_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hr_production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── NestJS API ──────────────────────────────────────────────────────────────
+  api:
+    build: ./apps/api
+    container_name: hr-api-prod
+    expose:
+      - "4002"
+    environment:
+      PORT: 4002
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN must be set in .env}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      LOGIN_THROTTLE_TTL: ${LOGIN_THROTTLE_TTL:-60}
+      LOGIN_THROTTLE_LIMIT: ${LOGIN_THROTTLE_LIMIT:-5}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - hr_production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Next.js Web ─────────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      # NEXT_PUBLIC_* vars are baked into the JS bundle at build time.
+      # This must be the public-facing API URL (e.g. https://hr.example.com/api).
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set in .env}
+    container_name: hr-web-prod
+    expose:
+      - "3002"
+    environment:
+      PORT: 3002
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - hr_production
+    restart: unless-stopped
+
+# ── Named network (allows external proxy container to join) ───────────────────
+networks:
+  hr_production:
+    name: hr_production
+    driver: bridge
+
+# ── Persistent volume for PostgreSQL data ────────────────────────────────────
+# Volume name matches docker-compose.yml so data is preserved when migrating
+# from the overlay approach to this standalone file on the same server.
+volumes:
+  postgres_data:
+    driver: local

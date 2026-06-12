@@ -1,17 +1,22 @@
-# docker-compose.prod.yml — Production overlay
+# docker-compose.prod.yml — Production overlay (HISTORICAL — see note below)
 #
-# Usage:
+# ⚠ RECOMMENDED ALTERNATIVE: use docker-compose.production.yml instead.
+#   This overlay approach has a fundamental limitation: Docker Compose v2 merges
+#   array-type fields (ports:), so ports: [] does NOT remove ports from the base
+#   file. Ports 3002, 4002, and 5432 remain host-bound even with this overlay.
+#   docker-compose.production.yml is a standalone file with no host port exposure.
+#
+# This file is kept for reference and may be useful for:
+#   - Quick TRUST_PROXY / CORS override testing alongside docker-compose.yml
+#   - CI/CD pipelines that already use the -f flag pattern
+#
+# Usage (if you choose this path over the standalone file):
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# What this overlay does:
-#   - Enables trust proxy so X-Forwarded-For is used for rate limiting
-#   - Sets NEXT_PUBLIC_API_URL to the public-facing API path (proxied via /api)
-#
-# ⚠ PORT NOTE — Docker Compose v2 merges port arrays; ports: [] does NOT remove
-#   base ports. Ports 3002, 4002, and 5432 will still be host-bound.
-#   In production, use a server firewall (ufw / security group) to block direct
-#   external access to those ports — only 80 and 443 should be publicly reachable.
-#   The reverse proxy connects to services via the Docker internal network.
+# ── PORT LIMITATION ───────────────────────────────────────────────────────────
+#   Ports 3002, 4002, and 5432 will still be host-bound after merge.
+#   Mitigate with a server firewall: block those ports externally,
+#   allow only 80 and 443 publicly.
 #
 # Prerequisites:
 #   - Firewall: only ports 80 and 443 open to the internet

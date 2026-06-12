@@ -1,21 +1,49 @@
 # deploy/caddy/Caddyfile.example
 #
 # Caddy v2 reverse proxy configuration for HR Management.
-# Copy to your Caddyfile (e.g. /etc/caddy/Caddyfile) and replace placeholders.
+# Copy to your Caddyfile and replace app.example.com with your actual domain.
+# Caddy handles TLS automatically (Let's Encrypt / ZeroSSL).
 #
-# Assumes Docker Compose services are on the default bridge network named
-# "hr-management_default" (or whatever Docker names it from the project dir).
-# If running Caddy on the host (not in Docker), replace service names with
-# localhost and the host-mapped port (but port mapping is disabled in prod overlay).
+# ── How Caddy reaches the services ───────────────────────────────────────────
 #
-# Single-domain layout: app.example.com
-#   /api/*  → api:4002  (NestJS)
-#   /*      → web:3002  (Next.js)
+# When using docker-compose.production.yml (recommended), services are on the
+# Docker network "hr_production" with no host port bindings. Caddy must be in
+# the same network to use service names (web:3002, api:4002).
 #
-# Replace app.example.com with your actual domain.
+# Option A — Caddy in Docker (recommended with standalone compose):
+#   Run Caddy as a Docker container and connect it to hr_production:
+#
+#     docker run -d --name caddy \
+#       --network hr_production \
+#       -p 80:80 -p 443:443 \
+#       -v /etc/caddy/Caddyfile:/etc/caddy/Caddyfile \
+#       -v caddy_data:/data \
+#       caddy:2
+#
+#   Or, in a Caddy compose file:
+#
+#     networks:
+#       hr_production:
+#         external: true   # joins the network created by docker-compose.production.yml
+#
+# Option B — Caddy on the host (requires host-bound ports or container IPs):
+#   Replace service names with localhost and the published port (if using dev compose),
+#   or use `docker inspect hr-api-prod --format '{{.NetworkSettings.Networks.hr_production.IPAddress}}'`
+#   to get container IPs. Option A is simpler for production.
+#
+# ── Single-domain layout ──────────────────────────────────────────────────────
+#   app.example.com/api/*  → api:4002   (NestJS — strips /api prefix)
+#   app.example.com/*      → web:3002   (Next.js)
+#
+# Note: api receives requests WITHOUT the /api prefix (uri strip_prefix /api).
+# This matches NEXT_PUBLIC_API_URL=https://app.example.com/api in .env.
+# The NestJS API does NOT have a /api global prefix configured.
+#
+# Note: TRUST_PROXY=true must be set in .env (or defaulted in production compose)
+# so NestJS reads X-Forwarded-For for correct per-client rate limiting.
 
 app.example.com {
-    # Route /api/* to NestJS
+    # Route /api/* to NestJS (strip the /api prefix before forwarding)
     handle /api/* {
         uri strip_prefix /api
         reverse_proxy api:4002
@@ -26,18 +54,17 @@ app.example.com {
         reverse_proxy web:3002
     }
 
-    # Caddy handles TLS automatically (Let's Encrypt / ZeroSSL)
-    # No manual cert config needed for public domains.
-
-    # Optional: tighten logging
+    # Optional: structured logging
     log {
         output file /var/log/caddy/hr-management.log
         format json
     }
 }
 
-# ── Alternative: separate subdomain for API ───────────────────────────────────
-# Uncomment and adjust if you prefer api.example.com instead of /api path prefix.
+# ── Alternative: separate subdomains ─────────────────────────────────────────
+# Uncomment if you prefer api.example.com instead of the /api path prefix.
+# Update NEXT_PUBLIC_API_URL=https://api.example.com and
+# CORS_ORIGIN=https://app.example.com in .env accordingly.
 #
 # app.example.com {
 #     reverse_proxy web:3002
