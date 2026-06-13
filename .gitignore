@@ -8,3 +8,9 @@ HR-Knowledge/.obsidian/
 .env
 .env.local
 .env.*.local
+
+# Playwright artifacts — local only, never commit
+apps/web/playwright-report/
+apps/web/test-results/
+apps/web/.playwright-browsers/
+apps/web/e2e/.auth-cache.json

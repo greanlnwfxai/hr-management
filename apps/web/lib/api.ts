@@ -19,9 +19,16 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const res = await fetch(`${API_BASE}${path}`, { ...rest, headers });
 
   if (res.status === 401) {
-    clearAuth();
-    if (typeof window !== 'undefined') window.location.href = '/login';
-    throw new Error('Unauthorized');
+    // skipAuth is set only on the login endpoint itself — don't redirect/clear
+    // when the login call returns 401 (wrong credentials), so the login page
+    // can display its own error instead of causing a redirect loop.
+    if (!skipAuth) {
+      clearAuth();
+      if (typeof window !== 'undefined') window.location.href = '/login';
+      throw new Error('Unauthorized');
+    }
+    const errBody = await res.json().catch(() => ({})) as { message?: string };
+    throw new ApiError(401, errBody.message ?? 'Unauthorized');
   }
 
   if (!res.ok) {

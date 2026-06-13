@@ -169,7 +169,7 @@ All CI environment variables are safe placeholder values. No real secrets are st
 | Capability | Status | See |
 |------------|--------|-----|
 | Unit tests (Jest) | **Configured** — runs in `api-ci` | `apps/api/src/**/*.spec.ts` |
-| Browser E2E tests | Not configured | Future task — Playwright/Cypress against full stack |
+| Browser E2E tests | **Local only** — Playwright added in T-039, not wired into CI (see below) | `apps/web/e2e/` |
 | Build Docker images | Not configured | Slow without registry cache; deferred to future task |
 | Push images to a container registry | Not configured | Future task |
 | Deploy to production | Not configured | Future task — manual deployment via `docker-compose.production.yml` |
@@ -228,6 +228,37 @@ All CI environment variables are safe placeholder values. No real secrets are st
 
 ### `integration-ci` fails at "Run API smoke test" — 429 Too Many Requests
 → The smoke test triggered the login rate limiter. `LOGIN_THROTTLE_LIMIT` in `integration-ci` is set to `10` specifically to avoid this. If you added retry logic that calls `POST /auth/login` many times, reduce the retries or increase the limit further in the CI env block only.
+
+---
+
+## Playwright E2E Tests (T-039 — Local Only)
+
+Playwright critical-flow tests were added in T-039 under `apps/web/e2e/`. They run against the local Docker stack and are **not yet wired into GitHub Actions**.
+
+**Why not in CI yet:**
+- Browser install (`npx playwright install chromium`) adds ~200 MB and significant job time.
+- Tests require a fully running Docker stack with seeded data (`docker compose up` in CI).
+- The existing `integration-ci` job already validates the API end-to-end with a real database.
+- A reliable Playwright CI job needs a stable pre-seeded test database — best addressed in T-040/T-041.
+
+**Running locally:**
+
+```bash
+# Prerequisite: install browser once
+cd apps/web && npx playwright install chromium
+
+# Prerequisite: stack must be running
+./scripts/docker-verify.sh
+
+# Run tests
+./scripts/e2e-test.sh
+# or directly:
+cd apps/web && npm run test:e2e
+```
+
+**Future CI E2E (T-040/T-041):** Add a new job that starts the compose stack, waits for health, and runs `npm run test:e2e:ci`. Mark it as a required status check only when it is reliably green.
+
+See **[E2E_TESTING.md](E2E_TESTING.md)** for full documentation.
 
 ---
 
