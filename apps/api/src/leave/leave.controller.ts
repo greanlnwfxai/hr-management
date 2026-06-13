@@ -9,6 +9,15 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -20,12 +29,19 @@ import { QueryLeaveRequestDto } from './dto/query-leave-request.dto';
 import { RejectLeaveRequestDto } from './dto/reject-leave-request.dto';
 import { LeaveService } from './leave.service';
 
+@ApiTags('Leave Requests')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
 @Controller('leave')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class LeaveController {
   constructor(private leave: LeaveService) {}
 
   @Post('request')
+  @ApiOperation({ summary: 'Submit a leave request (own employee record required)' })
+  @ApiResponse({ status: 201, description: 'Leave request created' })
+  @ApiResponse({ status: 404, description: 'No employee record found for current user' })
+  @ApiResponse({ status: 409, description: 'Overlapping leave request already exists' })
   create(
     @CurrentUser() user: { id: string },
     @Body() dto: CreateLeaveRequestDto,
@@ -33,8 +49,9 @@ export class LeaveController {
     return this.leave.create(user.id, dto);
   }
 
-  // Declared before /:id so NestJS matches the static segment first
   @Get('me')
+  @ApiOperation({ summary: 'Own leave requests (paginated)' })
+  @ApiResponse({ status: 200, description: 'Paginated leave request list' })
   findMy(
     @CurrentUser() user: { id: string },
     @Query() query: QueryLeaveRequestDto,
@@ -44,11 +61,19 @@ export class LeaveController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'All leave requests (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Paginated leave request list' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
   findAll(@Query() query: QueryLeaveRequestDto) {
     return this.leave.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get leave request by ID (owner or admin)' })
+  @ApiParam({ name: 'id', description: 'Leave request UUID' })
+  @ApiResponse({ status: 200, description: 'Leave request record' })
+  @ApiResponse({ status: 403, description: 'Not the owner and not an admin' })
+  @ApiResponse({ status: 404, description: 'Leave request not found' })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -58,6 +83,12 @@ export class LeaveController {
 
   @Patch(':id/approve')
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Approve a PENDING leave request — deducts leave balance atomically (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Leave request UUID' })
+  @ApiResponse({ status: 200, description: 'Leave request approved' })
+  @ApiResponse({ status: 404, description: 'Leave request or leave balance not found' })
+  @ApiResponse({ status: 409, description: 'Request not PENDING or insufficient leave balance' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
   approve(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: { id: string },
@@ -68,6 +99,12 @@ export class LeaveController {
 
   @Patch(':id/reject')
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Reject a PENDING leave request (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Leave request UUID' })
+  @ApiResponse({ status: 200, description: 'Leave request rejected' })
+  @ApiResponse({ status: 404, description: 'Leave request not found' })
+  @ApiResponse({ status: 409, description: 'Request is not PENDING' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
   reject(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: { id: string },

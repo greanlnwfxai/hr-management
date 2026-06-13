@@ -8,6 +8,15 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiForbiddenResponse,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 import { UserRole } from '../common/enums';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -18,12 +27,18 @@ import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 
+@ApiTags('Attendance')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
   constructor(private attendance: AttendanceService) {}
 
   @Post('clock-in')
+  @ApiOperation({ summary: 'Clock in for today (LATE if after 09:00 Asia/Bangkok)' })
+  @ApiResponse({ status: 201, description: 'Attendance record created' })
+  @ApiResponse({ status: 409, description: 'Already clocked in today' })
   clockIn(
     @CurrentUser() user: { id: string },
     @Body() dto: ClockInDto,
@@ -32,6 +47,9 @@ export class AttendanceController {
   }
 
   @Post('clock-out')
+  @ApiOperation({ summary: 'Clock out for today' })
+  @ApiResponse({ status: 201, description: 'Clock-out recorded' })
+  @ApiResponse({ status: 409, description: 'No active clock-in for today' })
   clockOut(
     @CurrentUser() user: { id: string },
     @Body() dto: ClockOutDto,
@@ -39,8 +57,9 @@ export class AttendanceController {
     return this.attendance.clockOut(user.id, dto);
   }
 
-  // Declared before /:id so NestJS matches the static segment first
   @Get('me')
+  @ApiOperation({ summary: 'Own attendance history (paginated)' })
+  @ApiResponse({ status: 200, description: 'Paginated attendance list' })
   findMy(
     @CurrentUser() user: { id: string },
     @Query() query: QueryAttendanceDto,
@@ -50,11 +69,19 @@ export class AttendanceController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'All attendance records (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Paginated attendance list' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
   findAll(@Query() query: QueryAttendanceDto) {
     return this.attendance.findAll(query);
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get attendance record by ID (owner or admin)' })
+  @ApiParam({ name: 'id', description: 'Attendance UUID' })
+  @ApiResponse({ status: 200, description: 'Attendance record' })
+  @ApiResponse({ status: 403, description: 'Not the owner and not an admin' })
+  @ApiResponse({ status: 404, description: 'Attendance record not found' })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: { id: string; role: string },

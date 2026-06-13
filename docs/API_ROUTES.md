@@ -4,6 +4,9 @@ Base URL: `http://localhost:4002`
 Auth: All protected routes require `Authorization: Bearer <token>`.
 Roles: `SUPER_ADMIN` · `HR_ADMIN` · `MANAGER` · `EMPLOYEE`
 
+> **Living API reference:** Swagger UI is available at `http://localhost:4002/docs` (local/dev).
+> OpenAPI JSON at `http://localhost:4002/docs-json`. See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for auth and production guidance.
+
 ---
 
 ## Health
