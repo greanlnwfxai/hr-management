@@ -226,3 +226,153 @@ jobs:
         run: ./scripts/api-smoke-test.sh
         env:
           API_URL: http://localhost:4002
+
+  # ── E2E — Playwright Critical Flows ─────────────────────────────────────────
+  # Starts the real Docker stack (db → migrate/seed → api → web), then runs all
+  # 44 Playwright tests in Chromium. Depends on build jobs but NOT on
+  # integration-ci — they validate different runtime paths in parallel.
+  #
+  # Migration strategy: the API Docker image (runner stage) does not include
+  # prisma/ migration files, so migrations run from the host runner against the
+  # db container's exposed port (localhost:5432) before the API container starts.
+  e2e-ci:
+    name: E2E — Playwright Critical Flows
+    runs-on: ubuntu-latest
+    needs: [api-ci, web-ci, compose-ci]
+
+    env:
+      # ── Docker Compose / API ───────────────────────────────────────────────
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: hr_management
+      # Container-internal URL used by the api service via the Docker network.
+      # Host-side migration steps override this to localhost:5432 (see below).
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/hr_management?schema=public
+      JWT_SECRET: ci_jwt_secret_do_not_use_in_production
+      CORS_ORIGIN: http://localhost:3002
+      NEXT_PUBLIC_API_URL: http://localhost:4002
+      PORT: "4002"
+      TRUST_PROXY: "false"
+      THROTTLE_TTL: "60"
+      THROTTLE_LIMIT: "100"
+      LOGIN_THROTTLE_TTL: "60"
+      # Raised from the production default (5) to absorb Playwright globalSetup
+      # token fetch + login.spec.ts UI login calls without hitting the rate limiter.
+      LOGIN_THROTTLE_LIMIT: "20"
+      SWAGGER_ENABLED: "true"
+      SWAGGER_PATH: docs
+      # ── Playwright ─────────────────────────────────────────────────────────
+      E2E_BASE_URL: http://localhost:3002
+      E2E_API_URL: http://localhost:4002
+      E2E_ADMIN_EMAIL: admin@hr.local
+      E2E_ADMIN_PASSWORD: admin1234
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          # Cache both lockfiles so web install and api install share the cache key.
+          cache-dependency-path: |
+            apps/web/package-lock.json
+            apps/api/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      # Install Chromium system dependencies and the browser binary.
+      # --with-deps installs OS-level packages required on ubuntu-latest.
+      - name: Install Playwright Chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      # API deps are needed to run prisma migrate deploy and prisma db seed
+      # from the host runner (the API Docker image has no migration files).
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      # Start the database container first, before the API, so we can apply
+      # migrations from the host before any application code connects.
+      - name: Start database service
+        run: docker compose up -d db
+
+      - name: Wait for database to be ready
+        run: |
+          echo "Waiting for PostgreSQL to be ready..."
+          for i in $(seq 1 30); do
+            if docker compose exec -T db pg_isready -U postgres -d hr_management >/dev/null 2>&1; then
+              echo "Database ready after ${i} attempt(s)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "ERROR: database did not become ready within 90 seconds"
+              docker compose logs db
+              exit 1
+            fi
+            echo "  attempt ${i}/30 — retrying in 3 s..."
+            sleep 3
+          done
+
+      # Run migrations against localhost:5432 (the db container's host-exposed
+      # port). The API container uses db:5432 (Docker-internal); both resolve
+      # to the same database instance.
+      - name: Run Prisma migrations
+        working-directory: apps/api
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_management?schema=public
+
+      - name: Seed database
+        working-directory: apps/api
+        run: npx prisma db seed
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hr_management?schema=public
+
+      # Build images and start API + Web. The web service depends_on api healthy,
+      # so Docker Compose starts web only after the API healthcheck passes.
+      # NEXT_PUBLIC_API_URL is picked up from the job env and passed as a build
+      # arg by docker-compose.yml, baking it into the Next.js bundle.
+      - name: Build and start API and Web
+        run: docker compose up -d --build api web
+
+      - name: Wait for API health endpoint
+        run: |
+          curl -f --retry 30 --retry-delay 3 --retry-all-errors \
+            --max-time 5 http://localhost:4002/health
+
+      - name: Wait for Web app to be reachable
+        run: |
+          curl -f --retry 30 --retry-delay 3 --retry-all-errors \
+            --max-time 5 http://localhost:3002
+
+      - name: Run Playwright E2E tests
+        working-directory: apps/web
+        run: npm run test:e2e
+
+      # Upload report and test results so failures can be diagnosed without
+      # re-running the full CI pipeline locally.
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+          retention-days: 7
+
+      # Always clean up containers and volumes to keep the GitHub runner tidy.
+      - name: Stop and remove Docker services
+        if: always()
+        run: docker compose down -v

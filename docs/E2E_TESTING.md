@@ -150,16 +150,123 @@ The protected layout uses `useEffect` to check `localStorage` and redirect if no
 
 ---
 
-## CI Decision (T-039)
+## CI Integration (T-040)
 
-E2E tests are **local-only** for T-039. They are not wired into GitHub Actions.
+E2E tests run in GitHub Actions as the **`e2e-ci`** job. The job starts the real Docker stack, seeds the database, and runs all 44 Playwright tests in Chromium.
 
-**Reasons:**
-- Browser install (`npx playwright install`) adds ~200 MB and significant time on CI runners.
-- Tests require a fully running Docker stack with seeded data, which means a full `docker compose up` on CI (additional time + cost).
-- The existing GitHub Actions integration test (`runtime-integration`) already validates the API end-to-end with a real PostgreSQL service.
-- Adding a reliable Playwright CI job requires a stable test database with guaranteed seed data — best addressed in T-040 or T-041.
+### Job name
 
-When E2E CI is added (future task), the recommended approach is:
-1. Add a `test:e2e:ci` script with `--reporter=github`.
-2. Add a new CI job that starts the Docker stack, waits for health, runs `npm run test:e2e:ci`, and uploads the report artifact.
+```
+HR Management CI / E2E — Playwright Critical Flows
+```
+
+### Job dependency
+
+`e2e-ci` runs after `api-ci`, `web-ci`, and `compose-ci` pass. It runs in parallel with `integration-ci` (which validates the API via a different runtime path).
+
+### CI Docker strategy
+
+The API Docker image does not include `prisma/` migration files (only `dist/` and `node_modules/`), so migrations run from the host runner before the API container starts:
+
+1. Start database only: `docker compose up -d db`
+2. Wait for `pg_isready` inside the container
+3. Run `npx prisma migrate deploy` (host → `localhost:5432`, the exposed db port)
+4. Run `npx prisma db seed` (creates `admin@hr.local`)
+5. Build and start API + Web: `docker compose up -d --build api web`
+6. Poll `http://localhost:4002/health` and `http://localhost:3002` with `curl --retry`
+7. Run `npm run test:e2e`
+8. Upload artifacts on failure
+9. `docker compose down -v` (always)
+
+### Required CI environment variables
+
+All values are safe CI-only placeholders — no real secrets.
+
+| Variable | CI Value | Notes |
+|----------|----------|-------|
+| `POSTGRES_USER` | `postgres` | DB superuser for CI |
+| `POSTGRES_PASSWORD` | `postgres` | CI-only placeholder password |
+| `POSTGRES_DB` | `hr_management` | Database name |
+| `DATABASE_URL` | `postgresql://postgres:postgres@db:5432/hr_management?schema=public` | Used by API container (Docker-internal hostname) |
+| `JWT_SECRET` | `ci_jwt_secret_do_not_use_in_production` | API JWT signing key |
+| `CORS_ORIGIN` | `http://localhost:3002` | API CORS allowed origin |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:4002` | Baked into web bundle at Docker build time |
+| `PORT` | `4002` | API listen port |
+| `TRUST_PROXY` | `false` | Not behind a reverse proxy in CI |
+| `THROTTLE_TTL` | `60` | Rate limiter window (seconds) |
+| `THROTTLE_LIMIT` | `100` | Global request limit per window |
+| `LOGIN_THROTTLE_TTL` | `60` | Login rate limiter window |
+| `LOGIN_THROTTLE_LIMIT` | `20` | Raised from default (5) to absorb Playwright login calls |
+| `SWAGGER_ENABLED` | `true` | Swagger UI enabled |
+| `SWAGGER_PATH` | `docs` | Swagger endpoint path |
+| `E2E_BASE_URL` | `http://localhost:3002` | Playwright base URL |
+| `E2E_API_URL` | `http://localhost:4002` | API URL for token fetch |
+| `E2E_ADMIN_EMAIL` | `admin@hr.local` | Seeded admin credentials |
+| `E2E_ADMIN_PASSWORD` | `admin1234` | Seeded admin credentials |
+
+### Artifact upload
+
+On failure, the job uploads:
+
+| Path | Content |
+|------|---------|
+| `apps/web/playwright-report/` | HTML test report |
+| `apps/web/test-results/` | Screenshots and traces for failed tests |
+
+Artifacts are retained for **7 days** under the name `playwright-report` in the GitHub Actions run.
+
+### Retries
+
+`playwright.config.ts` sets `retries: process.env.CI ? 1 : 0`. In CI, each failing test gets one retry to absorb transient Docker timing issues. Locally, retries stay at 0 for immediate feedback.
+
+---
+
+## Troubleshooting CI Failures
+
+### Docker build failed (`api` or `web` image)
+Check the build output in the "Build and start API and Web" step. Common causes: network timeout fetching npm packages, lockfile mismatch, or TypeScript error that slipped past `api-ci`/`web-ci`.
+
+### API health timeout (`localhost:4002/health` never responds)
+The API container failed to start. Check:
+1. The "Build and start API and Web" step for Docker error output.
+2. Run `docker compose logs api` in a subsequent debug step if needed.
+3. Confirm `DATABASE_URL` points to `db:5432` (not `localhost:5432`) for the API container.
+
+### Web health timeout (`localhost:3002` never responds)
+The web container starts only after the API is healthy (due to `depends_on: api: condition: service_healthy`). If the API health check never passes, web never starts. Fix the API first.
+
+### Login failed / 401 during Playwright `globalSetup`
+The admin seed did not run or the API is not yet serving. Confirm:
+1. The "Seed database" step succeeded.
+2. The "Wait for API health endpoint" step passed.
+
+### 429 Too Many Requests in login tests
+`LOGIN_THROTTLE_LIMIT` is set to `20` in CI to absorb `globalSetup` + `login.spec.ts` calls. If tests are added that call `/auth/login` many more times, raise this value in the CI job env only.
+
+### Playwright browser install failed
+`npx playwright install --with-deps chromium` failed to download the browser binary. This is usually a transient network issue on the runner. Re-run the workflow; it will retry from scratch.
+
+### `NEXT_PUBLIC_API_URL` baked incorrectly (browser calls go to wrong host)
+This happens if `NEXT_PUBLIC_API_URL` is passed only as a runtime env var instead of a Docker build arg. The `docker-compose.yml` passes it as `build.args.NEXT_PUBLIC_API_URL`, which bakes the value into the Next.js bundle at image build time. Verify the job-level `NEXT_PUBLIC_API_URL` env var is set before `docker compose up --build`.
+
+### Database migration timeout
+The "Wait for database to be ready" step polls `pg_isready` up to 30 times (90 s). If it times out, check `docker compose logs db` output in the step. Likely cause: runner resource contention. Re-run the workflow.
+
+---
+
+## Local-Only Usage (original T-039 behavior)
+
+Running E2E tests locally still works exactly as before:
+
+```bash
+# Prerequisite: install browser once
+cd apps/web && npx playwright install chromium
+
+# Prerequisite: stack must be running and seeded
+./scripts/docker-verify.sh
+
+# Run tests
+./scripts/e2e-test.sh
+# or directly:
+cd apps/web && npm run test:e2e
+```

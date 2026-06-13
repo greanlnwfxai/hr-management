@@ -6,6 +6,8 @@ The project uses **GitHub Actions** for continuous integration. Every push and p
 
 The pipeline does **not** deploy to production or push Docker images to a registry — those are future tasks (see [Future Improvements](#future-improvements)).
 
+The pipeline now has **five jobs**: API build/validate, Web build/validate, Compose config validation, Runtime API integration test, and Playwright E2E critical flows.
+
 Workflow file: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
 ---
@@ -23,6 +25,18 @@ Concurrent runs on the same branch or PR are automatically cancelled to save run
 ---
 
 ## Jobs
+
+| Job | Name | Depends on | Runner |
+|-----|------|-----------|--------|
+| `api-ci` | API — Build & Validate | — | ubuntu-latest |
+| `web-ci` | Web — Build & Validate | — | ubuntu-latest |
+| `compose-ci` | Compose — Config Validation | — | ubuntu-latest |
+| `integration-ci` | Integration — Runtime API Test | `api-ci` | ubuntu-latest |
+| `e2e-ci` | E2E — Playwright Critical Flows | `api-ci`, `web-ci`, `compose-ci` | ubuntu-latest |
+
+`integration-ci` and `e2e-ci` run in parallel after the three build/validate jobs complete. They validate different runtime paths: `integration-ci` exercises the NestJS API directly (no browser); `e2e-ci` exercises the full stack through a real Chromium browser.
+
+---
 
 ### `api-ci` — API: Build & Validate
 
@@ -169,10 +183,11 @@ All CI environment variables are safe placeholder values. No real secrets are st
 | Capability | Status | See |
 |------------|--------|-----|
 | Unit tests (Jest) | **Configured** — runs in `api-ci` | `apps/api/src/**/*.spec.ts` |
-| Browser E2E tests | **Local only** — Playwright added in T-039, not wired into CI (see below) | `apps/web/e2e/` |
-| Build Docker images | Not configured | Slow without registry cache; deferred to future task |
+| Browser E2E tests (Chromium) | **Configured** — `e2e-ci` added in T-040 | `apps/web/e2e/` |
+| Build Docker images (standalone) | Not configured | Slow without registry cache; deferred to future task |
 | Push images to a container registry | Not configured | Future task |
 | Deploy to production | Not configured | Future task — manual deployment via `docker-compose.production.yml` |
+| Browser matrix (Firefox, WebKit) | Not configured | Deferred — Chromium-only for now |
 
 ---
 
@@ -229,19 +244,51 @@ All CI environment variables are safe placeholder values. No real secrets are st
 ### `integration-ci` fails at "Run API smoke test" — 429 Too Many Requests
 → The smoke test triggered the login rate limiter. `LOGIN_THROTTLE_LIMIT` in `integration-ci` is set to `10` specifically to avoid this. If you added retry logic that calls `POST /auth/login` many times, reduce the retries or increase the limit further in the CI env block only.
 
+### `e2e-ci` fails at "Wait for database to be ready"
+→ The `db` container did not pass `pg_isready` within 30 × 3 s = 90 s. Check `docker compose logs db` output in the step (the step prints logs on timeout). Re-running the workflow usually resolves transient runner resource issues.
+
+### `e2e-ci` fails at "Run Prisma migrations"
+→ `prisma migrate deploy` could not reach `localhost:5432` or a migration file has an error. Confirm the "Wait for database" step succeeded. The step-level `DATABASE_URL` override uses `localhost:5432` (the host-exposed port) — ensure no job-level override is shadowing it.
+
+### `e2e-ci` fails at "Wait for API health endpoint" / "Wait for Web app to be reachable"
+→ The API container failed to start (check `docker compose logs api`) or the Web container is waiting for the API healthcheck to pass. The API healthcheck has a 15 s `start_period` plus 5 × 10 s retries. Our curl polls for up to 30 × 3 s = 90 s, which should be sufficient. If flakiness persists, raise `--retry` to 40.
+
+### `e2e-ci` fails at "Run Playwright E2E tests" — a test fails once but passes on retry
+→ The single automatic retry (`retries: process.env.CI ? 1 : 0`) absorbed a transient timing issue. This is expected occasional behaviour; if the test passes on retry the job still succeeds. If a test fails twice consistently, investigate the root cause.
+
+### `e2e-ci` fails at "Run Playwright E2E tests" — 429 login rate limit
+→ `LOGIN_THROTTLE_LIMIT` in `e2e-ci` is set to `20` to handle `globalSetup` (1 login) + `login.spec.ts` (2 logins) plus retries. If more spec files call `getAdminToken()` directly (instead of `getCachedAdminToken()`), the budget will be exhausted. Always use the cached token in spec files.
+
+### `e2e-ci` — Playwright report available
+→ Download the `playwright-report` artifact from the GitHub Actions run page. Extract it and open `playwright-report/index.html` locally to see screenshots and traces for each failed test.
+
 ---
 
-## Playwright E2E Tests (T-039 — Local Only)
+## Playwright E2E Tests (`e2e-ci` — T-040)
 
-Playwright critical-flow tests were added in T-039 under `apps/web/e2e/`. They run against the local Docker stack and are **not yet wired into GitHub Actions**.
+Playwright critical-flow tests run in GitHub Actions as the `e2e-ci` job. They exercise the full stack (browser → Next.js → NestJS API → PostgreSQL) using Chromium.
 
-**Why not in CI yet:**
-- Browser install (`npx playwright install chromium`) adds ~200 MB and significant job time.
-- Tests require a fully running Docker stack with seeded data (`docker compose up` in CI).
-- The existing `integration-ci` job already validates the API end-to-end with a real database.
-- A reliable Playwright CI job needs a stable pre-seeded test database — best addressed in T-040/T-041.
+**Coverage:** 44 tests across 5 spec files — login/logout, navigation, dashboard, employees, leave/attendance.
 
-**Running locally:**
+**Docker strategy:** The API image does not include Prisma migration files (only `dist/` + `node_modules/`). CI runs migrations from the host runner before starting the API container:
+
+```
+docker compose up -d db
+→ wait for pg_isready
+→ npx prisma migrate deploy (host → localhost:5432)
+→ npx prisma db seed
+→ docker compose up -d --build api web
+→ curl --retry on /health and / (3002)
+→ npm run test:e2e
+```
+
+**`LOGIN_THROTTLE_LIMIT=20`** is set in `e2e-ci` (vs. 5 in production) to absorb Playwright's `globalSetup` token fetch + `login.spec.ts` UI login calls without triggering the rate limiter.
+
+**Retries:** `playwright.config.ts` uses `retries: process.env.CI ? 1 : 0`. In CI each failing test gets one automatic retry to absorb transient Docker startup timing issues.
+
+**Artifacts:** On failure, `playwright-report/` and `test-results/` are uploaded as the `playwright-report` artifact (retained 7 days) so screenshots and traces are available without re-running CI.
+
+**Running locally (unchanged from T-039):**
 
 ```bash
 # Prerequisite: install browser once
@@ -256,15 +303,13 @@ cd apps/web && npx playwright install chromium
 cd apps/web && npm run test:e2e
 ```
 
-**Future CI E2E (T-040/T-041):** Add a new job that starts the compose stack, waits for health, and runs `npm run test:e2e:ci`. Mark it as a required status check only when it is reliably green.
-
-See **[E2E_TESTING.md](E2E_TESTING.md)** for full documentation.
+See **[E2E_TESTING.md](E2E_TESTING.md)** for full CI troubleshooting and env var reference.
 
 ---
 
 ## Branch Protection
 
-All four CI jobs should be configured as **required status checks** on `main`. This prevents code from merging if any check fails — including the runtime integration test.
+All five CI jobs should be configured as **required status checks** on `main`. This prevents code from merging if any check fails — including the runtime integration test and the Playwright E2E suite.
 
 Required check names (as they appear in GitHub):
 
@@ -273,6 +318,7 @@ HR Management CI / API — Build & Validate
 HR Management CI / Web — Build & Validate
 HR Management CI / Compose — Config Validation
 HR Management CI / Integration — Runtime API Test
+HR Management CI / E2E — Playwright Critical Flows
 ```
 
 Full setup instructions, solo-vs-team policy, emergency bypass guidance, and a validation checklist are in **[BRANCH_PROTECTION.md](BRANCH_PROTECTION.md)**.
@@ -335,6 +381,7 @@ npm run test:watch  # watch mode during development
 
 ### Short Term
 - **Coverage enforcement**: Add `--coverageThreshold` to `jest` config to require minimum coverage on new code
+- **E2E browser matrix**: Extend `e2e-ci` to run against Firefox and WebKit (add projects to `playwright.config.ts`); currently Chromium-only to minimise install time
 
 ### Medium Term
 - **Docker image builds**: Add a `docker-build` job that runs `docker compose build api web` using GitHub Actions cache (`type=gha`)
@@ -342,9 +389,9 @@ npm run test:watch  # watch mode during development
 - **Staging deployment**: Auto-deploy to a staging server on successful merge using SSH + `docker compose pull && up`
 
 ### Long Term
-- **E2E tests**: Playwright or Cypress tests against a fully running test stack (currently blocked — no browser test framework configured)
 - **Scheduled smoke tests**: Nightly run of `api-smoke-test.sh` against staging
 - **Multi-environment workflows**: Separate pipelines for `staging` and `production` branches
+- **E2E mutating tests**: Add write-path coverage (create employee, submit leave, clock in/out) once a test-data reset strategy is in place
 
 ---
 

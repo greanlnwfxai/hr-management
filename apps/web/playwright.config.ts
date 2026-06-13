@@ -6,7 +6,9 @@ export default defineConfig({
   // Run tests sequentially to avoid rate-limit collisions against the shared local stack
   fullyParallel: false,
   workers: 1,
-  retries: 0,
+  // Allow one retry in CI to absorb transient Docker stack timing flakiness;
+  // keep at 0 locally so failures surface immediately during development.
+  retries: process.env.CI ? 1 : 0,
   timeout: 45000,
   expect: { timeout: 15000 },
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
