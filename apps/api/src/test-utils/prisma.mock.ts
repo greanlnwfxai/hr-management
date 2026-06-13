@@ -13,17 +13,34 @@ export function mockPrisma() {
       create: jest.fn(),
       update: jest.fn(),
     },
+    leaveRequest: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+    leaveBalance: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      update: jest.fn(),
+    },
+    attendance: {
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+    },
+    department: {
+      count: jest.fn(),
+    },
+    position: {
+      count: jest.fn(),
+    },
     $transaction: jest.fn(),
-  } as unknown as jest.Mocked<PrismaService> & {
-    user: { findUnique: jest.Mock };
-    employee: {
-      findMany: jest.Mock;
-      count: jest.Mock;
-      findFirst: jest.Mock;
-      findUnique: jest.Mock;
-      create: jest.Mock;
-      update: jest.Mock;
-    };
-    $transaction: jest.Mock;
-  };
+  } as unknown as PrismaService;
 }

@@ -184,6 +184,9 @@ All CI environment variables are safe placeholder values. No real secrets are st
 ### `api-ci` fails at "Run unit tests" — TypeScript compile error in spec file
 → A type change in a DTO, service, or enum broke the `.spec.ts` file. Run `cd apps/api && npm test` locally — `ts-jest` will show the exact line. Update the spec to match the new types. Do not cast to `any` to suppress errors unless the cast is intentional.
 
+### `api-ci` fails at "Run unit tests" — timezone-sensitive test is flaky
+→ Attendance and dashboard tests that assert Bangkok date/time must use `jest.useFakeTimers()` and `jest.setSystemTime()` to pin the clock. Tests that do not pin time and depend on "what hour it is now" will fail unpredictably. All such tests should call `jest.useRealTimers()` in `afterEach`. Do not assert exact Bangkok date values without pinning the system clock first.
+
 ### `api-ci` fails at "Run unit tests" — bcrypt/JWT mock not applied
 → `jest.mock('bcrypt')` or `jest.mock('@nestjs/jwt')` must appear at the top of the spec file (before any imports that trigger the module). If the mock is inside a `describe()` block it will be hoisted by Jest but may not apply in time. Move it to the top level.
 
@@ -258,15 +261,24 @@ Unit tests run in `api-ci` via `npm test` (Jest + ts-jest). They mock all extern
 | `AuthService` | `src/auth/auth.service.spec.ts` | Valid login, wrong password, unknown user, safe response shape, JWT payload fields |
 | `AuthController` | `src/auth/auth.controller.spec.ts` | Login delegation, `/me` handler |
 | `JwtStrategy` | `src/auth/strategies/jwt.strategy.spec.ts` | Valid payload returns safe user; deleted user throws `UnauthorizedException` |
-| `EmployeesService` | `src/employees/employees.service.spec.ts` | Pagination, findOne, NotFoundException, create, ConflictException, update, soft-delete via remove |
+| `EmployeesService` | `src/employees/employees.service.spec.ts` | Pagination, findOne, NotFoundException, create, ConflictException, update, soft-delete |
 | `EmployeesController` | `src/employees/employees.controller.spec.ts` | All five CRUD routes delegate correctly to service |
+| `LeaveService` | `src/leave/leave.service.spec.ts` | Create with overlap guard, date validation, findMy, findAll, findOne with RBAC, approve (balance check + atomic transaction), reject |
+| `LeaveController` | `src/leave/leave.controller.spec.ts` | All six routes delegate with correct user context |
+| `LeaveBalanceService` | `src/leave-balance/leave-balance.service.spec.ts` | Create with conflict guard, findAll, findMy, findOne with RBAC, update with negative-remaining guard, `remainingDays` computed field |
+| `LeaveBalanceController` | `src/leave-balance/leave-balance.controller.spec.ts` | All five routes delegate correctly |
+| `AttendanceService` | `src/attendance/attendance.service.spec.ts` | clockIn PRESENT/LATE boundary (Bangkok UTC+7 fake timers), clockOut, duplicate-clock guards, findMyAttendance, findAll, findOne with RBAC |
+| `AttendanceController` | `src/attendance/attendance.controller.spec.ts` | All five routes delegate correctly |
+| `DashboardService` | `src/dashboard/dashboard.service.spec.ts` | Full response shape, employee/attendance/leave counts, `lowLeaveBalanceCount` threshold logic, Bangkok `todayDate` calendar boundary |
+| `DashboardController` | `src/dashboard/dashboard.controller.spec.ts` | Delegates to service, returns timezone |
 
 ### Mocking strategy
 
-- **PrismaService** — replaced by a typed mock factory in `src/test-utils/prisma.mock.ts`. Methods (`user.findUnique`, `employee.*`, `$transaction`) are all `jest.fn()`.
+- **PrismaService** — replaced by a typed mock factory in `src/test-utils/prisma.mock.ts`. Covers `user`, `employee`, `leaveRequest`, `leaveBalance`, `attendance`, `department`, `position`, and `$transaction` (both array form and callback form).
 - **JwtService** — injected as a plain `{ signAsync: jest.fn() }` object.
 - **bcrypt** — module-level `jest.mock('bcrypt')` replaces `compare` with a controllable `jest.fn()`.
 - **Guards** (`JwtAuthGuard`, `RolesGuard`) — overridden with `{ canActivate: () => true }` in controller tests.
+- **Date / timers** — attendance and dashboard timezone tests use `jest.useFakeTimers()` / `jest.setSystemTime()` for deterministic Bangkok calendar date assertions. Timers are always restored in `afterEach`.
 
 ### Running locally
 
