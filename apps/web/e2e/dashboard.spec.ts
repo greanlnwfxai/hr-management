@@ -41,10 +41,11 @@ test.describe('Dashboard', () => {
 
   test('recent sections render without error state', async ({ page }) => {
     await page.goto('/dashboard');
-    // These headings appear in the "Recent" cards
-    await expect(page.getByText('Recent Employees')).toBeVisible();
-    await expect(page.getByText('Recent Attendance')).toBeVisible();
-    await expect(page.getByText('Recent Leave Requests')).toBeVisible();
+    // Use heading role to avoid strict-mode violation: the parent card div also
+    // contains the heading text as a substring of its combined text content.
+    await expect(page.getByRole('heading', { name: 'Recent Employees', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recent Attendance', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recent Leave Requests', exact: true })).toBeVisible();
   });
 
   test('dashboard data loads — no loading/error state remaining', async ({ page }) => {
@@ -55,7 +56,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Failed to load dashboard')).not.toBeVisible();
     // Heading and recent sections are present
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-    await expect(page.getByText('Recent Employees')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Recent Employees', exact: true })).toBeVisible();
   });
 
   test('timezone indicator is visible', async ({ page }) => {
