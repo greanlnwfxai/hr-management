@@ -1,6 +1,9 @@
-export default function LoadingState({ message = 'Loading…' }: { message?: string }) {
+export default function LoadingState({ message = 'Loading…', testid }: { message?: string; testid?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-zinc-400">
+    <div
+      data-testid={testid ?? 'loading-state'}
+      className="flex flex-col items-center justify-center py-24 text-zinc-400 dark:text-zinc-500"
+    >
       <svg
         className="mb-3 h-8 w-8 animate-spin"
         xmlns="http://www.w3.org/2000/svg"

@@ -1,10 +1,14 @@
 type Props = {
   message?: string;
+  testid?: string;
 };
 
-export default function EmptyState({ message = 'No records found.' }: Props) {
+export default function EmptyState({ message = 'No records found.', testid }: Props) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 bg-white py-16 text-zinc-400">
+    <div
+      data-testid={testid ?? 'empty-state'}
+      className="flex flex-col items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 py-16 text-zinc-400 dark:text-zinc-500"
+    >
       <svg
         className="mb-3 h-10 w-10 opacity-40"
         fill="none"

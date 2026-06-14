@@ -11,7 +11,7 @@ test.describe('Login', () => {
     await page.goto('/login');
     await expect(page.locator('#email')).toBeVisible();
     await expect(page.locator('#password')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.locator('[data-testid="btn-signin"]')).toBeVisible();
   });
 
   test('invalid credentials show error and stay on login page', async ({ page }) => {
@@ -19,7 +19,7 @@ test.describe('Login', () => {
     await page.fill('#email', 'nobody@invalid.local');
     await page.fill('#password', 'wrongpassword');
     await page.click('button[type="submit"]');
-    await expect(page.getByText('Invalid email or password')).toBeVisible();
+    await expect(page.locator('[data-testid="login-error"]')).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
   });
 
@@ -29,7 +29,7 @@ test.describe('Login', () => {
     await page.fill('#password', ADMIN_PASSWORD);
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.locator('[data-testid="page-title-dashboard"]')).toBeVisible();
   });
 
   test('logout clears session and redirects to login', async ({ page }) => {
@@ -39,8 +39,8 @@ test.describe('Login', () => {
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/dashboard/);
 
-    // Desktop sidebar has the Log out button
-    await page.getByRole('button', { name: 'Log out' }).click();
+    // Desktop sidebar has the logout button
+    await page.locator('[data-testid="btn-logout"]').click();
     await expect(page).toHaveURL(/\/login/);
   });
 });

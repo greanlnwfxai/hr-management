@@ -3,19 +3,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  getEmployees,
-  getEmployee,
-  createEmployee,
-  updateEmployee,
-  deleteEmployee,
-  getAllDepartments,
-  getAllPositions,
-  type Employee,
-  type EmployeeFull,
-  type Department,
-  type Position,
-  type PaginatedResponse,
-  ApiError,
+  getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee,
+  getAllDepartments, getAllPositions,
+  type Employee, type EmployeeFull, type Department, type Position,
+  type PaginatedResponse, ApiError,
 } from '@/lib/api';
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
@@ -23,18 +14,19 @@ import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
+import { useLanguage } from '@/hooks/useLanguage';
 
 const STATUS_OPTIONS = ['', 'ACTIVE', 'INACTIVE', 'RESIGNED'];
 const EMP_STATUS = ['ACTIVE', 'INACTIVE', 'RESIGNED'];
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
-    ACTIVE: 'bg-green-100 text-green-700',
-    INACTIVE: 'bg-zinc-100 text-zinc-500',
-    RESIGNED: 'bg-red-100 text-red-600',
+    ACTIVE:   'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
+    INACTIVE: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400',
+    RESIGNED: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
   };
   return (
-    <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[status] ?? 'bg-zinc-100 text-zinc-500'}`}>
+    <span className={`rounded px-2 py-0.5 text-xs font-medium ${map[status] ?? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'}`}>
       {status}
     </span>
   );
@@ -66,18 +58,19 @@ function formFromEmployee(e: EmployeeFull): EmpForm {
   };
 }
 
-const INPUT = 'w-full rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500';
+const INPUT = 'w-full rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-zinc-600">{label}</label>
+      <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">{label}</label>
       {children}
     </div>
   );
 }
 
 export default function EmployeesPage() {
+  const { t } = useLanguage();
   const user = getUser();
   const admin = isAdmin(user);
 
@@ -108,11 +101,11 @@ export default function EmployeesPage() {
       const data = await getEmployees({ page, limit: 20, search: search || undefined, status: statusFilter || undefined });
       setResult(data);
     } catch (err) {
-      setError(err instanceof ApiError ? { message: err.message, status: err.status } : { message: 'Failed to load employees.' });
+      setError(err instanceof ApiError ? { message: err.message, status: err.status } : { message: t('error_employees') });
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]);
+  }, [page, search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -150,7 +143,7 @@ export default function EmployeesPage() {
       setForm(formFromEmployee(full));
       setModal('edit');
     } catch {
-      setToast({ message: 'Failed to load employee details.', type: 'error' });
+      setToast({ message: t('error_employees'), type: 'error' });
     }
   }
 
@@ -198,7 +191,7 @@ export default function EmployeesPage() {
   }
 
   async function handleDelete(emp: Employee) {
-    if (!window.confirm(`Deactivate ${emp.firstName} ${emp.lastName}? This sets their status to INACTIVE.`)) return;
+    if (!window.confirm(`Deactivate ${emp.firstName} ${emp.lastName}?`)) return;
     try {
       await deleteEmployee(emp.id);
       setToast({ message: `${emp.firstName} ${emp.lastName} deactivated.`, type: 'success' });
@@ -215,15 +208,18 @@ export default function EmployeesPage() {
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-zinc-900">Employees</h1>
+        <h1 data-testid="page-title-employees" className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+          {t('page_employees')}
+        </h1>
         <div className="flex items-center gap-3">
-          {meta && <span className="text-sm text-zinc-400">{meta.total} total</span>}
+          {meta && <span className="text-sm text-zinc-400 dark:text-zinc-500">{meta.total} total</span>}
           {admin && (
             <button
+              data-testid="btn-add-employee"
               onClick={openCreate}
-              className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700"
+              className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white"
             >
-              + Add Employee
+              {t('emp_add')}
             </button>
           )}
         </div>
@@ -233,79 +229,89 @@ export default function EmployeesPage() {
       <div className="mb-4 flex flex-wrap gap-3">
         <form onSubmit={handleSearch} className="flex gap-2">
           <input
+            data-testid="search-input"
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search employees…"
-            className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-900 placeholder-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            placeholder={t('emp_search_placeholder')}
+            className="rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400"
           />
-          <button type="submit" className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700">
-            Search
+          <button
+            data-testid="btn-search"
+            type="submit"
+            className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white"
+          >
+            {t('search')}
           </button>
           {(search || statusFilter) && (
             <button
               type="button"
               onClick={() => { setSearch(''); setSearchInput(''); setStatusFilter(''); setPage(1); }}
-              className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+              className="rounded-md border border-zinc-200 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
             >
-              Clear
+              {t('clear')}
             </button>
           )}
         </form>
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-          className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 focus:border-zinc-500 focus:outline-none"
+          className="rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-300 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none"
         >
-          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || 'All Statuses'}</option>)}
+          {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s || t('emp_all_statuses')}</option>)}
         </select>
       </div>
 
-      {loading && <LoadingState message="Loading employees…" />}
-      {!loading && error && <ErrorState message={error.message} status={error.status} onRetry={load} />}
+      {loading && <LoadingState testid="loading-state" message={t('loading_employees')} />}
+      {!loading && error && <ErrorState testid="error-state" message={error.message} status={error.status} onRetry={load} />}
 
       {!loading && !error && result && (
         <>
           {result.data.length === 0 ? (
-            <EmptyState message="No employees found. Try adjusting your search or filters." />
+            <EmptyState testid="empty-state" message={t('empty_employees_detail')} />
           ) : (
-            <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white">
-              <table className="min-w-full divide-y divide-zinc-200 text-sm">
-                <thead className="bg-zinc-50">
+            <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+              <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700 text-sm">
+                <thead className="bg-zinc-50 dark:bg-zinc-900/60">
                   <tr>
-                    {['Code', 'Name', 'Email', 'Department', 'Position', 'Status', ...(admin ? ['Actions'] : [])].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500">{h}</th>
+                    {[
+                      t('emp_col_code'), t('emp_col_name'), t('emp_col_email'),
+                      t('emp_col_dept'), t('emp_col_pos'), t('emp_col_status'),
+                      ...(admin ? [t('emp_col_actions')] : []),
+                    ].map((h) => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700">
                   {result.data.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-zinc-50">
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-500">{emp.employeeCode}</td>
-                      <td className="px-4 py-3 font-medium text-zinc-900">
-                        <Link href={`/employees/${emp.id}`} className="hover:underline hover:text-zinc-600">
+                    <tr key={emp.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/50">
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">{emp.employeeCode}</td>
+                      <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                        <Link href={`/employees/${emp.id}`} className="hover:underline hover:text-zinc-600 dark:hover:text-zinc-300">
                           {emp.firstName} {emp.lastName}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-zinc-500">{emp.email ?? '—'}</td>
-                      <td className="px-4 py-3 text-zinc-600">{emp.department?.name ?? '—'}</td>
-                      <td className="px-4 py-3 text-zinc-600">{emp.position?.title ?? '—'}</td>
+                      <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{emp.email ?? '—'}</td>
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{emp.department?.name ?? '—'}</td>
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{emp.position?.title ?? '—'}</td>
                       <td className="px-4 py-3">{statusBadge(emp.status)}</td>
                       {admin && (
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
                             <button
+                              data-testid="btn-edit-employee"
                               onClick={() => openEdit(emp)}
-                              className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-600 hover:bg-zinc-50"
+                              className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                             >
-                              Edit
+                              {t('edit')}
                             </button>
                             <button
                               onClick={() => handleDelete(emp)}
                               disabled={emp.status === 'INACTIVE'}
-                              className="rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
+                              className="rounded border border-red-200 dark:border-red-800/50 px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40"
                             >
-                              Deactivate
+                              {t('emp_deactivate')}
                             </button>
                           </div>
                         </td>
@@ -318,11 +324,11 @@ export default function EmployeesPage() {
           )}
 
           {meta && meta.totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between text-sm text-zinc-500">
+            <div className="mt-4 flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
               <span>Page {meta.page} of {meta.totalPages}</span>
               <div className="flex gap-2">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={meta.page <= 1} className="rounded border border-zinc-200 px-3 py-1 text-sm hover:bg-zinc-50 disabled:opacity-40">Previous</button>
-                <button onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))} disabled={meta.page >= meta.totalPages} className="rounded border border-zinc-200 px-3 py-1 text-sm hover:bg-zinc-50 disabled:opacity-40">Next</button>
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={meta.page <= 1} className="rounded border border-zinc-200 dark:border-zinc-600 px-3 py-1 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-40">{t('previous')}</button>
+                <button onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))} disabled={meta.page >= meta.totalPages} className="rounded border border-zinc-200 dark:border-zinc-600 px-3 py-1 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700 disabled:opacity-40">{t('next')}</button>
               </div>
             </div>
           )}
@@ -331,51 +337,51 @@ export default function EmployeesPage() {
 
       {/* Create / Edit Modal */}
       {modal && (
-        <Modal title={modal === 'create' ? 'Add Employee' : 'Edit Employee'} onClose={closeModal} wide>
-          {formError && <div className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{formError}</div>}
+        <Modal title={modal === 'create' ? t('emp_modal_add') : t('emp_modal_edit')} onClose={closeModal} wide>
+          {formError && <div className="mb-3 rounded border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">{formError}</div>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Employee Code *">
+            <Field label={t('emp_field_code')}>
               <input type="text" required value={form.employeeCode} onChange={(e) => setForm({ ...form, employeeCode: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="First Name *">
+            <Field label={t('emp_field_first')}>
               <input type="text" required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Last Name *">
+            <Field label={t('emp_field_last')}>
               <input type="text" required value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Email *">
+            <Field label={t('emp_field_email')}>
               <input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Phone">
+            <Field label={t('emp_field_phone')}>
               <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Hire Date *">
+            <Field label={t('emp_field_hire_date')}>
               <input type="date" required value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Date of Birth">
+            <Field label={t('emp_field_dob')}>
               <input type="date" value={form.dateOfBirth} onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} className={INPUT} />
             </Field>
-            <Field label="Status">
+            <Field label={t('emp_field_status')}>
               <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} className={INPUT}>
                 {EMP_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </Field>
-            <Field label="Department *">
+            <Field label={t('emp_field_dept')}>
               <select required value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value, positionId: '' })} className={INPUT}>
-                <option value="">Select department</option>
+                <option value="">{t('emp_select_dept')}</option>
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </Field>
-            <Field label="Position *">
+            <Field label={t('emp_field_pos')}>
               <select required value={form.positionId} onChange={(e) => setForm({ ...form, positionId: e.target.value })} className={INPUT}>
-                <option value="">Select position</option>
+                <option value="">{t('emp_select_pos')}</option>
                 {positionsFiltered.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </Field>
             <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
-              <button type="button" onClick={closeModal} className="rounded-md border border-zinc-200 px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-50">Cancel</button>
-              <button type="submit" disabled={submitting} className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-50">
-                {submitting ? 'Saving…' : modal === 'create' ? 'Create' : 'Save Changes'}
+              <button type="button" onClick={closeModal} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('cancel')}</button>
+              <button type="submit" disabled={submitting} className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-4 py-2 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white disabled:opacity-50">
+                {submitting ? t('emp_saving') : modal === 'create' ? t('create') : t('save')}
               </button>
             </div>
           </form>

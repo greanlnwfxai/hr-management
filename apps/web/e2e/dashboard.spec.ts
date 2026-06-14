@@ -14,49 +14,47 @@ test.beforeEach(async ({ page }) => {
 test.describe('Dashboard', () => {
   test('renders Dashboard heading', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+    await expect(page.locator('[data-testid="page-title-dashboard"]')).toBeVisible();
   });
 
   test('employee stat cards are visible', async ({ page }) => {
     await page.goto('/dashboard');
-    // The "Employees" section label
-    await expect(page.getByText('Employees', { exact: true }).first()).toBeVisible();
-    // Key stat card labels rendered by StatCard
-    for (const label of ['Total', 'Active', 'Departments', 'Positions']) {
-      await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    // The employee section label
+    await expect(page.locator('[data-testid="stat-section-employees"]')).toBeVisible();
+    // Key stat cards
+    for (const id of ['stat-total', 'stat-active', 'stat-departments', 'stat-positions']) {
+      await expect(page.locator(`[data-testid="${id}"]`)).toBeVisible();
     }
   });
 
   test('attendance stat section renders', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText('Present', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Late', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('[data-testid="stat-present"]')).toBeVisible();
+    await expect(page.locator('[data-testid="stat-late"]')).toBeVisible();
   });
 
   test('leave stat section renders', async ({ page }) => {
     await page.goto('/dashboard');
-    await expect(page.getByText('Pending', { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('Approved', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('[data-testid="stat-pending"]')).toBeVisible();
+    await expect(page.locator('[data-testid="stat-approved"]')).toBeVisible();
   });
 
   test('recent sections render without error state', async ({ page }) => {
     await page.goto('/dashboard');
-    // Use heading role to avoid strict-mode violation: the parent card div also
-    // contains the heading text as a substring of its combined text content.
-    await expect(page.getByRole('heading', { name: 'Recent Employees', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Recent Attendance', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Recent Leave Requests', exact: true })).toBeVisible();
+    await expect(page.locator('[data-testid="section-recent-employees"]')).toBeVisible();
+    await expect(page.locator('[data-testid="section-recent-attendance"]')).toBeVisible();
+    await expect(page.locator('[data-testid="section-recent-leave"]')).toBeVisible();
   });
 
   test('dashboard data loads — no loading/error state remaining', async ({ page }) => {
     await page.goto('/dashboard');
-    // Loading state uses the text "Loading dashboard…" — wait for it to disappear
-    await expect(page.getByText('Loading dashboard…')).not.toBeVisible({ timeout: 15000 });
+    // Wait for loading state to disappear
+    await expect(page.locator('[data-testid="loading-state"]')).not.toBeVisible({ timeout: 15000 });
     // No error state
-    await expect(page.getByText('Failed to load dashboard')).not.toBeVisible();
-    // Heading and recent sections are present
-    await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Recent Employees', exact: true })).toBeVisible();
+    await expect(page.locator('[data-testid="error-state"]')).not.toBeVisible();
+    // Page title and recent sections are present
+    await expect(page.locator('[data-testid="page-title-dashboard"]')).toBeVisible();
+    await expect(page.locator('[data-testid="section-recent-employees"]')).toBeVisible();
   });
 
   test('timezone indicator is visible', async ({ page }) => {
