@@ -70,3 +70,31 @@ export interface DepartmentItem {
   name: string;
   code: string;
 }
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+export type AttendanceStatus = 'PRESENT' | 'LATE' | 'ABSENT';
+
+export interface AttendanceEmployee {
+  id: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  status: AttendanceStatus;
+  note: string | null;
+  employee: AttendanceEmployee;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttendanceHistoryResponse {
+  data: AttendanceRecord[];
+  meta: PaginatedMeta;
+}

@@ -19,6 +19,10 @@ export default function RootLayout() {
           name="home"
           options={{ title: 'HR Mobile', headerBackVisible: false }}
         />
+        <Stack.Screen
+          name="attendance"
+          options={{ title: 'ลงเวลา' }}
+        />
       </Stack>
     </AuthProvider>
   );

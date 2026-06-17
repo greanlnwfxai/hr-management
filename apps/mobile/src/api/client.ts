@@ -7,6 +7,8 @@ import {
   type PaginatedResponse,
   type EmployeeItem,
   type DepartmentItem,
+  type AttendanceRecord,
+  type AttendanceHistoryResponse,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -128,4 +130,28 @@ export async function getDepartments(
     `/departments?page=${page}&limit=${limit}`,
     token,
   );
+}
+
+// ─── Attendance ───────────────────────────────────────────────────────────────
+
+export async function getMyAttendance(
+  token: string,
+  page = 1,
+  limit = 10,
+): Promise<AttendanceHistoryResponse> {
+  return authGet<AttendanceHistoryResponse>(
+    `/attendance/me?page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+export async function getTodayAttendance(
+  token: string,
+): Promise<AttendanceRecord | null> {
+  const today = new Date().toISOString().split('T')[0];
+  const res = await authGet<AttendanceHistoryResponse>(
+    `/attendance/me?startDate=${today}&endDate=${today}&limit=1`,
+    token,
+  );
+  return res.data[0] ?? null;
 }

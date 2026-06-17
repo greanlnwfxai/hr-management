@@ -209,16 +209,37 @@ export default function HomeScreen() {
         {/* ── Feature cards ────────────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>เมนูหลัก</Text>
         <View style={styles.featureGrid}>
-          {FEATURE_CARDS.map((card) => (
-            <View key={card.key} style={styles.featureCard}>
-              <Text style={styles.featureIcon}>{card.icon}</Text>
-              <Text style={styles.featureTh}>{card.th}</Text>
-              <Text style={styles.featureEn}>{card.en}</Text>
-              <View style={styles.comingSoonBadge}>
-                <Text style={styles.comingSoonText}>เร็วๆ นี้</Text>
+          {FEATURE_CARDS.map((card) => {
+            const isAttendance = card.key === 'attendance';
+            if (isAttendance) {
+              return (
+                <Pressable
+                  key={card.key}
+                  style={({ pressed }) => [styles.featureCard, styles.featureCardActive, pressed && styles.pressed]}
+                  onPress={() => router.push('/attendance')}
+                  accessibilityRole="button"
+                  accessibilityLabel={card.th}
+                >
+                  <Text style={styles.featureIcon}>{card.icon}</Text>
+                  <Text style={styles.featureTh}>{card.th}</Text>
+                  <Text style={styles.featureEn}>{card.en}</Text>
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>เปิดใช้งาน</Text>
+                  </View>
+                </Pressable>
+              );
+            }
+            return (
+              <View key={card.key} style={styles.featureCard}>
+                <Text style={styles.featureIcon}>{card.icon}</Text>
+                <Text style={styles.featureTh}>{card.th}</Text>
+                <Text style={styles.featureEn}>{card.en}</Text>
+                <View style={styles.comingSoonBadge}>
+                  <Text style={styles.comingSoonText}>เร็วๆ นี้</Text>
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* ── Refresh button ───────────────────────────────────────────── */}
@@ -480,6 +501,10 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  featureCardActive: {
+    borderWidth: 1.5,
+    borderColor: '#1a56db',
+  },
   featureIcon: {
     fontSize: 22,
     marginBottom: 4,
@@ -505,6 +530,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#1a56db',
     fontWeight: '500',
+  },
+  activeBadge: {
+    marginTop: 8,
+    backgroundColor: '#dcfce7',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    alignSelf: 'flex-start',
+  },
+  activeBadgeText: {
+    fontSize: 11,
+    color: '#16a34a',
+    fontWeight: '600',
   },
 
   // Refresh button

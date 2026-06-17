@@ -1,2 +1,2 @@
-// Custom hooks — to be added in T-043 and beyond.
-export {};
+export { useDashboard } from './useDashboard';
+export { useAttendance } from './useAttendance';

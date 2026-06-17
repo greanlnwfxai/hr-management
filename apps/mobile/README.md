@@ -83,6 +83,7 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 | `/` | Index | Redirects based on auth state (loading → home or login) |
 | `/login` | Login | Real JWT login form (T-043) |
 | `/home` | Home | Protected dashboard — profile card, live HR summary, feature navigation (T-044) |
+| `/attendance` | Attendance | Protected attendance screen — today card, history, disabled clock-in/out (T-045) |
 
 ## Dashboard & Profile (T-044)
 
@@ -99,9 +100,40 @@ The `/home` screen fetches live data from the API using the stored JWT:
 
 See [docs/MOBILE_DASHBOARD_PROFILE.md](../../docs/MOBILE_DASHBOARD_PROFILE.md) for full details.
 
+## Attendance Screen (T-045)
+
+Navigate to the Attendance screen by tapping the **การลงเวลา** card on the Home screen.
+
+The `/attendance` screen fetches live attendance data from the API:
+
+| Endpoint | Data shown |
+|---|---|
+| `GET /attendance/me?startDate=TODAY&endDate=TODAY&limit=1` | Today's attendance card (check-in, check-out, status) |
+| `GET /attendance/me?page=1&limit=10` | Recent history list |
+
+**Clock In / Clock Out:** Buttons are displayed but disabled. Real mobile clock-in/out requires geofence backend validation (within 100 meters of company premises), which is deferred to T-046 / T-047.
+
+**Testing manually:**
+```bash
+# Start backend
+docker compose up -d
+
+# Start mobile
+cd apps/mobile
+npm run web
+
+# Open http://localhost:8081
+# Login with admin@hr.local / admin1234
+# Tap "การลงเวลา" card on Home screen
+# Verify Attendance screen loads with today's data
+```
+
+**API base URL:** Set `EXPO_PUBLIC_API_BASE_URL` in `.env` (defaults to `http://localhost:4002`).
+
+See [docs/MOBILE_ATTENDANCE_FOUNDATION.md](../../docs/MOBILE_ATTENDANCE_FOUNDATION.md) for full details.
+
 ## Future Tasks
 
-- **T-045** — Mobile Attendance Foundation
 - **T-046** — Attendance Geofence Backend
 - **T-047** — Mobile Geofence Clock In/Out
 - **T-048** — Mobile Leave Request
