@@ -14,3 +14,10 @@ apps/web/playwright-report/
 apps/web/test-results/
 apps/web/.playwright-browsers/
 apps/web/e2e/.auth-cache.json
+
+# Expo / React Native — local build artifacts
+apps/mobile/.expo/
+apps/mobile/node_modules/
+apps/mobile/ios/
+apps/mobile/android/
+apps/mobile/dist/
