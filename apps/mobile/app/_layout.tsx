@@ -1,9 +1,10 @@
+import { AuthProvider } from '../src/auth/AuthProvider';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export default function RootLayout() {
   return (
-    <>
+    <AuthProvider>
       <StatusBar style="auto" />
       <Stack
         screenOptions={{
@@ -19,6 +20,6 @@ export default function RootLayout() {
           options={{ title: 'HR Mobile', headerBackVisible: false }}
         />
       </Stack>
-    </>
+    </AuthProvider>
   );
 }

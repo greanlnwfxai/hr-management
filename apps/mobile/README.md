@@ -9,6 +9,7 @@ Expo React Native app for the HR Management system.
 | Framework | Expo SDK 52 |
 | Navigation | Expo Router 4 (file-based) |
 | Language | TypeScript (strict) |
+| Auth storage | expo-secure-store (Keychain / Keystore) |
 | Styling | React Native StyleSheet |
 
 ## Setup
@@ -63,17 +64,28 @@ Start the API first:
 docker compose up api db
 ```
 
-## Screens (T-042 foundation)
+## Auth
 
-| Route | Screen | Notes |
+Login with JWT via `POST /auth/login`. Token stored securely with `expo-secure-store`.
+
+**Demo credentials (local seed):**
+```
+Email:    admin@hr.local
+Password: admin1234
+```
+
+The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** button to pre-fill these values.
+
+## Screens
+
+| Route | Screen | Status |
 |---|---|---|
-| `/` | index | Redirects to `/login` |
-| `/login` | Login | Placeholder — real auth in T-043 |
-| `/home` | Home | Feature cards + API health check |
+| `/` | Index | Redirects based on auth state (loading → home or login) |
+| `/login` | Login | Real JWT login form (T-043) |
+| `/home` | Home | Protected; shows user info, feature cards, health check, logout |
 
 ## Future Tasks
 
-- **T-043** — Mobile Auth (JWT login)
 - **T-044** — Mobile Dashboard & Profile
 - **T-045** — Mobile Attendance Foundation
 - **T-046** — Attendance Geofence Backend

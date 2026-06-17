@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -8,7 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { getHealth } from '../src/api/client';
+import { useAuth } from '../src/auth/useAuth';
 
 type HealthStatus = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -25,10 +27,15 @@ const FEATURE_CARDS: Array<{ key: string; th: string; en: string }> = [
 ];
 
 export default function HomeScreen() {
-  const [health, setHealth] = useState<HealthState>({
-    status: 'idle',
-    message: '',
-  });
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading, signOut } = useAuth();
+  const [health, setHealth] = useState<HealthState>({ status: 'idle', message: '' });
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/login');
+    }
+  }, [isLoading, isAuthenticated]);
 
   const checkHealth = async () => {
     setHealth({ status: 'loading', message: '' });
@@ -36,17 +43,58 @@ export default function HomeScreen() {
       const result = await getHealth();
       setHealth({ status: 'ok', message: `API: ${result.status}` });
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'Connection failed';
-      setHealth({ status: 'error', message: msg });
+      setHealth({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Connection failed',
+      });
     }
   };
+
+  const handleLogout = async () => {
+    await signOut();
+    router.replace('/login');
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color="#1a56db" size="large" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.heading}>HR Mobile</Text>
         <Text style={styles.subheading}>ระบบบริหารทรัพยากรบุคคล</Text>
+
+        {user && (
+          <View style={styles.userCard}>
+            <View style={styles.userRow}>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>
+                  {user.email.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.userInfo}>
+                <Text style={styles.userEmail}>{user.email}</Text>
+                <Text style={styles.userRole}>{user.role.replace(/_/g, ' ')}</Text>
+              </View>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.logoutButton,
+                pressed && styles.logoutButtonPressed,
+              ]}
+              onPress={handleLogout}
+              accessibilityRole="button"
+              accessibilityLabel="ออกจากระบบ"
+            >
+              <Text style={styles.logoutText}>ออกจากระบบ</Text>
+            </Pressable>
+          </View>
+        )}
 
         <View style={styles.grid}>
           {FEATURE_CARDS.map((card) => (
@@ -62,40 +110,25 @@ export default function HomeScreen() {
 
         <View style={styles.healthCard}>
           <Text style={styles.healthTitle}>API Health Check</Text>
-          <Text style={styles.healthDesc}>
-            ตรวจสอบการเชื่อมต่อกับ API Server
-          </Text>
+          <Text style={styles.healthDesc}>ตรวจสอบการเชื่อมต่อกับ API Server</Text>
 
           {health.status === 'loading' && (
-            <ActivityIndicator
-              color="#1a56db"
-              size="small"
-              style={styles.indicator}
-            />
+            <ActivityIndicator color="#1a56db" size="small" style={styles.indicator} />
           )}
-
           {health.status === 'ok' && (
             <View style={styles.statusRow}>
               <View style={[styles.dot, styles.dotOk]} />
-              <Text style={[styles.statusText, styles.statusOk]}>
-                {health.message}
-              </Text>
+              <Text style={[styles.statusText, styles.statusOk]}>{health.message}</Text>
             </View>
           )}
-
           {health.status === 'error' && (
             <View style={styles.statusRow}>
               <View style={[styles.dot, styles.dotError]} />
-              <Text style={[styles.statusText, styles.statusError]}>
-                {health.message}
-              </Text>
+              <Text style={[styles.statusText, styles.statusError]}>{health.message}</Text>
             </View>
           )}
-
           {health.status === 'idle' && (
-            <Text style={styles.healthHint}>
-              กดปุ่มด้านล่างเพื่อตรวจสอบ
-            </Text>
+            <Text style={styles.healthHint}>กดปุ่มด้านล่างเพื่อตรวจสอบ</Text>
           )}
 
           <Pressable
@@ -122,6 +155,12 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f8f9fa',
@@ -142,6 +181,63 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: -8,
     marginBottom: 4,
+  },
+  userCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1a56db',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  userInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  userEmail: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  userRole: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  logoutButton: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  logoutButtonPressed: {
+    backgroundColor: '#f9fafb',
+  },
+  logoutText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#374151',
   },
   grid: {
     flexDirection: 'row',
@@ -209,36 +305,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 4,
   },
-  indicator: {
-    paddingVertical: 4,
-  },
+  indicator: { paddingVertical: 4 },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  dotOk: {
-    backgroundColor: '#16a34a',
-  },
-  dotError: {
-    backgroundColor: '#dc2626',
-  },
-  statusText: {
-    fontSize: 13,
-    fontWeight: '500',
-    flex: 1,
-  },
-  statusOk: {
-    color: '#16a34a',
-  },
-  statusError: {
-    color: '#dc2626',
-  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotOk: { backgroundColor: '#16a34a' },
+  dotError: { backgroundColor: '#dc2626' },
+  statusText: { fontSize: 13, fontWeight: '500', flex: 1 },
+  statusOk: { color: '#16a34a' },
+  statusError: { color: '#dc2626' },
   button: {
     backgroundColor: '#1a56db',
     borderRadius: 10,
@@ -246,15 +324,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  buttonPressed: {
-    opacity: 0.82,
-  },
-  buttonDisabled: {
-    opacity: 0.55,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  buttonPressed: { opacity: 0.82 },
+  buttonDisabled: { opacity: 0.55 },
+  buttonText: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
 });
