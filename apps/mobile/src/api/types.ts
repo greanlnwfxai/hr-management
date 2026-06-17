@@ -98,3 +98,20 @@ export interface AttendanceHistoryResponse {
   data: AttendanceRecord[];
   meta: PaginatedMeta;
 }
+
+// ─── Mobile Clock Actions ─────────────────────────────────────────────────────
+
+export interface MobileLocationPayload {
+  source: 'mobile';
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+}
+
+export interface ClockActionResult {
+  id: string;
+  date: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  status: AttendanceStatus;
+}

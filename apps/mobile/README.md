@@ -10,6 +10,7 @@ Expo React Native app for the HR Management system.
 | Navigation | Expo Router 4 (file-based) |
 | Language | TypeScript (strict) |
 | Auth storage | expo-secure-store (Keychain / Keystore) |
+| Location | expo-location (foreground only) |
 | Styling | React Native StyleSheet |
 
 ## Setup
@@ -83,7 +84,7 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 | `/` | Index | Redirects based on auth state (loading → home or login) |
 | `/login` | Login | Real JWT login form (T-043) |
 | `/home` | Home | Protected dashboard — profile card, live HR summary, feature navigation (T-044) |
-| `/attendance` | Attendance | Protected attendance screen — today card, history, disabled clock-in/out (T-045) |
+| `/attendance` | Attendance | Protected attendance screen — today card, history, live geofence clock-in/out (T-045, T-047) |
 
 ## Dashboard & Profile (T-044)
 
@@ -111,12 +112,23 @@ The `/attendance` screen fetches live attendance data from the API:
 | `GET /attendance/me?startDate=TODAY&endDate=TODAY&limit=1` | Today's attendance card (check-in, check-out, status) |
 | `GET /attendance/me?page=1&limit=10` | Recent history list |
 
-**Clock In / Clock Out:** Buttons are displayed but disabled. Real mobile clock-in/out requires geofence backend validation (within 100 meters of company premises), which is deferred to T-046 / T-047.
+**Clock In / Clock Out (T-047):** Buttons are live. Tapping either button:
+1. Requests foreground location permission.
+2. Reads current GPS position.
+3. Sends `{ source: "mobile", latitude, longitude, accuracy }` to the backend.
+4. Displays backend success or geofence rejection in Thai.
+
+Geofence enforcement is controlled by `ATTENDANCE_GEOFENCE_ENABLED` on the backend (default `false` in development).
 
 **Testing manually:**
 ```bash
 # Start backend
 docker compose up -d
+
+# (Optional) enable geofence in backend .env:
+# ATTENDANCE_GEOFENCE_ENABLED=true
+# COMPANY_LATITUDE=<lat>
+# COMPANY_LONGITUDE=<lon>
 
 # Start mobile
 cd apps/mobile
@@ -125,15 +137,14 @@ npm run web
 # Open http://localhost:8081
 # Login with admin@hr.local / admin1234
 # Tap "การลงเวลา" card on Home screen
-# Verify Attendance screen loads with today's data
+# Grant location permission
+# Tap "ลงเวลาเข้า" or "ลงเวลาออก"
 ```
 
 **API base URL:** Set `EXPO_PUBLIC_API_BASE_URL` in `.env` (defaults to `http://localhost:4002`).
 
-See [docs/MOBILE_ATTENDANCE_FOUNDATION.md](../../docs/MOBILE_ATTENDANCE_FOUNDATION.md) for full details.
+See [docs/MOBILE_ATTENDANCE_FOUNDATION.md](../../docs/MOBILE_ATTENDANCE_FOUNDATION.md) and [docs/MOBILE_GEOFENCE_CLOCK.md](../../docs/MOBILE_GEOFENCE_CLOCK.md) for full details.
 
 ## Future Tasks
 
-- **T-046** — Attendance Geofence Backend
-- **T-047** — Mobile Geofence Clock In/Out
 - **T-048** — Mobile Leave Request

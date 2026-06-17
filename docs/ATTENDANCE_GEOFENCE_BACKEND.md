@@ -1,6 +1,6 @@
 # Attendance Geofence — Backend Documentation
 
-> Added in T-046. Mobile wiring (GPS UI + real clock-in/out) is T-047.
+> Added in T-046. Mobile wiring (GPS UI + real clock-in/out) completed in T-047. See [MOBILE_GEOFENCE_CLOCK.md](MOBILE_GEOFENCE_CLOCK.md).
 
 ---
 

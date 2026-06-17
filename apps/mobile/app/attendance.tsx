@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import type { AttendanceRecord, AttendanceStatus } from '../src/api/types';
+import type { ClockActionState } from '../src/hooks/useAttendance';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -111,27 +112,113 @@ function TodayCard({ record }: { record: AttendanceRecord | null }) {
   );
 }
 
-function ClockActionCard() {
+interface ClockActionCardProps {
+  today: AttendanceRecord | null;
+  dataLoading: boolean;
+  clockInState: ClockActionState;
+  clockOutState: ClockActionState;
+  actionError: string | null;
+  actionMessage: string | null;
+  onClockIn: () => void;
+  onClockOut: () => void;
+}
+
+function clockInLabel(state: ClockActionState): string {
+  if (state === 'locating') return 'กำลังตรวจสอบตำแหน่ง...';
+  if (state === 'submitting') return 'กำลังลงเวลาเข้า...';
+  return 'ลงเวลาเข้า';
+}
+
+function clockOutLabel(state: ClockActionState): string {
+  if (state === 'locating') return 'กำลังตรวจสอบตำแหน่ง...';
+  if (state === 'submitting') return 'กำลังลงเวลาออก...';
+  return 'ลงเวลาออก';
+}
+
+function ClockActionCard({
+  today,
+  dataLoading,
+  clockInState,
+  clockOutState,
+  actionError,
+  actionMessage,
+  onClockIn,
+  onClockOut,
+}: ClockActionCardProps) {
+  const inBusy = clockInState === 'locating' || clockInState === 'submitting';
+  const outBusy = clockOutState === 'locating' || clockOutState === 'submitting';
+
+  const alreadyClockedIn = Boolean(today?.checkIn);
+  const alreadyClockedOut = Boolean(today?.checkOut);
+
+  const inDisabled = dataLoading || inBusy || outBusy || alreadyClockedIn;
+  const outDisabled = dataLoading || inBusy || outBusy || !alreadyClockedIn || alreadyClockedOut;
+
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>ลงเวลา</Text>
+
       <View style={styles.clockRow}>
-        <View style={[styles.clockBtn, styles.clockBtnDisabled]}>
-          <Text style={styles.clockBtnIcon}>⬆️</Text>
-          <Text style={styles.clockBtnLabel}>ลงเวลาเข้า</Text>
-          <Text style={styles.clockBtnSub}>ยังไม่เปิดใช้งาน</Text>
-        </View>
-        <View style={[styles.clockBtn, styles.clockBtnDisabled]}>
-          <Text style={styles.clockBtnIcon}>⬇️</Text>
-          <Text style={styles.clockBtnLabel}>ลงเวลาออก</Text>
-          <Text style={styles.clockBtnSub}>ยังไม่เปิดใช้งาน</Text>
-        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.clockBtn,
+            inDisabled ? styles.clockBtnDisabled : styles.clockBtnIn,
+            pressed && !inDisabled && styles.pressed,
+          ]}
+          onPress={onClockIn}
+          disabled={inDisabled}
+          accessibilityRole="button"
+          accessibilityLabel="ลงเวลาเข้า"
+        >
+          {inBusy ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text style={styles.clockBtnIcon}>⬆️</Text>
+          )}
+          <Text style={[styles.clockBtnLabel, !inDisabled && styles.clockBtnLabelActive]}>
+            {clockInLabel(clockInState)}
+          </Text>
+          {alreadyClockedIn && !inBusy && (
+            <Text style={styles.clockBtnSub}>ลงเวลาแล้ว</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.clockBtn,
+            outDisabled ? styles.clockBtnDisabled : styles.clockBtnOut,
+            pressed && !outDisabled && styles.pressed,
+          ]}
+          onPress={onClockOut}
+          disabled={outDisabled}
+          accessibilityRole="button"
+          accessibilityLabel="ลงเวลาออก"
+        >
+          {outBusy ? (
+            <ActivityIndicator size="small" color="#ffffff" />
+          ) : (
+            <Text style={styles.clockBtnIcon}>⬇️</Text>
+          )}
+          <Text style={[styles.clockBtnLabel, !outDisabled && styles.clockBtnLabelActive]}>
+            {clockOutLabel(clockOutState)}
+          </Text>
+          {alreadyClockedOut && !outBusy && (
+            <Text style={styles.clockBtnSub}>ลงเวลาแล้ว</Text>
+          )}
+        </Pressable>
       </View>
-      <View style={styles.disabledNotice}>
-        <Text style={styles.disabledNoticeText}>
-          ฟีเจอร์ลงเวลาจะเปิดใช้งานหลังจากเพิ่มการตรวจสอบตำแหน่งบริษัท
-        </Text>
-      </View>
+
+      {actionError ? (
+        <View style={styles.actionErrorBox}>
+          <Text style={styles.actionErrorText}>{actionError}</Text>
+        </View>
+      ) : null}
+
+      {actionMessage ? (
+        <View style={styles.actionSuccessBox}>
+          <Text style={styles.actionSuccessText}>{actionMessage}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -144,10 +231,10 @@ function GeofenceNotice() {
         <View style={styles.noticeTextBlock}>
           <Text style={styles.noticeTitle}>การตรวจสอบตำแหน่ง</Text>
           <Text style={styles.noticeBody}>
-            การลงเวลาผ่านมือถือจะต้องอยู่ในรัศมีบริษัท 100 เมตร
+            การลงเวลาผ่านมือถือจะตรวจสอบว่าคุณอยู่ในรัศมีบริษัท 100 เมตร
           </Text>
           <Text style={styles.noticeBody}>
-            ระบบตรวจสอบตำแหน่งจะเพิ่มในขั้นตอนถัดไป (T-046 / T-047)
+            ระบบจะส่งตำแหน่งไปให้เซิร์ฟเวอร์ตรวจสอบเท่านั้น
           </Text>
         </View>
       </View>
@@ -178,7 +265,20 @@ function HistoryRow({ record }: { record: AttendanceRecord }) {
 export default function AttendanceScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
-  const { loadState, today, history, error, lastUpdated, refresh } = useAttendance();
+  const {
+    loadState,
+    today,
+    history,
+    error,
+    lastUpdated,
+    refresh,
+    clockInState,
+    clockOutState,
+    clockActionError,
+    clockActionMessage,
+    performClockIn,
+    performClockOut,
+  } = useAttendance();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -226,8 +326,17 @@ export default function AttendanceScreen() {
           <TodayCard record={today} />
         )}
 
-        {/* ── Clock actions (disabled) ─────────────────────────────────── */}
-        <ClockActionCard />
+        {/* ── Clock actions ────────────────────────────────────────────── */}
+        <ClockActionCard
+          today={today}
+          dataLoading={loadState === 'loading'}
+          clockInState={clockInState}
+          clockOutState={clockOutState}
+          actionError={clockActionError}
+          actionMessage={clockActionMessage}
+          onClockIn={performClockIn}
+          onClockOut={performClockOut}
+        />
 
         {/* ── Geofence notice ──────────────────────────────────────────── */}
         <GeofenceNotice />
@@ -384,11 +493,19 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     gap: 4,
+    minHeight: 80,
+    justifyContent: 'center',
   },
   clockBtnDisabled: {
     backgroundColor: '#f3f4f6',
     borderWidth: 1,
     borderColor: '#e5e7eb',
+  },
+  clockBtnIn: {
+    backgroundColor: '#16a34a',
+  },
+  clockBtnOut: {
+    backgroundColor: '#dc2626',
   },
   clockBtnIcon: {
     fontSize: 22,
@@ -398,20 +515,36 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#9ca3af',
   },
+  clockBtnLabelActive: {
+    color: '#ffffff',
+  },
   clockBtnSub: {
     fontSize: 11,
     color: '#d1d5db',
   },
-  disabledNotice: {
-    backgroundColor: '#fef9c3',
+  actionErrorBox: {
+    backgroundColor: '#fef2f2',
     borderRadius: 8,
     padding: 10,
     borderWidth: 1,
-    borderColor: '#fde68a',
+    borderColor: '#fecaca',
   },
-  disabledNoticeText: {
+  actionErrorText: {
     fontSize: 12,
-    color: '#92400e',
+    color: '#dc2626',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  actionSuccessBox: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  actionSuccessText: {
+    fontSize: 12,
+    color: '#16a34a',
     textAlign: 'center',
     lineHeight: 18,
   },

@@ -29,9 +29,9 @@ Query params for `GET /attendance/me`: `page`, `limit`, `startDate`, `endDate`, 
 | `GET /attendance/me?startDate=TODAY&endDate=TODAY&limit=1` | Fetch today's attendance record |
 | `GET /attendance/me?page=1&limit=10` | Fetch recent history (last 10 records) |
 
-**Endpoints NOT used:**
-- `POST /attendance/clock-in` — deferred to T-047 (geofence required)
-- `POST /attendance/clock-out` — deferred to T-047 (geofence required)
+**Endpoints NOT used in T-045 (enabled in T-047):**
+- `POST /attendance/clock-in` — enabled in T-047 with mobile geofence payload
+- `POST /attendance/clock-out` — enabled in T-047 with mobile geofence payload
 - `GET /attendance` — admin-only, not applicable to mobile employee view
 - `GET /attendance/:id` — not needed for this screen
 

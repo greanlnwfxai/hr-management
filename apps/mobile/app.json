@@ -14,13 +14,20 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hrmanagement.mobile"
+      "bundleIdentifier": "com.hrmanagement.mobile",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "HR Management ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#1a56db"
       },
-      "package": "com.hrmanagement.mobile"
+      "package": "com.hrmanagement.mobile",
+      "permissions": [
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -28,7 +35,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "HR Management ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
+        }
+      ]
     ],
     "extra": {
       "apiBaseUrl": ""

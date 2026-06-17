@@ -9,6 +9,8 @@ import {
   type DepartmentItem,
   type AttendanceRecord,
   type AttendanceHistoryResponse,
+  type MobileLocationPayload,
+  type ClockActionResult,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -71,7 +73,16 @@ export async function getMe(token: string): Promise<AuthUser> {
   return response.json() as Promise<AuthUser>;
 }
 
-// ─── Authenticated request helper ─────────────────────────────────────────────
+// ─── Authenticated request helpers ────────────────────────────────────────────
+
+function normalizeApiMessage(body: unknown): string {
+  if (body && typeof body === 'object' && 'message' in body) {
+    const msg = (body as { message: unknown }).message;
+    if (Array.isArray(msg)) return msg.join(', ');
+    if (typeof msg === 'string') return msg;
+  }
+  return 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง';
+}
 
 async function authGet<T>(path: string, token: string): Promise<T> {
   let response: Response;
@@ -89,6 +100,34 @@ async function authGet<T>(path: string, token: string): Promise<T> {
   }
   if (!response.ok) {
     throw new Error(`ไม่สามารถโหลดข้อมูลได้: HTTP ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+async function authPost<T>(path: string, token: string, body: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${ENV.API_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+  }
+
+  if (response.status === 401) {
+    throw new SessionExpiredError();
+  }
+  if (!response.ok) {
+    let parsed: unknown;
+    try { parsed = await response.json(); } catch { parsed = null; }
+    throw new Error(normalizeApiMessage(parsed));
   }
 
   return response.json() as Promise<T>;
@@ -154,4 +193,18 @@ export async function getTodayAttendance(
     token,
   );
   return res.data[0] ?? null;
+}
+
+export async function clockIn(
+  token: string,
+  payload: MobileLocationPayload,
+): Promise<ClockActionResult> {
+  return authPost<ClockActionResult>('/attendance/clock-in', token, payload);
+}
+
+export async function clockOut(
+  token: string,
+  payload: MobileLocationPayload,
+): Promise<ClockActionResult> {
+  return authPost<ClockActionResult>('/attendance/clock-out', token, payload);
 }
