@@ -93,6 +93,30 @@ Query params (GET /attendance, GET /attendance/me): `page`, `limit`, `startDate`
 
 Timezone rule: Clock-in status LATE if wall-clock time in Asia/Bangkok (UTC+7, fixed) is strictly after 09:00.
 
+### POST /attendance/clock-in and POST /attendance/clock-out — Body
+
+All fields are optional. Web clients may omit location fields entirely.
+
+```json
+{
+  "source": "mobile",
+  "latitude": 13.7563,
+  "longitude": 100.5018,
+  "accuracy": 25,
+  "note": "optional note (max 500 chars)"
+}
+```
+
+| Field | Type | Constraints | Notes |
+|---|---|---|---|
+| `source` | `"web"` \| `"mobile"` | optional | Omit or `"web"` → no geofence check |
+| `latitude` | number | -90 to 90 | Required for mobile when geofence enabled |
+| `longitude` | number | -180 to 180 | Required for mobile when geofence enabled |
+| `accuracy` | number | > 0 | GPS error radius in meters; rejected if > `ATTENDANCE_GPS_MAX_ACCURACY_METERS` |
+| `note` | string | max 500 chars | Optional attendance note |
+
+**Geofence behavior (T-046):** When `source = "mobile"` and `ATTENDANCE_GEOFENCE_ENABLED=true`, the backend validates that the supplied coordinates are within `COMPANY_GEOFENCE_RADIUS_METERS` (default 100 m) of the configured company location. Out-of-range or poorly-accurate requests receive `422 Unprocessable Entity`. See [ATTENDANCE_GEOFENCE_BACKEND.md](ATTENDANCE_GEOFENCE_BACKEND.md) for full policy details.
+
 ---
 
 ## Leave Requests

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AttendanceStatus as PrismaAttendanceStatus } from '@prisma/client';
@@ -12,6 +13,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
+import { GeofenceConfigService } from './geofence-config.service';
+import { GeofenceService } from './geofence.service';
 
 const ATTENDANCE_SELECT = {
   id: true,
@@ -36,9 +39,15 @@ const ATTENDANCE_SELECT = {
 
 @Injectable()
 export class AttendanceService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private geofenceService: GeofenceService,
+    private geofenceConfig: GeofenceConfigService,
+  ) {}
 
   async clockIn(userId: string, dto: ClockInDto) {
+    await this.validateGeofence(dto);
+
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
     const now = new Date();
@@ -63,6 +72,8 @@ export class AttendanceService {
   }
 
   async clockOut(userId: string, dto: ClockOutDto) {
+    await this.validateGeofence(dto);
+
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
 
@@ -150,6 +161,47 @@ export class AttendanceService {
     }
 
     return record;
+  }
+
+  // Geofence validation — only applied when source='mobile'.
+  // Web and legacy (no source) requests are passed through without checks,
+  // preserving backwards compatibility with the existing web attendance flow.
+  private async validateGeofence(dto: ClockInDto | ClockOutDto): Promise<void> {
+    if (dto.source !== 'mobile') return;
+    if (!this.geofenceConfig.isEnabled()) return;
+
+    if (dto.latitude === undefined || dto.longitude === undefined || dto.accuracy === undefined) {
+      throw new UnprocessableEntityException(
+        'Location is required for mobile attendance.',
+      );
+    }
+
+    if (dto.accuracy > this.geofenceConfig.getMaxAccuracyMeters()) {
+      throw new UnprocessableEntityException(
+        'GPS accuracy is too low. Please try again near the office.',
+      );
+    }
+
+    const company = this.geofenceConfig.getCompanyLocation();
+    if (!company) {
+      throw new UnprocessableEntityException(
+        'Attendance geofence is not configured.',
+      );
+    }
+
+    const within = this.geofenceService.isWithinRadius(
+      dto.latitude,
+      dto.longitude,
+      company.lat,
+      company.lon,
+      this.geofenceConfig.getRadiusMeters(),
+    );
+
+    if (!within) {
+      throw new UnprocessableEntityException(
+        'You are outside the allowed company area.',
+      );
+    }
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

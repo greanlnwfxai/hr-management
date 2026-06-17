@@ -147,6 +147,22 @@ npm run web
 - No clock-in/out via mobile — deferred to T-047.
 - No real-time status auto-refresh (only on load / manual refresh).
 - History shows only the first 10 records; no pagination in mobile view yet.
+
+---
+
+## T-046 Status — Backend Geofence Available
+
+**T-046 is complete.** The backend geofence validation foundation is now in place.
+
+What was added in T-046:
+- `POST /attendance/clock-in` and `POST /attendance/clock-out` now accept optional location payload: `{ source, latitude, longitude, accuracy }`.
+- When `source = "mobile"` and `ATTENDANCE_GEOFENCE_ENABLED=true`, the backend validates GPS coordinates against the configured company location and 100 m radius.
+- Out-of-range, low-accuracy, or missing location requests receive `422 Unprocessable Entity` with a clear English error message.
+- Web clock-in/out is fully unaffected (no `source` field = legacy path).
+
+See [ATTENDANCE_GEOFENCE_BACKEND.md](ATTENDANCE_GEOFENCE_BACKEND.md) for the full policy and payload contract.
+
+**T-047** will wire the mobile GPS UI to these backend endpoints.
 - Admin-only views (`GET /attendance`) are not exposed in mobile.
 
 ---

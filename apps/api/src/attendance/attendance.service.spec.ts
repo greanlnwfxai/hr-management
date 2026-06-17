@@ -1,7 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { GeofenceService } from './geofence.service';
+import { GeofenceConfigService } from './geofence-config.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
 
 type PrismaMock = ReturnType<typeof mockPrisma> & {
@@ -18,15 +26,19 @@ const BANGKOK_PRESENT_UTC = '2026-06-13T02:00:00.000Z'; // Bangkok 09:00 — bou
 const BANGKOK_LATE_UTC = '2026-06-13T02:01:00.000Z';    // Bangkok 09:01 — one minute past: LATE
 const BANGKOK_EARLY_UTC = '2026-06-13T01:59:00.000Z';   // Bangkok 08:59 — PRESENT
 
+const COMPANY_LAT = 13.7563;
+const COMPANY_LON = 100.5018;
+
 describe('AttendanceService', () => {
   let service: AttendanceService;
   let prisma: PrismaMock;
+  let geofenceConfig: jest.Mocked<GeofenceConfigService>;
+  let geofenceService: jest.Mocked<GeofenceService>;
 
   const userId = 'user-uuid-1';
   const employeeId = 'emp-uuid-1';
   const attendanceId = 'att-uuid-1';
 
-  // Raw attendance record returned by findUnique (no ATTENDANCE_SELECT shape needed here)
   const mockOpenRecord = {
     id: attendanceId,
     employeeId,
@@ -47,10 +59,24 @@ describe('AttendanceService', () => {
   beforeEach(async () => {
     prisma = mockPrisma() as PrismaMock;
 
+    geofenceConfig = {
+      isEnabled: jest.fn().mockReturnValue(false),
+      getCompanyLocation: jest.fn().mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON }),
+      getRadiusMeters: jest.fn().mockReturnValue(100),
+      getMaxAccuracyMeters: jest.fn().mockReturnValue(100),
+    } as unknown as jest.Mocked<GeofenceConfigService>;
+
+    geofenceService = {
+      calculateDistanceMeters: jest.fn().mockReturnValue(0),
+      isWithinRadius: jest.fn().mockReturnValue(true),
+    } as unknown as jest.Mocked<GeofenceService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
         { provide: PrismaService, useValue: prisma },
+        { provide: GeofenceService, useValue: geofenceService },
+        { provide: GeofenceConfigService, useValue: geofenceConfig },
       ],
     }).compile();
 
@@ -237,7 +263,7 @@ describe('AttendanceService', () => {
       expect(result).toMatchObject({ id: attendanceId });
     });
 
-    it('throws ForbiddenException when employee views another employee\'s record', async () => {
+    it("throws ForbiddenException when employee views another employee's record", async () => {
       prisma.attendance.findUnique.mockResolvedValue(mockAttendanceFull as any);
       prisma.employee.findFirst.mockResolvedValue({ id: 'other-emp-uuid' });
 
@@ -248,6 +274,160 @@ describe('AttendanceService', () => {
       prisma.attendance.findUnique.mockResolvedValue(null);
 
       await expect(service.findOne('missing', userId, 'SUPER_ADMIN')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── geofence validation ────────────────────────────────────────────────────
+
+  describe('geofence validation (clockIn)', () => {
+    const mobileDto = {
+      source: 'mobile' as const,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      accuracy: 25,
+    };
+
+    it('skips geofence entirely when source is not "mobile" (web path)', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      // No source field — legacy web behavior
+      await expect(service.clockIn(userId, { note: 'web' })).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('skips geofence when source is "web"', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      await expect(service.clockIn(userId, { source: 'web' })).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('skips geofence when source is "mobile" but geofence is disabled', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(false);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      await expect(service.clockIn(userId, { source: 'mobile' })).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('throws 422 when source is "mobile", geofence enabled, but location fields are missing', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+
+      await expect(service.clockIn(userId, { source: 'mobile' })).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+    });
+
+    it('throws 422 when accuracy is missing even if lat/lon are present', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON }),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('throws 422 when GPS accuracy exceeds the configured maximum', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 150 }),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('throws 422 when company location is not configured', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue(null);
+
+      await expect(service.clockIn(userId, mobileDto)).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('throws 422 when user is outside the allowed radius', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
+      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(service.clockIn(userId, mobileDto)).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('allows clock-in when source is "mobile", geofence enabled, and user is within radius', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
+      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceService.isWithinRadius.mockReturnValue(true);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      await expect(service.clockIn(userId, mobileDto)).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).toHaveBeenCalledWith(
+        COMPANY_LAT, COMPANY_LON, COMPANY_LAT, COMPANY_LON, 100,
+      );
+    });
+
+    it('throws 422 error message includes expected text for out-of-range', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
+      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      try {
+        await service.clockIn(userId, mobileDto);
+        fail('Expected UnprocessableEntityException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(UnprocessableEntityException);
+        expect(err.message).toContain('outside the allowed company area');
+      }
+    });
+
+    it('throws 422 error message includes expected text for poor accuracy', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(50);
+
+      try {
+        await service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 75 });
+        fail('Expected UnprocessableEntityException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(UnprocessableEntityException);
+        expect(err.message).toContain('GPS accuracy is too low');
+      }
+    });
+  });
+
+  describe('geofence validation (clockOut)', () => {
+    it('enforces geofence on clock-out for mobile source', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+
+      await expect(
+        service.clockOut(userId, { source: 'mobile' }),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('skips geofence on clock-out for web source', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+      prisma.attendance.update.mockResolvedValue({
+        ...mockAttendanceFull,
+        checkOut: new Date(),
+      } as any);
+
+      await expect(service.clockOut(userId, { source: 'web' })).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
     });
   });
 });
