@@ -25,7 +25,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3002}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3002,http://localhost:3004}
       THROTTLE_TTL: ${THROTTLE_TTL:-60}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       LOGIN_THROTTLE_TTL: ${LOGIN_THROTTLE_TTL:-60}
@@ -40,6 +40,19 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  mobile:
+    build:
+      context: ./apps/mobile
+      args:
+        EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:-http://localhost:4002}
+    container_name: hr-mobile
+    ports:
+      - "3004:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
 
   db:
     image: postgres:16

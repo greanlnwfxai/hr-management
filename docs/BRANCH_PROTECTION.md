@@ -31,16 +31,17 @@ When GitHub Actions runs a workflow, each job reports a status check whose name 
 <workflow name> / <job display name>
 ```
 
-For this repository, the four required check context strings are:
+For this repository, the five required check context strings are:
 
 ```
 HR Management CI / API — Build & Validate
 HR Management CI / Web — Build & Validate
+HR Management CI / Mobile — Typecheck & Export
 HR Management CI / Compose — Config Validation
 HR Management CI / Integration — Runtime API Test
 ```
 
-> **Tip**: GitHub's search box autocompletes status check names from checks that have already run on the repository. Since CI has already passed on `main`, all four names will appear in the dropdown as you type.
+> **Tip**: GitHub's search box autocompletes status check names from checks that have already run on the repository. Since CI has already passed on `main`, all five names will appear in the dropdown as you type.
 
 ### Ruleset Settings
 
@@ -51,6 +52,7 @@ HR Management CI / Integration — Runtime API Test
 | Require status checks to pass | ✅ | ✅ |
 | — `HR Management CI / API — Build & Validate` | ✅ | ✅ |
 | — `HR Management CI / Web — Build & Validate` | ✅ | ✅ |
+| — `HR Management CI / Mobile — Typecheck & Export` | ✅ | ✅ |
 | — `HR Management CI / Compose — Config Validation` | ✅ | ✅ |
 | — `HR Management CI / Integration — Runtime API Test` | ✅ | ✅ |
 | Require branches to be up to date before merging | Optional | ✅ |
@@ -90,8 +92,9 @@ HR Management CI / Integration — Runtime API Test
 8. Under **Branch rules**, enable **Require status checks to pass**:
    - Click **Add checks**.
    - In the search box, type `API` — select **HR Management CI / API — Build & Validate**.
-   - Repeat for the remaining three checks:
+   - Repeat for the remaining four checks:
      - `HR Management CI / Web — Build & Validate`
+     - `HR Management CI / Mobile — Typecheck & Export`
      - `HR Management CI / Compose — Config Validation`
      - `HR Management CI / Integration — Runtime API Test`
    - (Optional — recommended for teams) Enable **Require branches to be up to date before merging**.
@@ -116,9 +119,10 @@ If Rulesets is not available in your GitHub plan or UI, use the legacy path:
 1. Under **Branch name pattern**, enter `main`.
 2. Enable **Require status checks to pass before merging**.
 3. Enable **Require branches to be up to date before merging** (recommended for teams).
-4. In the status checks search box, add all four checks:
+4. In the status checks search box, add all five checks:
    - `HR Management CI / API — Build & Validate`
    - `HR Management CI / Web — Build & Validate`
+   - `HR Management CI / Mobile — Typecheck & Export`
    - `HR Management CI / Compose — Config Validation`
    - `HR Management CI / Integration — Runtime API Test`
 5. Enable **Do not allow bypassing the above settings** (team) or leave it unchecked (solo, allows admin bypass in emergencies).
@@ -131,7 +135,7 @@ If Rulesets is not available in your GitHub plan or UI, use the legacy path:
 
 For a solo developer or small project owner, the minimum recommended configuration is:
 
-- ✅ Require all four status checks to pass
+- ✅ Require all five status checks to pass
 - ✅ Block force pushes to `main`
 - ✅ Block deletion of `main`
 - ⬜ Pull request requirement — optional (direct push to `main` is allowed if CI passes)
@@ -146,7 +150,7 @@ For a solo developer or small project owner, the minimum recommended configurati
 
 For a team of 2 or more developers:
 
-- ✅ Require all four status checks to pass
+- ✅ Require all five status checks to pass
 - ✅ Require a pull request before merging
 - ✅ Require at least 1 approval
 - ✅ Dismiss stale approvals when new commits are pushed
@@ -178,16 +182,16 @@ Do not leave bypass permissions permanently relaxed after the emergency is resol
 
 Use this checklist after configuring branch protection:
 
-- [ ] Confirm the latest CI run on `main` is green (all four jobs pass)
+- [ ] Confirm the latest CI run on `main` is green (all six jobs pass)
 - [ ] Open **Repository → Settings → Rules → Rulesets**
 - [ ] Create ruleset `protect-main-ci` targeting `main`
-- [ ] Add all four required status checks
+- [ ] Add all five required status checks
 - [ ] Enable block force pushes
 - [ ] Enable block deletions
 - [ ] Save the ruleset
 - [ ] Open a test pull request from a feature branch
 - [ ] Confirm the PR shows "Required checks must pass before merging"
-- [ ] Confirm merge is blocked until all four checks pass (or is not available if checks fail)
+- [ ] Confirm merge is blocked until all five checks pass (or is not available if checks fail)
 - [ ] Confirm a force push to `main` is rejected
 
 ---
@@ -209,8 +213,8 @@ Use this checklist after configuring branch protection:
 - **CODEOWNERS**: Add a `CODEOWNERS` file to auto-assign reviewers to specific paths (e.g., infra changes require a second review)
 - **Required signed commits**: Enable GPG-signed commit requirement for production-sensitive repositories
 - **Protected tags**: Restrict who can create version tags (`v*`) to prevent accidental or unauthorized releases
-- **E2E gate**: Once Playwright/Cypress tests are configured, add an `e2e-ci` job as a fifth required check
-- **Deployment gate**: When a staging deploy job is added, gate it on all four current checks before triggering
+- **E2E gate**: Add `HR Management CI / E2E — Playwright Critical Flows` as a sixth required check once the team is comfortable with E2E reliability
+- **Deployment gate**: When a staging deploy job is added, gate it on all current required checks before triggering
 
 ---
 

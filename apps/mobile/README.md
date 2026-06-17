@@ -29,8 +29,26 @@ cp .env.example .env
 | `npm run start` | Start Expo dev server |
 | `npm run ios` | Launch iOS simulator |
 | `npm run android` | Launch Android emulator |
-| `npm run web` | Run in browser via Metro |
+| `npm run web` | Run in browser via Metro (http://localhost:3004) |
 | `npm run typecheck` | TypeScript type check (CI-safe) |
+
+## CI
+
+The mobile app runs as a dedicated CI job (`mobile-ci`) in GitHub Actions on every push and PR to `main`.
+
+| Check | Command | Notes |
+|---|---|---|
+| TypeScript typecheck | `npm run typecheck` | `tsc --noEmit` — fails on any type error |
+| Expo web export | `npx expo export --platform web` | Static bundle — fails if Metro bundler errors |
+
+**Install:** CI uses `npm ci` (plain, no `--legacy-peer-deps`). The lockfile resolves peer deps at install time, so the flag is not needed in CI. The README `setup` section uses `npm install --legacy-peer-deps` for interactive local installs where the flag is required.
+
+**Local equivalent:**
+```bash
+./scripts/mobile-verify.sh
+```
+
+See [docs/MOBILE_CI.md](../../docs/MOBILE_CI.md) for the full CI reference, local verification commands, and known limitations.
 
 ## Environment Variables
 

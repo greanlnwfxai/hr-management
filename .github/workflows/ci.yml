@@ -98,6 +98,39 @@ jobs:
       - name: Build web (next build)
         run: npm run build
 
+  # ── Mobile — Typecheck & Export ────────────────────────────────────────────
+  # Installs Expo/React Native dependencies, runs TypeScript typecheck, and
+  # produces a static Expo web export to validate the bundle compiles cleanly.
+  # No real device, GPS permission, API, or secrets are required.
+  # Install note: plain `npm ci` from the lockfile succeeds — no --legacy-peer-deps
+  # needed in CI because the lockfile resolves peer deps at install time.
+  mobile-ci:
+    name: Mobile — Typecheck & Export
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript typecheck
+        run: npm run typecheck
+
+      - name: Export web build (Expo)
+        run: npx expo export --platform web
+
   # ── Compose — Config Validation ─────────────────────────────────────────────
   # Validates both compose files render correctly and that the production
   # standalone compose has no host-bound port mappings.

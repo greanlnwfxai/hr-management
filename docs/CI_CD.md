@@ -6,7 +6,7 @@ The project uses **GitHub Actions** for continuous integration. Every push and p
 
 The pipeline does **not** deploy to production or push Docker images to a registry — those are future tasks (see [Future Improvements](#future-improvements)).
 
-The pipeline now has **five jobs**: API build/validate, Web build/validate, Compose config validation, Runtime API integration test, and Playwright E2E critical flows.
+The pipeline now has **six jobs**: API build/validate, Web build/validate, Mobile typecheck/export, Compose config validation, Runtime API integration test, and Playwright E2E critical flows.
 
 Workflow file: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 
@@ -30,11 +30,12 @@ Concurrent runs on the same branch or PR are automatically cancelled to save run
 |-----|------|-----------|--------|
 | `api-ci` | API — Build & Validate | — | ubuntu-latest |
 | `web-ci` | Web — Build & Validate | — | ubuntu-latest |
+| `mobile-ci` | Mobile — Typecheck & Export | — | ubuntu-latest |
 | `compose-ci` | Compose — Config Validation | — | ubuntu-latest |
 | `integration-ci` | Integration — Runtime API Test | `api-ci` | ubuntu-latest |
 | `e2e-ci` | E2E — Playwright Critical Flows | `api-ci`, `web-ci`, `compose-ci` | ubuntu-latest |
 
-`integration-ci` and `e2e-ci` run in parallel after the three build/validate jobs complete. They validate different runtime paths: `integration-ci` exercises the NestJS API directly (no browser); `e2e-ci` exercises the full stack through a real Chromium browser.
+`api-ci`, `web-ci`, `mobile-ci`, and `compose-ci` run in parallel with no dependencies between them. `integration-ci` and `e2e-ci` run after their respective build jobs complete and validate different runtime paths: `integration-ci` exercises the NestJS API directly (no browser); `e2e-ci` exercises the full stack through a real Chromium browser. `mobile-ci` runs fully independently — it has no `needs:` dependency and does not gate `e2e-ci`.
 
 ---
 
@@ -70,6 +71,34 @@ Concurrent runs on the same branch or PR are automatically cancelled to save run
 | Build web | `npm run build` | `next build` with `NEXT_PUBLIC_API_URL` placeholder |
 
 **API URL note**: `NEXT_PUBLIC_API_URL=http://localhost:4002` is injected at build time (Next.js bakes it into the JS bundle). A placeholder is sufficient to validate the build. Changing this for a real deployment requires rebuilding the image with the correct value (see `docker-compose.production.yml` build args).
+
+---
+
+### `mobile-ci` — Mobile: Typecheck & Export
+
+**Runner**: `ubuntu-latest`  
+**Working directory**: `apps/mobile`
+
+| Step | Command | Notes |
+|------|---------|-------|
+| Checkout | `actions/checkout@v4` | |
+| Setup Node.js 22 | `actions/setup-node@v4` | npm cache keyed to `apps/mobile/package-lock.json` |
+| Install deps | `npm ci` | Plain frozen-lockfile install — no `--legacy-peer-deps` needed in CI because the lockfile resolves peer deps at install time |
+| TypeScript typecheck | `npm run typecheck` | `tsc --noEmit`; fails CI on any type error |
+| Expo web export | `npx expo export --platform web` | Static Metro bundle to `dist/`; fails CI if bundler errors |
+
+**Install strategy note**: The mobile README documents `npm install --legacy-peer-deps` for interactive local setup. In CI we use `npm ci` against the committed lockfile, which exits 0 without the flag. The two commands operate differently: `npm ci` consults the lockfile to pin every version, which sidesteps the peer-dep negotiation that requires `--legacy-peer-deps` during `npm install`.
+
+**No runtime dependencies**: This job requires no API, no database, no secrets, and no real device. `EXPO_PUBLIC_API_BASE_URL` defaults to empty — the export succeeds with a placeholder URL baked in.
+
+**What this job does not test**:
+- Native iOS / Android builds (requires macOS runner + simulators)
+- Real GPS / location permission
+- App store or EAS cloud builds
+- Mobile E2E tests (Detox / Maestro)
+- Physical device rendering
+
+See **[MOBILE_CI.md](MOBILE_CI.md)** for the full mobile CI reference and local verification commands.
 
 ---
 
@@ -184,6 +213,11 @@ All CI environment variables are safe placeholder values. No real secrets are st
 |------------|--------|-----|
 | Unit tests (Jest) | **Configured** — runs in `api-ci` | `apps/api/src/**/*.spec.ts` |
 | Browser E2E tests (Chromium) | **Configured** — `e2e-ci` added in T-040 | `apps/web/e2e/` |
+| Mobile TypeScript typecheck | **Configured** — `mobile-ci` added in T-047.5 | `apps/mobile/` |
+| Mobile Expo web export | **Configured** — `mobile-ci` added in T-047.5 | `apps/mobile/` |
+| Native iOS / Android builds | Not configured | Requires macOS runner, simulators, or EAS |
+| Mobile E2E tests | Not configured | Deferred — Detox / Maestro not yet set up |
+| EAS cloud builds | Not configured | Future task |
 | Build Docker images (standalone) | Not configured | Slow without registry cache; deferred to future task |
 | Push images to a container registry | Not configured | Future task |
 | Deploy to production | Not configured | Future task — manual deployment via `docker-compose.production.yml` |
@@ -309,13 +343,14 @@ See **[E2E_TESTING.md](E2E_TESTING.md)** for full CI troubleshooting and env var
 
 ## Branch Protection
 
-All five CI jobs should be configured as **required status checks** on `main`. This prevents code from merging if any check fails — including the runtime integration test and the Playwright E2E suite.
+All six CI jobs should be configured as **required status checks** on `main`. This prevents code from merging if any check fails — including the runtime integration test and the Playwright E2E suite.
 
 Required check names (as they appear in GitHub):
 
 ```
 HR Management CI / API — Build & Validate
 HR Management CI / Web — Build & Validate
+HR Management CI / Mobile — Typecheck & Export
 HR Management CI / Compose — Config Validation
 HR Management CI / Integration — Runtime API Test
 HR Management CI / E2E — Playwright Critical Flows
@@ -382,22 +417,29 @@ npm run test:watch  # watch mode during development
 ### Short Term
 - **Coverage enforcement**: Add `--coverageThreshold` to `jest` config to require minimum coverage on new code
 - **E2E browser matrix**: Extend `e2e-ci` to run against Firefox and WebKit (add projects to `playwright.config.ts`); currently Chromium-only to minimise install time
+- **Mobile unit tests**: Add Jest unit tests for mobile services/hooks and run them in `mobile-ci`
+- **Mobile component tests**: Add React Native Testing Library tests and run them in `mobile-ci`
 
 ### Medium Term
 - **Docker image builds**: Add a `docker-build` job that runs `docker compose build api web` using GitHub Actions cache (`type=gha`)
 - **Container registry push**: Push tagged images to GHCR (GitHub Container Registry) on merge to `main`
 - **Staging deployment**: Auto-deploy to a staging server on successful merge using SSH + `docker compose pull && up`
+- **EAS build**: Add an EAS cloud build job for iOS/Android production builds (requires EAS secrets)
+- **Expo export artifact upload**: Upload the `apps/mobile/dist/` export as a GitHub Actions artifact for inspection
 
 ### Long Term
 - **Scheduled smoke tests**: Nightly run of `api-smoke-test.sh` against staging
 - **Multi-environment workflows**: Separate pipelines for `staging` and `production` branches
 - **E2E mutating tests**: Add write-path coverage (create employee, submit leave, clock in/out) once a test-data reset strategy is in place
+- **Mobile E2E (Detox/Maestro)**: Native end-to-end tests on iOS/Android simulators
+- **Native Android/iOS CI**: macOS runner builds for `.ipa` / `.apk` artifacts
 
 ---
 
 ## Related Docs
 
 - [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) — required status checks and GitHub ruleset setup guide
+- [MOBILE_CI.md](MOBILE_CI.md) — mobile CI job reference, local verification, and known limitations
 - [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) — how to deploy using `docker-compose.production.yml`
 - [AUTH_SECURITY_HARDENING.md](AUTH_SECURITY_HARDENING.md) — rate limiting, Helmet, brute-force protection
 - [PRE_DEPLOYMENT_SECURITY.md](PRE_DEPLOYMENT_SECURITY.md) — JWT, CORS, credentials hardening
