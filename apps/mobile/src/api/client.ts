@@ -1,5 +1,13 @@
 import { ENV } from '../config/env';
 import type { AuthUser } from '../auth/types';
+import {
+  SessionExpiredError,
+  type DashboardSummary,
+  type MobileUserProfile,
+  type PaginatedResponse,
+  type EmployeeItem,
+  type DepartmentItem,
+} from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 
@@ -59,4 +67,65 @@ export async function getMe(token: string): Promise<AuthUser> {
     throw new Error(`Session expired: HTTP ${response.status}`);
   }
   return response.json() as Promise<AuthUser>;
+}
+
+// ─── Authenticated request helper ─────────────────────────────────────────────
+
+async function authGet<T>(path: string, token: string): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${ENV.API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    throw new Error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+  }
+
+  if (response.status === 401) {
+    throw new SessionExpiredError();
+  }
+  if (!response.ok) {
+    throw new Error(`ไม่สามารถโหลดข้อมูลได้: HTTP ${response.status}`);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+
+export async function getDashboard(token: string): Promise<DashboardSummary> {
+  return authGet<DashboardSummary>('/dashboard', token);
+}
+
+// ─── Profile ──────────────────────────────────────────────────────────────────
+
+export async function getProfile(token: string): Promise<MobileUserProfile> {
+  return authGet<MobileUserProfile>('/auth/me', token);
+}
+
+// ─── Employees ────────────────────────────────────────────────────────────────
+
+export async function getEmployees(
+  token: string,
+  page = 1,
+  limit = 1,
+): Promise<PaginatedResponse<EmployeeItem>> {
+  return authGet<PaginatedResponse<EmployeeItem>>(
+    `/employees?page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+// ─── Departments ──────────────────────────────────────────────────────────────
+
+export async function getDepartments(
+  token: string,
+  page = 1,
+  limit = 1,
+): Promise<PaginatedResponse<DepartmentItem>> {
+  return authGet<PaginatedResponse<DepartmentItem>>(
+    `/departments?page=${page}&limit=${limit}`,
+    token,
+  );
 }

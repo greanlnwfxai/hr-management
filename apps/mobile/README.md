@@ -82,11 +82,25 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 |---|---|---|
 | `/` | Index | Redirects based on auth state (loading → home or login) |
 | `/login` | Login | Real JWT login form (T-043) |
-| `/home` | Home | Protected; shows user info, feature cards, health check, logout |
+| `/home` | Home | Protected dashboard — profile card, live HR summary, feature navigation (T-044) |
+
+## Dashboard & Profile (T-044)
+
+The `/home` screen fetches live data from the API using the stored JWT:
+
+| Endpoint | Data shown |
+|---|---|
+| `GET /auth/me` | Profile card: email, role |
+| `GET /dashboard` | Summary cards: employees, departments, attendance today, pending leave |
+
+**Session expiry:** a `401` response clears the token and redirects to `/login` automatically.
+
+**Refresh:** pull-to-refresh or the "อัปเดตข้อมูล" button re-fetches all data.
+
+See [docs/MOBILE_DASHBOARD_PROFILE.md](../../docs/MOBILE_DASHBOARD_PROFILE.md) for full details.
 
 ## Future Tasks
 
-- **T-044** — Mobile Dashboard & Profile
 - **T-045** — Mobile Attendance Foundation
 - **T-046** — Attendance Geofence Backend
 - **T-047** — Mobile Geofence Clock In/Out
