@@ -4,6 +4,7 @@ import { getDashboard, getProfile } from '../api/client';
 import { SessionExpiredError } from '../api/types';
 import type { DashboardSummary, MobileUserProfile } from '../api/types';
 import { useAuth } from '../auth/useAuth';
+import { canSeeDashboard } from '../utils/roles';
 
 export type DashboardLoadState = 'idle' | 'loading' | 'success' | 'error';
 
@@ -17,7 +18,7 @@ export interface DashboardState {
 }
 
 export function useDashboard(): DashboardState {
-  const { token, signOut } = useAuth();
+  const { token, user, signOut } = useAuth();
   const router = useRouter();
 
   const [loadState, setLoadState] = useState<DashboardLoadState>('idle');
@@ -38,8 +39,9 @@ export function useDashboard(): DashboardState {
     setError(null);
 
     try {
+      const role = user?.role ?? '';
       const [dashboardData, profileData] = await Promise.all([
-        getDashboard(token),
+        canSeeDashboard(role) ? getDashboard(token) : Promise.resolve(null),
         getProfile(token),
       ]);
       setDashboard(dashboardData);
@@ -54,7 +56,7 @@ export function useDashboard(): DashboardState {
       setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลได้');
       setLoadState('error');
     }
-  }, [token, handleSessionExpired]);
+  }, [token, user, handleSessionExpired]);
 
   useEffect(() => {
     void fetch();

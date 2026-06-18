@@ -101,28 +101,35 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 |---|---|---|
 | `/` | Index | Redirects based on auth state (loading → home or login) |
 | `/login` | Login | Real JWT login form (T-043) |
-| `/home` | Home | Protected dashboard — profile card, live HR summary, feature navigation (T-044) |
+| `/home` | Home | Protected dashboard — profile card, role badge, role-based feature cards, org summary for admin/manager (T-044, T-049) |
 | `/attendance` | Attendance | Protected attendance screen — today card, history, live geofence clock-in/out (T-045, T-047) |
 | `/leave` | Leave Request | Protected leave screen — balance, create request form, request history (T-048) |
 
-## Dashboard & Profile (T-044)
+## Dashboard & Profile (T-044, T-049)
 
 The `/home` screen fetches live data from the API using the stored JWT:
 
-| Endpoint | Data shown |
-|---|---|
-| `GET /auth/me` | Profile card: email, role |
-| `GET /dashboard` | Summary cards: employees, departments, attendance today, pending leave |
+| Endpoint | Data shown | Roles |
+|---|---|---|
+| `GET /auth/me` | Profile card: email, role badge | All |
+| `GET /dashboard` | Org summary: employees, departments, attendance, leave | SUPER_ADMIN, HR_ADMIN, MANAGER |
+
+`GET /dashboard` is not called for EMPLOYEE to avoid a 403 error. The org summary section is hidden for EMPLOYEE.
+
+**Role-based feature cards:**
+- All roles: ลงเวลา, ขออนุมัติลา
+- MANAGER / HR_ADMIN / SUPER_ADMIN: อนุมัติคำขอลา (coming in T-050)
+- HR_ADMIN / SUPER_ADMIN: ภาพรวม HR, จัดการพนักงาน (coming in future tasks)
 
 **Session expiry:** a `401` response clears the token and redirects to `/login` automatically.
 
 **Refresh:** pull-to-refresh or the "อัปเดตข้อมูล" button re-fetches all data.
 
-See [docs/MOBILE_DASHBOARD_PROFILE.md](../../docs/MOBILE_DASHBOARD_PROFILE.md) for full details.
+See [docs/MOBILE_DASHBOARD_PROFILE.md](../../docs/MOBILE_DASHBOARD_PROFILE.md) and [docs/MOBILE_ROLE_BASED_UX.md](../../docs/MOBILE_ROLE_BASED_UX.md) for full details.
 
 ## Attendance Screen (T-045)
 
-Navigate to the Attendance screen by tapping the **การลงเวลา** card on the Home screen.
+Navigate to the Attendance screen by tapping the **ลงเวลา** card on the Home screen.
 
 The `/attendance` screen fetches live attendance data from the API:
 
@@ -155,7 +162,7 @@ npm run web
 
 # Open http://localhost:8081
 # Login with admin@hr.local / admin1234
-# Tap "การลงเวลา" card on Home screen
+# Tap "ลงเวลา" card on Home screen
 # Grant location permission
 # Tap "ลงเวลาเข้า" or "ลงเวลาออก"
 ```
@@ -166,7 +173,7 @@ See [docs/MOBILE_ATTENDANCE_FOUNDATION.md](../../docs/MOBILE_ATTENDANCE_FOUNDATI
 
 ## Leave Request Screen (T-048)
 
-Navigate to the Leave screen by tapping the **คำขอลางาน** card on the Home screen.
+Navigate to the Leave screen by tapping the **ขออนุมัติลา** card on the Home screen.
 
 | Endpoint | Data shown |
 |---|---|

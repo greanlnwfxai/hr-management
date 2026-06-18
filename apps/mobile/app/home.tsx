@@ -12,13 +12,8 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/auth/useAuth';
 import { useDashboard } from '../src/hooks/useDashboard';
-
-const FEATURE_CARDS: Array<{ key: string; th: string; en: string; icon: string }> = [
-  { key: 'profile', th: 'โปรไฟล์ของฉัน', en: 'My Profile', icon: '👤' },
-  { key: 'attendance', th: 'การลงเวลา', en: 'Attendance', icon: '🕐' },
-  { key: 'leave', th: 'คำขอลางาน', en: 'Leave Request', icon: '📋' },
-  { key: 'dashboard', th: 'แดชบอร์ด', en: 'Dashboard', icon: '📊' },
-];
+import { FeatureCard } from '../src/components/FeatureCard';
+import { roleLabel, canUseManagerApproval, isAdmin, canSeeDashboard } from '../src/utils/roles';
 
 function formatTime(date: Date | null): string {
   if (!date) return '—';
@@ -65,24 +60,18 @@ export default function HomeScreen() {
     return (
       <View style={styles.fullCenter}>
         <ActivityIndicator color="#1a56db" size="large" />
-        <Text style={styles.loadingText}>กำลังโหลดข้อมูล</Text>
+        <Text style={styles.loadingText}>กำลังโหลดข้อมูล...</Text>
       </View>
     );
   }
 
   const displayUser = profile ?? user;
+  const role = displayUser?.role ?? '';
   const avatarLetter = displayUser?.email?.charAt(0).toUpperCase() ?? '?';
-  const roleTh = (role: string) => {
-    switch (role) {
-      case 'SUPER_ADMIN': return 'ผู้ดูแลระบบ';
-      case 'HR_ADMIN': return 'ฝ่ายบุคคล';
-      case 'MANAGER': return 'ผู้จัดการ';
-      case 'EMPLOYEE': return 'พนักงาน';
-      default: return role.replace(/_/g, ' ');
-    }
-  };
-
   const isRefreshing = loadState === 'loading';
+  const showDashboard = canSeeDashboard(role);
+  const showManagerApproval = canUseManagerApproval(role);
+  const showHRSection = isAdmin(role);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -123,147 +112,159 @@ export default function HomeScreen() {
               </View>
               <View style={styles.profileInfo}>
                 <Text style={styles.profileEmail}>{displayUser.email}</Text>
-                <Text style={styles.profileRole}>{roleTh(displayUser.role)}</Text>
+                <View style={styles.roleBadgeRow}>
+                  <View style={styles.roleBadge}>
+                    <Text style={styles.roleBadgeText}>{roleLabel(role)}</Text>
+                  </View>
+                </View>
                 <View style={styles.statusBadge}>
                   <View style={styles.statusDot} />
-                  <Text style={styles.statusText}>ผู้ใช้งานที่เข้าสู่ระบบ</Text>
+                  <Text style={styles.statusText}>ออนไลน์</Text>
                 </View>
               </View>
-            </View>
-            <View style={styles.divider} />
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>บทบาท</Text>
-              <Text style={styles.metaValue}>{displayUser.role.replace(/_/g, '_')}</Text>
-            </View>
-            <View style={styles.metaRow}>
-              <Text style={styles.metaLabel}>สถานะผู้ใช้</Text>
-              <Text style={[styles.metaValue, { color: '#16a34a' }]}>ใช้งานอยู่</Text>
             </View>
           </View>
         )}
 
-        {/* ── Dashboard summary ────────────────────────────────────────── */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>ภาพรวมระบบ</Text>
+        {/* ── Dashboard overview — admin/manager/HR only ───────────────── */}
+        {showDashboard && (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>ภาพรวมองค์กร</Text>
 
-          {loadState === 'loading' && (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#1a56db" size="small" />
-              <Text style={styles.loadingInlineText}>กำลังโหลดข้อมูล</Text>
-            </View>
-          )}
-
-          {loadState === 'error' && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{error ?? 'ไม่สามารถโหลดข้อมูลได้'}</Text>
-              <Pressable
-                style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
-                onPress={refresh}
-              >
-                <Text style={styles.retryText}>ลองใหม่อีกครั้ง</Text>
-              </Pressable>
-            </View>
-          )}
-
-          {loadState === 'success' && dashboard && (
-            <>
-              <View style={styles.summaryGrid}>
-                <SummaryCard
-                  label="พนักงานทั้งหมด"
-                  value={dashboard.employees.totalEmployees}
-                  sub={`ใช้งาน ${dashboard.employees.activeEmployees}`}
-                  color="#1a56db"
-                />
-                <SummaryCard
-                  label="แผนกทั้งหมด"
-                  value={dashboard.employees.totalDepartments}
-                  sub={`ตำแหน่ง ${dashboard.employees.totalPositions}`}
-                  color="#7c3aed"
-                />
-                <SummaryCard
-                  label="การลงเวลาวันนี้"
-                  value={dashboard.attendance.todayClockedInCount}
-                  sub={`สาย ${dashboard.attendance.todayLateCount}`}
-                  color="#059669"
-                />
-                <SummaryCard
-                  label="คำขอลารอดำเนินการ"
-                  value={dashboard.leave.pendingLeaveRequests}
-                  sub={`อนุมัติแล้ว ${dashboard.leave.approvedLeaveRequests}`}
-                  color="#d97706"
-                />
+            {loadState === 'loading' && (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color="#1a56db" size="small" />
+                <Text style={styles.loadingInlineText}>กำลังโหลดข้อมูล...</Text>
               </View>
+            )}
 
-              <View style={styles.updatedRow}>
-                <Text style={styles.updatedLabel}>อัปเดตล่าสุด</Text>
-                <Text style={styles.updatedValue}>{formatTime(lastUpdated)}</Text>
+            {loadState === 'error' && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error ?? 'ไม่สามารถโหลดข้อมูลได้'}</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
+                  onPress={refresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="ลองใหม่อีกครั้ง"
+                >
+                  <Text style={styles.retryText}>ลองใหม่อีกครั้ง</Text>
+                </Pressable>
               </View>
-            </>
-          )}
+            )}
 
-          {loadState === 'idle' && (
-            <Text style={styles.idleText}>กำลังเตรียมข้อมูล...</Text>
-          )}
-        </View>
-
-        {/* ── Feature cards ────────────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>เมนูหลัก</Text>
-        <View style={styles.featureGrid}>
-          {FEATURE_CARDS.map((card) => {
-            const isAttendance = card.key === 'attendance';
-            const isLeave = card.key === 'leave';
-            if (isAttendance) {
-              return (
-                <Pressable
-                  key={card.key}
-                  style={({ pressed }) => [styles.featureCard, styles.featureCardActive, pressed && styles.pressed]}
-                  onPress={() => router.push('/attendance')}
-                  accessibilityRole="button"
-                  accessibilityLabel={card.th}
-                >
-                  <Text style={styles.featureIcon}>{card.icon}</Text>
-                  <Text style={styles.featureTh}>{card.th}</Text>
-                  <Text style={styles.featureEn}>{card.en}</Text>
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>เปิดใช้งาน</Text>
-                  </View>
-                </Pressable>
-              );
-            }
-            if (isLeave) {
-              return (
-                <Pressable
-                  key={card.key}
-                  style={({ pressed }) => [styles.featureCard, styles.featureCardActive, pressed && styles.pressed]}
-                  onPress={() => router.push('/leave')}
-                  accessibilityRole="button"
-                  accessibilityLabel={card.th}
-                >
-                  <Text style={styles.featureIcon}>{card.icon}</Text>
-                  <Text style={styles.featureTh}>{card.th}</Text>
-                  <Text style={styles.featureEn}>{card.en}</Text>
-                  <View style={styles.activeBadge}>
-                    <Text style={styles.activeBadgeText}>เปิดใช้งาน</Text>
-                  </View>
-                </Pressable>
-              );
-            }
-            return (
-              <View key={card.key} style={styles.featureCard}>
-                <Text style={styles.featureIcon}>{card.icon}</Text>
-                <Text style={styles.featureTh}>{card.th}</Text>
-                <Text style={styles.featureEn}>{card.en}</Text>
-                <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>เร็วๆ นี้</Text>
+            {loadState === 'success' && dashboard && (
+              <>
+                <View style={styles.summaryGrid}>
+                  <SummaryCard
+                    label="พนักงานทั้งหมด"
+                    value={dashboard.employees.totalEmployees}
+                    sub={`ใช้งาน ${dashboard.employees.activeEmployees}`}
+                    color="#1a56db"
+                  />
+                  <SummaryCard
+                    label="แผนกทั้งหมด"
+                    value={dashboard.employees.totalDepartments}
+                    sub={`ตำแหน่ง ${dashboard.employees.totalPositions}`}
+                    color="#7c3aed"
+                  />
+                  <SummaryCard
+                    label="ลงเวลาวันนี้"
+                    value={dashboard.attendance.todayClockedInCount}
+                    sub={`สาย ${dashboard.attendance.todayLateCount}`}
+                    color="#059669"
+                  />
+                  <SummaryCard
+                    label="คำขอลารอดำเนินการ"
+                    value={dashboard.leave.pendingLeaveRequests}
+                    sub={`อนุมัติแล้ว ${dashboard.leave.approvedLeaveRequests}`}
+                    color="#d97706"
+                  />
                 </View>
-              </View>
-            );
-          })}
+                <View style={styles.updatedRow}>
+                  <Text style={styles.updatedLabel}>อัปเดตล่าสุด</Text>
+                  <Text style={styles.updatedValue}>{formatTime(lastUpdated)}</Text>
+                </View>
+              </>
+            )}
+
+            {loadState === 'idle' && (
+              <Text style={styles.idleText}>กำลังเตรียมข้อมูล...</Text>
+            )}
+          </View>
+        )}
+
+        {/* ── Quick Actions ─────────────────────────────────────────────── */}
+        <Text style={styles.sectionHeader}>เมนูหลัก</Text>
+        <View style={styles.featureGrid}>
+          <FeatureCard
+            title="ลงเวลา"
+            description="บันทึกเวลาเข้า-ออกงาน"
+            icon="🕐"
+            enabled
+            onPress={() => router.push('/attendance')}
+          />
+          <FeatureCard
+            title="ขออนุมัติลา"
+            description="ส่งคำขอวันหยุด/ลาป่วย"
+            icon="📋"
+            enabled
+            onPress={() => router.push('/leave')}
+          />
+          <FeatureCard
+            title="โปรไฟล์ของฉัน"
+            description="ข้อมูลส่วนตัวและสัญญาจ้าง"
+            icon="👤"
+            enabled={false}
+            badge="เร็ว ๆ นี้"
+          />
         </View>
+
+        {/* ── Manager Approval entry point — manager/HR/admin only ─────── */}
+        {showManagerApproval && (
+          <>
+            <Text style={styles.sectionHeader}>สำหรับผู้จัดการ</Text>
+            <View style={styles.featureGrid}>
+              <FeatureCard
+                title="อนุมัติคำขอลา"
+                description="ฟีเจอร์นี้จะเปิดใช้งานใน T-050"
+                icon="✅"
+                enabled={false}
+                badge="เร็ว ๆ นี้"
+              />
+            </View>
+          </>
+        )}
+
+        {/* ── HR admin section ─────────────────────────────────────────── */}
+        {showHRSection && (
+          <>
+            <Text style={styles.sectionHeader}>สำหรับ HR / ผู้ดูแลระบบ</Text>
+            <View style={styles.featureGrid}>
+              <FeatureCard
+                title="ภาพรวม HR"
+                description="สรุปข้อมูลพนักงานและแผนก"
+                icon="📊"
+                enabled={false}
+                badge="เร็ว ๆ นี้"
+              />
+              <FeatureCard
+                title="จัดการพนักงาน"
+                description="ดูและแก้ไขข้อมูลพนักงาน"
+                icon="👥"
+                enabled={false}
+                badge="เร็ว ๆ นี้"
+              />
+            </View>
+          </>
+        )}
 
         {/* ── Refresh button ───────────────────────────────────────────── */}
         <Pressable
-          style={({ pressed }) => [styles.refreshBtn, pressed && styles.pressed, isRefreshing && styles.disabled]}
+          style={({ pressed }) => [
+            styles.refreshBtn,
+            pressed && styles.pressed,
+            isRefreshing && styles.disabled,
+          ]}
           onPress={refresh}
           disabled={isRefreshing}
           accessibilityRole="button"
@@ -297,7 +298,7 @@ const styles = StyleSheet.create({
   scroll: {
     padding: 16,
     gap: 14,
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
 
   // Header
@@ -351,36 +352,47 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   avatarCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: '#1a56db',
     justifyContent: 'center',
     alignItems: 'center',
   },
   avatarText: {
     color: '#ffffff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
   },
   profileInfo: {
     flex: 1,
-    gap: 3,
+    gap: 5,
   },
   profileEmail: {
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
   },
-  profileRole: {
+  roleBadgeRow: {
+    flexDirection: 'row',
+  },
+  roleBadge: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  roleBadgeText: {
     fontSize: 12,
-    color: '#6b7280',
+    fontWeight: '600',
+    color: '#1e40af',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    marginTop: 2,
   },
   statusDot: {
     width: 7,
@@ -393,31 +405,19 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     fontWeight: '500',
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#f3f4f6',
-    marginVertical: 2,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  metaLabel: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  metaValue: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#111827',
-  },
 
-  // Section title
+  // Section headers
   sectionTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: '#111827',
+  },
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
 
   // Summary grid
@@ -479,6 +479,11 @@ const styles = StyleSheet.create({
   errorBox: {
     gap: 10,
     paddingVertical: 4,
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
   },
   errorText: {
     fontSize: 13,
@@ -507,61 +512,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-  },
-  featureCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
-    padding: 16,
-    width: '47%',
-    gap: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  featureCardActive: {
-    borderWidth: 1.5,
-    borderColor: '#1a56db',
-  },
-  featureIcon: {
-    fontSize: 22,
-    marginBottom: 4,
-  },
-  featureTh: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  featureEn: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  comingSoonBadge: {
-    marginTop: 8,
-    backgroundColor: '#eff6ff',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-  },
-  comingSoonText: {
-    fontSize: 11,
-    color: '#1a56db',
-    fontWeight: '500',
-  },
-  activeBadge: {
-    marginTop: 8,
-    backgroundColor: '#dcfce7',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-  },
-  activeBadgeText: {
-    fontSize: 11,
-    color: '#16a34a',
-    fontWeight: '600',
   },
 
   // Refresh button

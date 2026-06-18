@@ -113,9 +113,9 @@ falls back to the `user` object cached in AuthContext from login.
 
 ## Known Limitations
 
-- `/dashboard` is role-restricted to SUPER_ADMIN, HR_ADMIN, MANAGER. An EMPLOYEE-role
-  user will receive 403 (not 401), which shows a generic error message rather than
-  auto sign-out. T-045 can address employee-specific data views.
+- `/dashboard` is role-restricted to SUPER_ADMIN, HR_ADMIN, MANAGER. **T-049 fix:** `useDashboard`
+  now skips the `getDashboard` call for EMPLOYEE roles using `canSeeDashboard(role)`, and the
+  org-summary section is hidden on Home for EMPLOYEE. An EMPLOYEE-role user no longer triggers a 403.
 - Profile shows only `email` and `role`; no employee name, code, or department yet.
 - No persistent dashboard cache; data re-fetches on every mount and manual refresh.
 - No offline/stale-data indicator.
