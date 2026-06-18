@@ -49,19 +49,19 @@ export class ApiError extends Error {
 
 export type LoginResponse = {
   accessToken: string;
-  user: { id: string; email: string; role: string };
+  user: { id: string; email: string; username: string | null; role: string; mustChangePassword: boolean; employeeId: string | null };
 };
 
-export function login(email: string, password: string) {
+export function login(loginId: string, password: string) {
   return apiFetch<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ login: loginId, password }),
     skipAuth: true,
   });
 }
 
 export function getMe() {
-  return apiFetch<{ id: string; email: string; role: string }>('/auth/me');
+  return apiFetch<{ id: string; email: string; username: string | null; role: string; employeeId: string | null }>('/auth/me');
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -444,4 +444,32 @@ export function createLeaveBalance(body: {
 
 export function updateLeaveBalance(id: string, body: { entitledDays?: number; usedDays?: number }) {
   return apiFetch<LeaveBalance>(`/leave-balances/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+// ── Account Provisioning ──────────────────────────────────────────────────────
+
+export type ProvisionedAccount = {
+  userId: string;
+  employeeId: string;
+  username: string | null;
+  email: string;
+  role: string;
+  mustChangePassword: boolean;
+  temporaryPassword: string;
+};
+
+export function provisionEmployeeAccount(
+  employeeId: string,
+  body: { username: string; role: string; email?: string },
+) {
+  return apiFetch<ProvisionedAccount>(`/employees/${employeeId}/account`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function resetEmployeeAccountPassword(employeeId: string) {
+  return apiFetch<ProvisionedAccount>(`/employees/${employeeId}/account/reset-password`, {
+    method: 'POST',
+  });
 }

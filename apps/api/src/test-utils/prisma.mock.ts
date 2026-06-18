@@ -4,6 +4,9 @@ export function mockPrisma() {
   return {
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
     },
     employee: {
       findMany: jest.fn(),

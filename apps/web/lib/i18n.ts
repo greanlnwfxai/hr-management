@@ -31,11 +31,11 @@ const translations = {
     // Login
     login_title: 'Sign in',
     login_subtitle: 'HR Management System',
-    login_email: 'Email',
+    login_email: 'Username or Email',
     login_password: 'Password',
     login_submit: 'Sign in',
     login_submitting: 'Signing in…',
-    login_error_invalid: 'Invalid email or password.',
+    login_error_invalid: 'Invalid username/email or password.',
     login_error_failed: 'Login failed. Please try again.',
 
     // Dashboard
@@ -242,11 +242,11 @@ const translations = {
     // Login
     login_title: 'เข้าสู่ระบบ',
     login_subtitle: 'ระบบจัดการทรัพยากรบุคคล',
-    login_email: 'อีเมล',
+    login_email: 'ชื่อผู้ใช้หรืออีเมล',
     login_password: 'รหัสผ่าน',
     login_submit: 'เข้าสู่ระบบ',
     login_submitting: 'กำลังเข้าสู่ระบบ…',
-    login_error_invalid: 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+    login_error_invalid: 'ชื่อผู้ใช้/อีเมลหรือรหัสผ่านไม่ถูกต้อง',
     login_error_failed: 'เข้าสู่ระบบล้มเหลว กรุณาลองอีกครั้ง',
 
     // Dashboard

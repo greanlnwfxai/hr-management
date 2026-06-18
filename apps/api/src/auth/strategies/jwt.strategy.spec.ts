@@ -32,17 +32,35 @@ describe('JwtStrategy', () => {
   afterEach(() => jest.clearAllMocks());
 
   describe('validate', () => {
-    it('returns safe user object (id, email, role) for a valid payload', async () => {
-      const dbUser = { id: 'user-uuid-1', email: 'admin@hr.local', role: 'SUPER_ADMIN' };
+    const dbUser = {
+      id: 'user-uuid-1',
+      email: 'admin@hr.local',
+      username: 'admin',
+      role: 'SUPER_ADMIN',
+      isActive: true,
+      mustChangePassword: false,
+      employee: null,
+    };
+
+    it('returns safe user object including username and employeeId for a valid payload', async () => {
       prisma.user.findUnique.mockResolvedValue(dbUser as any);
 
       const result = await strategy.validate({
         sub: dbUser.id,
         email: dbUser.email,
+        username: dbUser.username,
         role: dbUser.role,
+        employeeId: null,
       });
 
-      expect(result).toEqual(dbUser);
+      expect(result).toEqual({
+        id: dbUser.id,
+        email: dbUser.email,
+        username: dbUser.username,
+        role: dbUser.role,
+        mustChangePassword: dbUser.mustChangePassword,
+        employeeId: null,
+      });
       expect(prisma.user.findUnique).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: dbUser.id } }),
       );
@@ -52,7 +70,15 @@ describe('JwtStrategy', () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
-        strategy.validate({ sub: 'deleted-user', email: 'gone@hr.local', role: 'EMPLOYEE' }),
+        strategy.validate({ sub: 'deleted-user', email: 'gone@hr.local', username: null, role: 'EMPLOYEE', employeeId: null }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('throws UnauthorizedException when user is inactive', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, isActive: false } as any);
+
+      await expect(
+        strategy.validate({ sub: dbUser.id, email: dbUser.email, username: dbUser.username, role: dbUser.role, employeeId: null }),
       ).rejects.toThrow(UnauthorizedException);
     });
   });

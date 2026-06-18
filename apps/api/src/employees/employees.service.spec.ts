@@ -1,8 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
+
+jest.mock('bcrypt');
 
 describe('EmployeesService', () => {
   let service: EmployeesService;
@@ -210,6 +213,173 @@ describe('EmployeesService', () => {
       prisma.employee.findUnique.mockResolvedValue(null);
 
       await expect(service.remove('nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── provisionAccount ───────────────────────────────────────────────────────
+
+  describe('provisionAccount', () => {
+    const provisionDto = { username: 'j.doe', role: 'EMPLOYEE' };
+
+    const mockNewUser = {
+      id: 'user-uuid-1',
+      email: 'emp_emp-uuid-1@hr.local',
+      username: 'j.doe',
+      role: 'EMPLOYEE',
+      mustChangePassword: true,
+    };
+
+    beforeEach(() => {
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_password');
+    });
+
+    it('creates a new user when employee has no linked account', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+
+      const result = await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(prisma.user.create).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        userId: 'user-uuid-1',
+        employeeId: 'emp-uuid-1',
+        username: 'j.doe',
+        mustChangePassword: true,
+      });
+    });
+
+    it('returns temporaryPassword in the response', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+
+      const result = await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(result.temporaryPassword).toBeDefined();
+      expect(typeof result.temporaryPassword).toBe('string');
+      expect(result.temporaryPassword.length).toBeGreaterThan(0);
+    });
+
+    it('hashes the password before storing — does not persist plain text', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+
+      const result = await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(bcrypt.hash).toHaveBeenCalledWith(result.temporaryPassword, 10);
+      const createCall = (prisma.user.create as jest.Mock).mock.calls[0][0];
+      expect(createCall.data.password).toBe('hashed_password');
+      expect(createCall.data.password).not.toBe(result.temporaryPassword);
+    });
+
+    it('sets mustChangePassword to true on the created user', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      const createCall = (prisma.user.create as jest.Mock).mock.calls[0][0];
+      expect(createCall.data.mustChangePassword).toBe(true);
+    });
+
+    it('updates the existing user when employee already has a linked account', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.update.mockResolvedValue({ ...mockNewUser, id: 'user-uuid-1' } as any);
+
+      const result = await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'user-uuid-1' } }),
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(result.userId).toBe('user-uuid-1');
+    });
+
+    it('throws NotFoundException when employee does not exist', async () => {
+      prisma.employee.findUnique.mockResolvedValue(null);
+
+      await expect(service.provisionAccount('missing-id', provisionDto as any)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ConflictException when username is taken by another user', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue({ id: 'other-user-id', username: 'j.doe' } as any);
+
+      await expect(service.provisionAccount('emp-uuid-1', provisionDto as any)).rejects.toThrow(ConflictException);
+    });
+
+    it('normalizes username to lowercase before lookup and storage', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+
+      await service.provisionAccount('emp-uuid-1', { username: 'J.Doe', role: 'EMPLOYEE' } as any);
+
+      const createCall = (prisma.user.create as jest.Mock).mock.calls[0][0];
+      expect(createCall.data.username).toBe('j.doe');
+    });
+  });
+
+  // ── resetAccountPassword ───────────────────────────────────────────────────
+
+  describe('resetAccountPassword', () => {
+    const mockUpdatedUser = {
+      id: 'user-uuid-1',
+      username: 'j.doe',
+      email: 'j.doe@hr.local',
+      role: 'EMPLOYEE',
+    };
+
+    beforeEach(() => {
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new_hashed_password');
+    });
+
+    it('generates a new password and returns it as temporaryPassword', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser as any);
+
+      const result = await service.resetAccountPassword('emp-uuid-1');
+
+      expect(result.temporaryPassword).toBeDefined();
+      expect(typeof result.temporaryPassword).toBe('string');
+      expect(result.temporaryPassword.length).toBeGreaterThan(0);
+    });
+
+    it('sets mustChangePassword to true in the response', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser as any);
+
+      const result = await service.resetAccountPassword('emp-uuid-1');
+
+      expect(result.mustChangePassword).toBe(true);
+    });
+
+    it('hashes the new password before storing', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser as any);
+
+      const result = await service.resetAccountPassword('emp-uuid-1');
+
+      expect(bcrypt.hash).toHaveBeenCalledWith(result.temporaryPassword, 10);
+      const updateCall = (prisma.user.update as jest.Mock).mock.calls[0][0];
+      expect(updateCall.data.password).toBe('new_hashed_password');
+      expect(updateCall.data.password).not.toBe(result.temporaryPassword);
+    });
+
+    it('throws NotFoundException when employee does not exist', async () => {
+      prisma.employee.findUnique.mockResolvedValue(null);
+
+      await expect(service.resetAccountPassword('missing-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when employee has no linked account', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+
+      await expect(service.resetAccountPassword('emp-uuid-1')).rejects.toThrow(NotFoundException);
     });
   });
 });

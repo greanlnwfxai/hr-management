@@ -26,6 +26,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { ProvisionAccountDto } from './dto/provision-account.dto';
 import { EmployeesService } from './employees.service';
 
 @ApiTags('Employees')
@@ -82,5 +83,31 @@ export class EmployeesController {
   @ApiForbiddenResponse({ description: 'Insufficient role' })
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.employees.remove(id);
+  }
+
+  @Post(':id/account')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Provision a login account for an employee (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 201, description: 'Account provisioned — temporaryPassword shown once' })
+  @ApiResponse({ status: 404, description: 'Employee not found' })
+  @ApiResponse({ status: 409, description: 'Username or email already taken' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  provisionAccount(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ProvisionAccountDto,
+  ) {
+    return this.employees.provisionAccount(id, dto);
+  }
+
+  @Post(':id/account/reset-password')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Reset employee account password (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 201, description: 'Password reset — temporaryPassword shown once' })
+  @ApiResponse({ status: 404, description: 'Employee or linked account not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  resetAccountPassword(@Param('id', ParseUUIDPipe) id: string) {
+    return this.employees.resetAccountPassword(id);
   }
 }

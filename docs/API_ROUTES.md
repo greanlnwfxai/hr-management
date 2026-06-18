@@ -27,27 +27,33 @@ Response: `{ "status": "ok", "timestamp": "..." }`
 | GET    | /auth/me    | ✅   | any   | Return currently authenticated user profile   |
 
 ### POST /auth/login
-Body: `{ "email": string, "password": string }`
-Response: `{ "accessToken": string, "user": { id, email, role } }`
+Body: `{ "login": string, "password": string }` — `login` may be username or email. Legacy `email` field also accepted.
+If identifier contains `@` → searched by email; otherwise searched by username.
+Response: `{ "accessToken": string, "user": { id, email, username, role, mustChangePassword, employeeId } }`
 
 ### GET /auth/me
-Response: `{ "id": string, "email": string, "role": UserRole }`
+Response: `{ "id": string, "email": string, "username": string|null, "role": UserRole, "mustChangePassword": boolean, "employeeId": string|null }`
 Note: Never exposes password hash.
 
 ---
 
 ## Employees
 
-| Method | Path            | Auth | Roles                        | Description                          |
-|--------|-----------------|------|------------------------------|--------------------------------------|
-| GET    | /employees      | ✅   | any                          | Paginated employee list with filters |
-| GET    | /employees/:id  | ✅   | any                          | Single employee by UUID              |
-| POST   | /employees      | ✅   | SUPER_ADMIN · HR_ADMIN       | Create employee                      |
-| PATCH  | /employees/:id  | ✅   | SUPER_ADMIN · HR_ADMIN       | Update employee fields               |
-| DELETE | /employees/:id  | ✅   | SUPER_ADMIN · HR_ADMIN       | Soft-delete (sets status=INACTIVE)   |
+| Method | Path                                | Auth | Roles                        | Description                                      |
+|--------|-------------------------------------|------|------------------------------|--------------------------------------------------|
+| GET    | /employees                          | ✅   | any                          | Paginated employee list with filters             |
+| GET    | /employees/:id                      | ✅   | any                          | Single employee by UUID                          |
+| POST   | /employees                          | ✅   | SUPER_ADMIN · HR_ADMIN       | Create employee                                  |
+| PATCH  | /employees/:id                      | ✅   | SUPER_ADMIN · HR_ADMIN       | Update employee fields                           |
+| DELETE | /employees/:id                      | ✅   | SUPER_ADMIN · HR_ADMIN       | Soft-delete (sets status=INACTIVE)               |
+| POST   | /employees/:id/account              | ✅   | SUPER_ADMIN · HR_ADMIN       | Provision login account; returns temporaryPassword once |
+| POST   | /employees/:id/account/reset-password | ✅ | SUPER_ADMIN · HR_ADMIN       | Reset account password; returns temporaryPassword once  |
 
 Query params (GET /employees): `page`, `limit`, `search`, `status`, `departmentId`, `positionId`
 Note: GET endpoints are accessible to all authenticated roles including EMPLOYEE (org directory access by design).
+
+**POST /employees/:id/account** body: `{ "username": string, "role": UserRole, "email"?: string }`
+Response: `{ userId, employeeId, username, email, role, mustChangePassword, temporaryPassword }`
 
 ---
 

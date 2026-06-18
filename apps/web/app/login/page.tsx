@@ -70,13 +70,13 @@ export default function LoginPage() {
             </label>
             <input
               id="email"
-              type="email"
-              autoComplete="email"
+              type="text"
+              autoComplete="username"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400"
-              placeholder="admin@hr.local"
+              placeholder="admin หรือ admin@hr.local"
             />
           </div>
 

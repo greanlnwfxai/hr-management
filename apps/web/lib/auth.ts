@@ -4,7 +4,10 @@ const USER_KEY = 'hr_user';
 export type AuthUser = {
   id: string;
   email: string;
+  username: string | null;
   role: 'SUPER_ADMIN' | 'HR_ADMIN' | 'MANAGER' | 'EMPLOYEE';
+  mustChangePassword?: boolean;
+  employeeId?: string | null;
 };
 
 export function getToken(): string | null {

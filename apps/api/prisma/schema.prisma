@@ -48,15 +48,21 @@ enum LeaveStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id        String    @id @default(uuid())
-  email     String    @unique
-  password  String
-  role      UserRole  @default(EMPLOYEE)
-  employee  Employee?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  username            String?   @unique
+  password            String
+  role                UserRole  @default(EMPLOYEE)
+  mustChangePassword  Boolean   @default(false)
+  passwordGeneratedAt DateTime?
+  lastLoginAt         DateTime?
+  isActive            Boolean   @default(true)
+  employee            Employee?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([email])
+  @@index([username])
   @@map("users")
 }
 

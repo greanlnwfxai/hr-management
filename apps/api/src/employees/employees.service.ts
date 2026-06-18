@@ -3,13 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 // Type-only import: erased at runtime, safe even if prisma generate hasn't run.
-import type { EmployeeStatus as PrismaEmployeeStatus } from '@prisma/client';
+import type { EmployeeStatus as PrismaEmployeeStatus, UserRole as PrismaUserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { generatePassword } from '../common/password.util';
+import { normalizeUsername } from '../common/username.util';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { ProvisionAccountDto } from './dto/provision-account.dto';
 
 const EMPLOYEE_SELECT = {
   id: true,
@@ -126,5 +130,95 @@ export class EmployeesService {
       data: { status: 'INACTIVE' as PrismaEmployeeStatus },
       select: { id: true, status: true },
     });
+  }
+
+  async provisionAccount(employeeId: string, dto: ProvisionAccountDto) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, userId: true },
+    });
+    if (!employee) throw new NotFoundException(`Employee ${employeeId} not found`);
+
+    const username = normalizeUsername(dto.username);
+
+    const existingUsername = await this.prisma.user.findUnique({ where: { username } });
+    if (existingUsername && existingUsername.id !== employee.userId) {
+      throw new ConflictException(`Username "${username}" is already taken`);
+    }
+
+    const temporaryPassword = generatePassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+    const now = new Date();
+
+    let user;
+    if (employee.userId) {
+      user = await this.prisma.user.update({
+        where: { id: employee.userId },
+        data: {
+          username,
+          password: hashedPassword,
+          role: dto.role as unknown as PrismaUserRole,
+          mustChangePassword: true,
+          passwordGeneratedAt: now,
+          ...(dto.email && { email: dto.email }),
+        },
+        select: { id: true, email: true, username: true, role: true, mustChangePassword: true },
+      });
+    } else {
+      const email = dto.email ?? `emp_${employeeId}@hr.local`;
+      const existingEmail = await this.prisma.user.findUnique({ where: { email } });
+      if (existingEmail) throw new ConflictException(`Email "${email}" is already in use`);
+
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          username,
+          password: hashedPassword,
+          role: dto.role as unknown as PrismaUserRole,
+          mustChangePassword: true,
+          passwordGeneratedAt: now,
+          employee: { connect: { id: employeeId } },
+        },
+        select: { id: true, email: true, username: true, role: true, mustChangePassword: true },
+      });
+    }
+
+    return {
+      userId: user.id,
+      employeeId,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+      temporaryPassword,
+    };
+  }
+
+  async resetAccountPassword(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, userId: true },
+    });
+    if (!employee) throw new NotFoundException(`Employee ${employeeId} not found`);
+    if (!employee.userId) throw new NotFoundException(`Employee ${employeeId} has no linked account`);
+
+    const temporaryPassword = generatePassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    const user = await this.prisma.user.update({
+      where: { id: employee.userId },
+      data: { password: hashedPassword, mustChangePassword: true, passwordGeneratedAt: new Date() },
+      select: { id: true, username: true, email: true, role: true },
+    });
+
+    return {
+      userId: user.id,
+      employeeId,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: true,
+      temporaryPassword,
+    };
   }
 }

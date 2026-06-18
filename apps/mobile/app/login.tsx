@@ -14,7 +14,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/auth/useAuth';
 
-const DEMO_EMAIL = 'admin@hr.local';
+const DEMO_LOGIN = 'admin';
 const DEMO_PASSWORD = 'admin1234';
 
 export default function LoginScreen() {
@@ -36,7 +36,7 @@ export default function LoginScreen() {
   };
 
   const fillDemo = () => {
-    setEmail(DEMO_EMAIL);
+    setEmail(DEMO_LOGIN);
     setPassword(DEMO_PASSWORD);
   };
 
@@ -65,16 +65,16 @@ export default function LoginScreen() {
             ) : null}
 
             <View style={styles.field}>
-              <Text style={styles.label}>อีเมล</Text>
+              <Text style={styles.label}>ชื่อผู้ใช้หรืออีเมล</Text>
               <TextInput
                 style={styles.input}
                 value={email}
                 onChangeText={setEmail}
-                placeholder="admin@hr.local"
+                placeholder="admin หรือ admin@hr.local"
                 placeholderTextColor="#9ca3af"
                 autoCapitalize="none"
                 autoCorrect={false}
-                keyboardType="email-address"
+                keyboardType="default"
                 returnKeyType="next"
                 editable={!isLoading}
               />

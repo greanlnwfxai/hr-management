@@ -41,7 +41,7 @@ export interface LoginResponse {
 }
 
 export async function login(
-  email: string,
+  loginId: string,
   password: string,
 ): Promise<LoginResponse> {
   let response: Response;
@@ -49,14 +49,14 @@ export async function login(
     response = await fetch(`${ENV.API_BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ login: loginId, password }),
     });
   } catch {
     throw new Error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
   }
 
   if (response.status === 401) {
-    throw new Error('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+    throw new Error('ชื่อผู้ใช้/อีเมลหรือรหัสผ่านไม่ถูกต้อง');
   }
   if (!response.ok) {
     throw new Error(`เกิดข้อผิดพลาด: HTTP ${response.status}`);
