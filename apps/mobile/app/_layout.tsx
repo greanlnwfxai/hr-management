@@ -23,6 +23,10 @@ export default function RootLayout() {
           name="attendance"
           options={{ title: 'ลงเวลา' }}
         />
+        <Stack.Screen
+          name="leave"
+          options={{ title: 'การลา' }}
+        />
       </Stack>
     </AuthProvider>
   );

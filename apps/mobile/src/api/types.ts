@@ -115,3 +115,45 @@ export interface ClockActionResult {
   checkOut: string | null;
   status: AttendanceStatus;
 }
+
+// ─── Leave ────────────────────────────────────────────────────────────────────
+
+export type LeaveType = 'SICK' | 'VACATION' | 'PERSONAL' | 'OTHER';
+export type LeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface LeaveEmployee {
+  id: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface LeaveRequestRecord {
+  id: string;
+  leaveType: LeaveType;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason: string | null;
+  status: LeaveRequestStatus;
+  approvedAt: string | null;
+  employee: LeaveEmployee;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeaveBalanceRecord {
+  id: string;
+  leaveType: LeaveType;
+  year: number;
+  totalDays: number;
+  usedDays: number;
+  remainingDays: number;
+}
+
+export interface CreateLeaveRequestPayload {
+  leaveType: LeaveType;
+  startDate: string;
+  endDate: string;
+  reason: string;
+}

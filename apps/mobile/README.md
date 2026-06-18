@@ -103,6 +103,7 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 | `/login` | Login | Real JWT login form (T-043) |
 | `/home` | Home | Protected dashboard — profile card, live HR summary, feature navigation (T-044) |
 | `/attendance` | Attendance | Protected attendance screen — today card, history, live geofence clock-in/out (T-045, T-047) |
+| `/leave` | Leave Request | Protected leave screen — balance, create request form, request history (T-048) |
 
 ## Dashboard & Profile (T-044)
 
@@ -163,6 +164,20 @@ npm run web
 
 See [docs/MOBILE_ATTENDANCE_FOUNDATION.md](../../docs/MOBILE_ATTENDANCE_FOUNDATION.md) and [docs/MOBILE_GEOFENCE_CLOCK.md](../../docs/MOBILE_GEOFENCE_CLOCK.md) for full details.
 
-## Future Tasks
+## Leave Request Screen (T-048)
 
-- **T-048** — Mobile Leave Request
+Navigate to the Leave screen by tapping the **คำขอลางาน** card on the Home screen.
+
+| Endpoint | Data shown |
+|---|---|
+| `GET /leave-balances/my` | Leave balance by type — total / used / remaining days |
+| `GET /leave/me` | Own leave requests — status badges, date range, reason |
+| `POST /leave/request` | Submit a new leave request |
+
+**Leave types:** ลาป่วย (SICK), ลาพักร้อน (VACATION), ลากิจ (PERSONAL), อื่น ๆ (OTHER)
+
+**Date format:** Enter dates as `YYYY-MM-DD`. Client validates format and date ordering before submit.
+
+**Balance note:** Leave balance is informational. Balance enforcement (deduction) happens at the HR approval step, not at submission.
+
+See [docs/MOBILE_LEAVE_REQUEST.md](../../docs/MOBILE_LEAVE_REQUEST.md) for full details.

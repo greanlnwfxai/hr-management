@@ -11,6 +11,9 @@ import {
   type AttendanceHistoryResponse,
   type MobileLocationPayload,
   type ClockActionResult,
+  type LeaveRequestRecord,
+  type LeaveBalanceRecord,
+  type CreateLeaveRequestPayload,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -207,4 +210,35 @@ export async function clockOut(
   payload: MobileLocationPayload,
 ): Promise<ClockActionResult> {
   return authPost<ClockActionResult>('/attendance/clock-out', token, payload);
+}
+
+// ─── Leave ────────────────────────────────────────────────────────────────────
+
+export async function getMyLeaveRequests(
+  token: string,
+  page = 1,
+  limit = 20,
+): Promise<PaginatedResponse<LeaveRequestRecord>> {
+  return authGet<PaginatedResponse<LeaveRequestRecord>>(
+    `/leave/me?page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+export async function getMyLeaveBalance(
+  token: string,
+  page = 1,
+  limit = 20,
+): Promise<PaginatedResponse<LeaveBalanceRecord>> {
+  return authGet<PaginatedResponse<LeaveBalanceRecord>>(
+    `/leave-balances/my?page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+export async function createLeaveRequest(
+  token: string,
+  payload: CreateLeaveRequestPayload,
+): Promise<LeaveRequestRecord> {
+  return authPost<LeaveRequestRecord>('/leave/request', token, payload);
 }

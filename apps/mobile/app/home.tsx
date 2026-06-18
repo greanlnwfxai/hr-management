@@ -211,12 +211,31 @@ export default function HomeScreen() {
         <View style={styles.featureGrid}>
           {FEATURE_CARDS.map((card) => {
             const isAttendance = card.key === 'attendance';
+            const isLeave = card.key === 'leave';
             if (isAttendance) {
               return (
                 <Pressable
                   key={card.key}
                   style={({ pressed }) => [styles.featureCard, styles.featureCardActive, pressed && styles.pressed]}
                   onPress={() => router.push('/attendance')}
+                  accessibilityRole="button"
+                  accessibilityLabel={card.th}
+                >
+                  <Text style={styles.featureIcon}>{card.icon}</Text>
+                  <Text style={styles.featureTh}>{card.th}</Text>
+                  <Text style={styles.featureEn}>{card.en}</Text>
+                  <View style={styles.activeBadge}>
+                    <Text style={styles.activeBadgeText}>เปิดใช้งาน</Text>
+                  </View>
+                </Pressable>
+              );
+            }
+            if (isLeave) {
+              return (
+                <Pressable
+                  key={card.key}
+                  style={({ pressed }) => [styles.featureCard, styles.featureCardActive, pressed && styles.pressed]}
+                  onPress={() => router.push('/leave')}
                   accessibilityRole="button"
                   accessibilityLabel={card.th}
                 >
