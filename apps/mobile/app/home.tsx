@@ -226,10 +226,11 @@ export default function HomeScreen() {
             <View style={styles.featureGrid}>
               <FeatureCard
                 title="อนุมัติคำขอลา"
-                description="ฟีเจอร์นี้จะเปิดใช้งานใน T-050"
+                description="ตรวจสอบและอนุมัติคำขอลา"
                 icon="✅"
-                enabled={false}
-                badge="เร็ว ๆ นี้"
+                enabled
+                badge="ผู้จัดการ"
+                onPress={() => router.push('/approvals')}
               />
             </View>
           </>

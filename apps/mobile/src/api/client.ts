@@ -14,6 +14,7 @@ import {
   type LeaveRequestRecord,
   type LeaveBalanceRecord,
   type CreateLeaveRequestPayload,
+  type LeaveRequestStatus,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -241,4 +242,61 @@ export async function createLeaveRequest(
   payload: CreateLeaveRequestPayload,
 ): Promise<LeaveRequestRecord> {
   return authPost<LeaveRequestRecord>('/leave/request', token, payload);
+}
+
+// ─── Manager Approval ─────────────────────────────────────────────────────────
+
+async function authPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${ENV.API_BASE_URL}${path}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new Error('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้');
+  }
+
+  if (response.status === 401) {
+    throw new SessionExpiredError();
+  }
+  if (!response.ok) {
+    let parsed: unknown;
+    try { parsed = await response.json(); } catch { parsed = null; }
+    throw new Error(normalizeApiMessage(parsed));
+  }
+
+  return response.json() as Promise<T>;
+}
+
+export async function getApprovalRequests(
+  token: string,
+  status: LeaveRequestStatus = 'PENDING',
+  page = 1,
+  limit = 50,
+): Promise<PaginatedResponse<LeaveRequestRecord>> {
+  return authGet<PaginatedResponse<LeaveRequestRecord>>(
+    `/leave?status=${status}&page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+export async function approveLeaveRequest(
+  token: string,
+  id: string,
+): Promise<LeaveRequestRecord> {
+  return authPatch<LeaveRequestRecord>(`/leave/${id}/approve`, token, {});
+}
+
+export async function rejectLeaveRequest(
+  token: string,
+  id: string,
+  rejectReason?: string,
+): Promise<LeaveRequestRecord> {
+  return authPatch<LeaveRequestRecord>(`/leave/${id}/reject`, token, { rejectReason });
 }

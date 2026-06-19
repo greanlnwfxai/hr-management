@@ -129,7 +129,7 @@ export class LeaveService {
     });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
 
-    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.HR_ADMIN) {
+    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.HR_ADMIN || userRole === UserRole.MANAGER) {
       return record;
     }
 

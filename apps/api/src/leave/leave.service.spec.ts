@@ -165,6 +165,15 @@ describe('LeaveService', () => {
       expect(result).toMatchObject({ id: leaveId });
     });
 
+    it('returns the record to MANAGER without ownership check', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(mockLeaveRecord as any);
+
+      const result = await service.findOne(leaveId, userId, 'MANAGER');
+
+      expect(result).toMatchObject({ id: leaveId });
+      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    });
+
     it('allows an employee to view their own leave request', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(mockLeaveRecord as any);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });

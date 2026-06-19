@@ -60,8 +60,8 @@ export class LeaveController {
   }
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
-  @ApiOperation({ summary: 'All leave requests (SUPER_ADMIN, HR_ADMIN)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'All leave requests (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
   @ApiResponse({ status: 200, description: 'Paginated leave request list' })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
   findAll(@Query() query: QueryLeaveRequestDto) {
@@ -82,7 +82,7 @@ export class LeaveController {
   }
 
   @Patch(':id/approve')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
   @ApiOperation({ summary: 'Approve a PENDING leave request — deducts leave balance atomically (SUPER_ADMIN, HR_ADMIN)' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request approved' })
@@ -98,8 +98,8 @@ export class LeaveController {
   }
 
   @Patch(':id/reject')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
-  @ApiOperation({ summary: 'Reject a PENDING leave request (SUPER_ADMIN, HR_ADMIN)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Reject a PENDING leave request (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request rejected' })
   @ApiResponse({ status: 404, description: 'Leave request not found' })

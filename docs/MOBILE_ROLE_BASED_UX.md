@@ -17,7 +17,7 @@ The mobile app displays different navigation and feature cards based on the auth
 | ลงเวลา (Attendance) | ✅ | ✅ | ✅ | ✅ |
 | ขออนุมัติลา (Leave Request) | ✅ | ✅ | ✅ | ✅ |
 | ภาพรวมองค์กร (Org Dashboard) | ✅ | ✅ | ✅ | ❌ |
-| อนุมัติคำขอลา (Approval entry) | ✅ (coming soon) | ✅ (coming soon) | ✅ (coming soon) | ❌ |
+| อนุมัติคำขอลา (Approval entry) | ✅ | ✅ | ✅ | ❌ |
 | ภาพรวม HR (HR Overview) | ✅ (coming soon) | ✅ (coming soon) | ❌ | ❌ |
 | จัดการพนักงาน (Employee Mgmt) | ✅ (coming soon) | ✅ (coming soon) | ❌ | ❌ |
 
@@ -63,13 +63,11 @@ This prevents broken navigation while preparing the UI entry point for T-050.
 
 ---
 
-## Manager Approval Preparation (for T-050)
+## Manager Approval (T-051)
 
-The "อนุมัติคำขอลา" card is visible to MANAGER, HR_ADMIN, and SUPER_ADMIN with a "เร็ว ๆ นี้" badge. It does **not** navigate to any screen. T-050 will:
+The "อนุมัติคำขอลา" card is active for MANAGER, HR_ADMIN, and SUPER_ADMIN with a "ผู้จัดการ" badge. It navigates to `/approvals`. EMPLOYEE role does not see this card.
 
-- Create `/approvals` screen with leave request list
-- Wire the card to navigate to `/approvals`
-- Implement approval/reject API calls
+See [MOBILE_MANAGER_APPROVAL.md](MOBILE_MANAGER_APPROVAL.md) for the full approval flow documentation.
 
 ---
 
@@ -98,16 +96,17 @@ The mobile app's role-based UI is purely for UX — it never bypasses backend au
 ## Known Limitations
 
 - Only one seed user exists (`admin@hr.local` / `admin1234` — SUPER_ADMIN). EMPLOYEE role UI path is code-complete but cannot be manually tested without creating an employee account.
-- Manager approval card does not navigate yet (T-050).
-- HR Overview and Employee Management are placeholder cards (T-050+).
+- HR Overview and Employee Management are placeholder cards (future tasks).
 - No role-aware bottom tabs yet (future enhancement).
+- No manager-subordinate hierarchy: MANAGER sees all PENDING leave requests (same as HR_ADMIN). Subordinate filtering is a future enhancement.
 
 ---
 
 ## Future Improvements
 
-- **T-050:** Manager approval screen with leave request list and approve/reject actions
-- **T-051+:** HR admin employee search and profile management
+- **T-052+:** HR admin employee search and profile management
 - Role-aware bottom tab bar
-- Mobile notification badges for pending approvals
+- Mobile notification badges for pending approvals (count from `dashboard.leave.pendingLeaveRequests`)
+- Approval history filter (approved/rejected requests view)
+- Manager-subordinate hierarchy (filter requests to only direct reports)
 - Deeper employee profile screen
