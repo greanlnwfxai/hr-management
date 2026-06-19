@@ -4,6 +4,63 @@ This log tracks security findings, accepted risks, and patch actions across task
 
 ---
 
+## T-052A.3 — CI Security Job + Dependabot Configuration — 2026-06-19
+
+### Summary
+Promoted the existing local security harness into GitHub Actions with a new
+blocking CI job named `Security — Audit & Secret Scan`. Added Dependabot
+configuration for API, Web, Mobile, and GitHub Actions. No dependencies were
+patched in this task, and no product logic changed.
+
+### CI Changes
+
+- Updated `.github/workflows/ci.yml`
+- Existing six CI jobs preserved unchanged
+- Added seventh job:
+  - `Security — Audit & Secret Scan`
+- Job behavior:
+  - installs dependencies for `apps/api`, `apps/web`, and `apps/mobile`
+  - runs `./scripts/security-review.sh`
+  - fails on unknown HIGH/CRITICAL advisories
+  - fails on likely real committed secrets or private keys
+
+### Dependabot Changes
+
+- Added `.github/dependabot.yml`
+- Configured weekly updates for:
+  - npm `/apps/api`
+  - npm `/apps/web`
+  - npm `/apps/mobile`
+  - `github-actions` `/`
+- Policy:
+  - timezone `Asia/Bangkok`
+  - open PR limit `5`
+  - commit prefix `chore(deps)`
+  - patch/minor updates grouped per ecosystem
+  - major updates remain separate
+  - auto-merge not enabled
+
+### Accepted-Risk Handling
+
+- No new accepted-risk advisories added in T-052A.3
+- Existing accepted risks continue to be tracked in `.security-accepted-risks`
+- Human-readable rationale remains in `docs/SECURITY_REVIEW_LOG.md`
+
+### Verification Results — T-052A.3
+
+- `./scripts/security-review.sh`: **PASS**
+- `./scripts/verify.sh`: **PASS**
+- `npm --prefix apps/api test`: **PASS** (202/202)
+- `git status`: task files present plus pre-existing untracked `AGENTS.md`
+
+### Follow-up Notes
+
+- Future external vulnerability intelligence remains a later enhancement
+- Dependabot PR review discipline remains required because updates are not
+  auto-merged
+
+---
+
 ## T-052A.2 — Security Patch & Accepted-Risk Resolution — 2026-06-19
 
 ### Summary

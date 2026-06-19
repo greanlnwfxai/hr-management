@@ -2,12 +2,15 @@
 
 ## Purpose
 
-This document describes the local security review harness added in **T-052A.1**.
-The harness provides lightweight, non-destructive security checks that run locally
-before any task is declared PASS.
+This document describes the security review harness added in **T-052A.1** and
+promoted into CI in **T-052A.3**. The harness provides lightweight,
+non-destructive security checks that run locally and in GitHub Actions before
+any task is declared PASS.
 
-It does NOT replace production-grade tooling (GitHub Actions security job,
-Dependabot, external advisory scanning). Those are planned for **T-052A.2**.
+It does NOT replace production-grade tooling such as full SAST/DAST, historical
+secret scanning, or external vulnerability intelligence feeds. Dependabot and
+the blocking GitHub Actions security job are now in place; richer external
+advisory intelligence remains a later enhancement.
 
 ---
 
@@ -18,6 +21,58 @@ Dependabot, external advisory scanning). Those are planned for **T-052A.2**.
 | `scripts/security-audit.sh` | npm dependency audit — all workspaces |
 | `scripts/secret-scan.sh` | Source file secret / sensitive-value scan |
 | `scripts/security-review.sh` | Combined runner + manual checklist reminder |
+
+## CI Enforcement
+
+GitHub Actions CI now includes a seventh blocking job named
+`Security — Audit & Secret Scan`.
+
+The full CI job list is now:
+
+1. `API — Build & Validate`
+2. `Web — Build & Validate`
+3. `Mobile — Typecheck & Export`
+4. `Compose — Config Validation`
+5. `Integration — Runtime API Test`
+6. `E2E — Playwright Critical Flows`
+7. `Security — Audit & Secret Scan`
+
+The security job installs dependencies for `apps/api`, `apps/web`, and
+`apps/mobile`, then runs:
+
+```bash
+./scripts/security-review.sh
+```
+
+It is intentionally blocking. CI fails when:
+
+- `scripts/security-audit.sh` finds any HIGH or CRITICAL advisory that is not
+  documented in `.security-accepted-risks`
+- `scripts/secret-scan.sh` finds likely real committed secrets or private keys
+
+Accepted risks remain transparent and reviewable:
+
+- Machine-readable registry: `.security-accepted-risks`
+- Human-readable rationale log: `docs/SECURITY_REVIEW_LOG.md`
+
+## Dependabot
+
+Dependabot is configured in `.github/dependabot.yml` for:
+
+- npm at `/apps/api`
+- npm at `/apps/web`
+- npm at `/apps/mobile`
+- GitHub Actions at `/`
+
+Update policy:
+
+- Weekly schedule
+- Timezone: `Asia/Bangkok`
+- Open PR limit: `5`
+- Commit prefix: `chore(deps)`
+- Patch/minor updates grouped per ecosystem where safe
+- Major updates remain separate
+- Auto-merge is not enabled
 
 ### Local Usage
 
@@ -49,17 +104,15 @@ Dependabot, external advisory scanning). Those are planned for **T-052A.2**.
 
 ---
 
-## What Does NOT Get Automated Here (T-052A.1)
+## What Does NOT Get Automated Here
 
 - Historical git history scanning (truffleHog, git-secrets)
-- External CVE / advisory lookups
+- External CVE / advisory intelligence feeds
 - Automatic dependency patching
-- GitHub Actions security job
-- Dependabot configuration
 - SAST / DAST tooling
 - Container image scanning (Trivy, Grype)
 
-These are all planned for **T-052A.2**.
+These remain future enhancements beyond the current harness and CI integration.
 
 ---
 
@@ -83,11 +136,10 @@ These are all planned for **T-052A.2**.
 
 ---
 
-## Future T-052A.2 Scope
+## Future Security Enhancements
 
-- GitHub Actions security job (run `security-review.sh` on every PR)
-- Dependabot for automated dependency update PRs
-- External advisory workflow (manual CVE lookup and documentation process)
-- Patch automation policy (safe auto-merge criteria)
+- External advisory workflow beyond npm audit output
+- Patch automation policy and triage refinement
 - Container image scanning
-- SAST integration (e.g., CodeQL)
+- SAST integration (for example, CodeQL)
+- Historical secret scanning against git history

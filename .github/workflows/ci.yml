@@ -260,6 +260,43 @@ jobs:
         env:
           API_URL: http://localhost:4002
 
+  # ── Security — Audit & Secret Scan ──────────────────────────────────────────
+  # Installs dependencies for each workspace, then runs the combined security
+  # harness. The job is blocking: unknown HIGH/CRITICAL advisories or likely
+  # committed secrets fail the workflow.
+  security-ci:
+    name: Security — Audit & Secret Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            apps/api/package-lock.json
+            apps/web/package-lock.json
+            apps/mobile/package-lock.json
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: npm ci
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Run security review
+        run: ./scripts/security-review.sh
+
   # ── E2E — Playwright Critical Flows ─────────────────────────────────────────
   # Starts the real Docker stack (db → migrate/seed → api → web), then runs all
   # 44 Playwright tests in Chromium. Depends on build jobs but NOT on

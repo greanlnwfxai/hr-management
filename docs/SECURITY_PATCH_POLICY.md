@@ -3,7 +3,16 @@
 ## Purpose
 
 This document defines how dependency vulnerabilities discovered by
-`scripts/security-audit.sh` or manual advisory review are handled.
+`scripts/security-audit.sh`, GitHub Actions CI, or manual advisory review are
+handled.
+
+As of **T-052A.3**, enforcement happens in two places:
+
+- Local review: `./scripts/security-review.sh`
+- CI review: GitHub Actions job `Security — Audit & Secret Scan`
+
+Dependabot now opens weekly update PRs for API, Web, Mobile, and GitHub Actions
+configuration. Those PRs are review-required and are **not auto-merged**.
 
 ---
 
@@ -20,6 +29,8 @@ This document defines how dependency vulnerabilities discovered by
 - **Action required before PASS.**
 - Same as CRITICAL: patch or document accepted-risk.
 - If a patch is available and safe, prefer patching.
+- If a HIGH/CRITICAL advisory is intentionally deferred, it must be recorded in
+  `.security-accepted-risks` and explained in `docs/SECURITY_REVIEW_LOG.md`.
 
 ### MODERATE
 - **Document and schedule**, unless the patch is trivially safe (patch-level bump,
@@ -83,6 +94,9 @@ When documenting accepted risk, add an entry to `docs/SECURITY_REVIEW_LOG.md`:
 - Review by: [task ID, e.g. T-052A.2]
 ```
 
+Also add a one-line registry entry to `.security-accepted-risks` so automated
+CI and local harness runs can classify the advisory correctly.
+
 ---
 
 ## Approval Policy
@@ -94,3 +108,12 @@ When documenting accepted risk, add an entry to `docs/SECURITY_REVIEW_LOG.md`:
 | `npm audit fix` (no force) | User must explicitly approve |
 | `npm audit fix --force` | User must explicitly approve — use only as last resort |
 | Accepted-risk note without patch | Claude documents; user reviews in next task |
+
+## CI and Dependabot Notes
+
+- The CI security job is blocking by default and should stay blocking unless a
+  documented exception is approved.
+- Dependabot PRs must pass the same verification gates as manual dependency
+  changes.
+- Future external vulnerability intelligence may expand beyond npm audit, but
+  that enhancement is not part of T-052A.3.
