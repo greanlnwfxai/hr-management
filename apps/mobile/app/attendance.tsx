@@ -264,7 +264,7 @@ function HistoryRow({ record }: { record: AttendanceRecord }) {
 
 export default function AttendanceScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const {
     loadState,
     today,
@@ -285,6 +285,12 @@ export default function AttendanceScreen() {
       router.replace('/login');
     }
   }, [isLoading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user?.mustChangePassword) {
+      router.replace('/profile');
+    }
+  }, [isLoading, isAuthenticated, user?.mustChangePassword]);
 
   const isRefreshing = loadState === 'loading';
 

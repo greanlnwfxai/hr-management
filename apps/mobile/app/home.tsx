@@ -72,6 +72,7 @@ export default function HomeScreen() {
   const showDashboard = canSeeDashboard(role);
   const showManagerApproval = canUseManagerApproval(role);
   const showHRSection = isAdmin(role);
+  const forced = !!(profile?.mustChangePassword ?? user?.mustChangePassword);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -141,8 +142,8 @@ export default function HomeScreen() {
           </Pressable>
         )}
 
-        {/* ── Dashboard overview — admin/manager/HR only ───────────────── */}
-        {showDashboard && (
+        {/* ── Dashboard overview — admin/manager/HR only, hidden when forced ── */}
+        {showDashboard && !forced && (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>ภาพรวมองค์กร</Text>
 
@@ -215,14 +216,16 @@ export default function HomeScreen() {
             title="ลงเวลา"
             description="บันทึกเวลาเข้า-ออกงาน"
             icon="🕐"
-            enabled
+            enabled={!forced}
+            badge={forced ? 'เปลี่ยนรหัสผ่านก่อน' : undefined}
             onPress={() => router.push('/attendance')}
           />
           <FeatureCard
             title="ขออนุมัติลา"
             description="ส่งคำขอวันหยุด/ลาป่วย"
             icon="📋"
-            enabled
+            enabled={!forced}
+            badge={forced ? 'เปลี่ยนรหัสผ่านก่อน' : undefined}
             onPress={() => router.push('/leave')}
           />
           <FeatureCard
@@ -243,8 +246,8 @@ export default function HomeScreen() {
                 title="อนุมัติคำขอลา"
                 description="ตรวจสอบและอนุมัติคำขอลา"
                 icon="✅"
-                enabled
-                badge="ผู้จัดการ"
+                enabled={!forced}
+                badge={forced ? 'เปลี่ยนรหัสผ่านก่อน' : 'ผู้จัดการ'}
                 onPress={() => router.push('/approvals')}
               />
             </View>

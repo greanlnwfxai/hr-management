@@ -53,6 +53,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('hr-user-change', onUserChange);
   }, []);
 
+  const forced = user?.mustChangePassword === true;
+
+  useEffect(() => {
+    if (forced && pathname !== '/profile') {
+      router.replace('/profile');
+    }
+  }, [forced, pathname, router]);
+
   function handleLogout() {
     clearAuth();
     router.push('/login');
@@ -68,20 +76,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">HR Management</span>
         </div>
         <nav className="flex-1 px-3 py-4">
-          {nav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              data-testid={item.testid}
-              className={`flex items-center rounded-md px-3 py-2 text-sm font-medium mb-1 transition-colors ${
-                pathname === item.href
-                  ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50'
-                  : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 hover:text-zinc-900 dark:hover:text-zinc-200'
-              }`}
-            >
-              {t(item.labelKey)}
-            </Link>
-          ))}
+          {forced ? (
+            <>
+              {nav.map((item) => (
+                <span
+                  key={item.href}
+                  data-testid={item.testid}
+                  title={t('profile_forced_nav_hint')}
+                  className="flex items-center rounded-md px-3 py-2 text-sm font-medium mb-1 text-zinc-300 dark:text-zinc-600 cursor-not-allowed select-none"
+                >
+                  {t(item.labelKey)}
+                </span>
+              ))}
+              <span
+                data-testid="nav-forced-hint"
+                className="flex items-center rounded-md px-3 py-2 text-xs text-amber-600 dark:text-amber-400 select-none"
+              >
+                {t('profile_forced_nav_hint')}
+              </span>
+            </>
+          ) : (
+            nav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                data-testid={item.testid}
+                className={`flex items-center rounded-md px-3 py-2 text-sm font-medium mb-1 transition-colors ${
+                  pathname === item.href
+                    ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 hover:text-zinc-900 dark:hover:text-zinc-200'
+                }`}
+              >
+                {t(item.labelKey)}
+              </Link>
+            ))
+          )}
           <Link
             href="/profile"
             data-testid="nav-profile"
@@ -137,21 +166,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {menuOpen && (
           <div className="border-b border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 pb-3 md:hidden">
-            {nav.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                data-testid={item.testid}
-                onClick={() => setMenuOpen(false)}
-                className={`flex items-center rounded-md px-3 py-2 text-sm font-medium mt-1 ${
-                  pathname === item.href
-                    ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50'
-                    : 'text-zinc-600 dark:text-zinc-400'
-                }`}
-              >
-                {t(item.labelKey)}
-              </Link>
-            ))}
+            {forced ? (
+              <>
+                {nav.map((item) => (
+                  <span
+                    key={item.href}
+                    data-testid={item.testid}
+                    className="flex items-center rounded-md px-3 py-2 text-sm font-medium mt-1 text-zinc-300 dark:text-zinc-600 cursor-not-allowed select-none"
+                  >
+                    {t(item.labelKey)}
+                  </span>
+                ))}
+                <span className="flex items-center rounded-md px-3 py-2 text-xs text-amber-600 dark:text-amber-400 select-none">
+                  {t('profile_forced_nav_hint')}
+                </span>
+              </>
+            ) : (
+              nav.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  data-testid={item.testid}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center rounded-md px-3 py-2 text-sm font-medium mt-1 ${
+                    pathname === item.href
+                      ? 'bg-zinc-100 text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50'
+                      : 'text-zinc-600 dark:text-zinc-400'
+                  }`}
+                >
+                  {t(item.labelKey)}
+                </Link>
+              ))
+            )}
             <Link
               href="/profile"
               data-testid="nav-profile"
@@ -174,12 +220,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {user?.mustChangePassword && (
+        {forced && (
           <div
             data-testid="banner-must-change-pw"
-            className="bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-700 px-4 py-2 text-sm text-amber-800 dark:text-amber-300"
+            className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-700 px-4 py-2 text-sm font-medium text-red-800 dark:text-red-300"
           >
-            {t('profile_must_change_pw_banner')}
+            {t('profile_forced_banner')}
           </div>
         )}
 

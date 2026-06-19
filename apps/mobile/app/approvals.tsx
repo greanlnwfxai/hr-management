@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -239,6 +239,12 @@ export default function ApprovalsScreen() {
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const isRefreshing = loadState === 'loading';
+
+  useEffect(() => {
+    if (!isLoading && user?.mustChangePassword) {
+      router.replace('/profile');
+    }
+  }, [isLoading, user?.mustChangePassword]);
 
   // Access denied for EMPLOYEE
   if (!isLoading && !hasAccess) {

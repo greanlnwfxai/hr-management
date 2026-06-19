@@ -284,7 +284,7 @@ function LeaveForm({
 
 export default function LeaveScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const {
     loadState,
     requests,
@@ -303,6 +303,12 @@ export default function LeaveScreen() {
       router.replace('/login');
     }
   }, [isLoading, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user?.mustChangePassword) {
+      router.replace('/profile');
+    }
+  }, [isLoading, isAuthenticated, user?.mustChangePassword]);
 
   const isRefreshing = loadState === 'loading';
 

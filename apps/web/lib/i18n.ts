@@ -235,6 +235,8 @@ const translations = {
     profile_pw_rules_special: 'Special character (!@#$%^&*)',
     profile_loading: 'Loading profile…',
     profile_error: 'Failed to load profile',
+    profile_forced_banner: 'For your security, you must change your password before accessing other menus.',
+    profile_forced_nav_hint: 'Locked — change password first',
 
     // State components
     loading_default: 'Loading…',
@@ -475,6 +477,8 @@ const translations = {
     profile_pw_rules_special: 'อักขระพิเศษ (!@#$%^&*)',
     profile_loading: 'กำลังโหลดโปรไฟล์…',
     profile_error: 'โหลดข้อมูลโปรไฟล์ล้มเหลว',
+    profile_forced_banner: 'เพื่อความปลอดภัย คุณต้องเปลี่ยนรหัสผ่านก่อนเข้าใช้งานเมนูอื่น',
+    profile_forced_nav_hint: 'ล็อก — เปลี่ยนรหัสผ่านก่อน',
 
     // State components
     loading_default: 'กำลังโหลด…',
