@@ -4,6 +4,8 @@ import {
   SessionExpiredError,
   type DashboardSummary,
   type MobileUserProfile,
+  type ChangePasswordPayload,
+  type ChangePasswordResponse,
   type PaginatedResponse,
   type EmployeeItem,
   type DepartmentItem,
@@ -135,6 +137,15 @@ async function authPost<T>(path: string, token: string, body: unknown): Promise<
   }
 
   return response.json() as Promise<T>;
+}
+
+// ─── Password Change ──────────────────────────────────────────────────────────
+
+export async function changePassword(
+  token: string,
+  payload: ChangePasswordPayload,
+): Promise<ChangePasswordResponse> {
+  return authPost<ChangePasswordResponse>('/auth/change-password', token, payload);
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────

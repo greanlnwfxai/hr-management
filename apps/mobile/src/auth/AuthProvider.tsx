@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { login } from '../api/client';
+import { login, getProfile } from '../api/client';
 import {
   clearToken,
   clearUser,
@@ -86,8 +86,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }
 
+  async function refreshUser(token: string) {
+    try {
+      const profile = await getProfile(token);
+      const updated: AuthUser = {
+        id: profile.id,
+        email: profile.email,
+        username: profile.username ?? null,
+        role: profile.role,
+        mustChangePassword: profile.mustChangePassword ?? false,
+        employeeId: profile.employeeId ?? null,
+      };
+      await saveUser(updated);
+      setState((s) => ({ ...s, user: updated }));
+    } catch {
+      // silently ignore — caller handles error display
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

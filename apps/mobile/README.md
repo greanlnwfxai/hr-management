@@ -104,6 +104,8 @@ The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** butt
 | `/home` | Home | Protected dashboard — profile card, role badge, role-based feature cards, org summary for admin/manager (T-044, T-049) |
 | `/attendance` | Attendance | Protected attendance screen — today card, history, live geofence clock-in/out (T-045, T-047) |
 | `/leave` | Leave Request | Protected leave screen — balance, create request form, request history (T-048) |
+| `/approvals` | Manager Approval | MANAGER/HR_ADMIN/SUPER_ADMIN — list, approve, reject pending leave requests (T-051) |
+| `/profile` | Profile | All roles — account info, employee info, password change form (T-052) |
 
 ## Dashboard & Profile (T-044, T-049)
 

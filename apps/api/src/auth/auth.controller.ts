@@ -3,6 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -34,14 +35,39 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiOperation({ summary: 'Get current authenticated user profile' })
   @ApiResponse({
     status: 200,
-    description: 'Current user profile',
-    schema: { example: { id: 'uuid', email: 'admin@hr.local', role: 'SUPER_ADMIN' } },
+    description: 'Current user profile with employee details',
+    schema: {
+      example: {
+        id: 'uuid',
+        email: 'admin@hr.local',
+        username: 'admin',
+        role: 'SUPER_ADMIN',
+        mustChangePassword: false,
+        employeeId: 'emp-uuid',
+        employee: { id: 'emp-uuid', firstName: 'John', lastName: 'Doe', employeeCode: 'EMP001', department: 'IT', position: 'Developer' },
+      },
+    },
   })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT' })
   me(@CurrentUser() user: Express.User) {
-    return user;
+    return this.auth.getMe((user as { id: string }).id);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change current user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully', schema: { example: { success: true, mustChangePassword: false } } })
+  @ApiUnauthorizedResponse({ description: 'Missing or invalid JWT, or wrong current password' })
+  @ApiResponse({ status: 400, description: 'Validation error or passwords do not match' })
+  changePassword(
+    @CurrentUser() user: Express.User,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.auth.changePassword((user as { id: string }).id, dto);
   }
 }

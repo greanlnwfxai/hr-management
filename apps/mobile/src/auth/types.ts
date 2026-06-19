@@ -1,7 +1,10 @@
 export interface AuthUser {
   id: string;
   email: string;
+  username: string | null;
   role: string;
+  mustChangePassword: boolean;
+  employeeId: string | null;
 }
 
 export interface AuthContextValue {
@@ -12,4 +15,5 @@ export interface AuthContextValue {
   error: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refreshUser: (token: string) => Promise<void>;
 }

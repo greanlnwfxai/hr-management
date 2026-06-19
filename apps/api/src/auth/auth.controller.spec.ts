@@ -4,15 +4,33 @@ import { AuthService } from './auth.service';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  let authService: { login: jest.Mock };
+  let authService: {
+    login: jest.Mock;
+    getMe: jest.Mock;
+    changePassword: jest.Mock;
+  };
 
   const mockLoginResult = {
     accessToken: 'mock.jwt.token',
     user: { id: 'user-uuid-1', email: 'admin@hr.local', role: 'SUPER_ADMIN' },
   };
 
+  const mockMeResult = {
+    id: 'user-uuid-1',
+    email: 'admin@hr.local',
+    username: 'admin',
+    role: 'SUPER_ADMIN',
+    mustChangePassword: false,
+    employeeId: null,
+    employee: null,
+  };
+
   beforeEach(async () => {
-    authService = { login: jest.fn().mockResolvedValue(mockLoginResult) };
+    authService = {
+      login: jest.fn().mockResolvedValue(mockLoginResult),
+      getMe: jest.fn().mockResolvedValue(mockMeResult),
+      changePassword: jest.fn().mockResolvedValue({ success: true, mustChangePassword: false }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -43,12 +61,39 @@ describe('AuthController', () => {
   });
 
   describe('GET /auth/me', () => {
-    it('returns the user attached by the JWT guard', () => {
+    it('delegates to authService.getMe with user id', async () => {
       const user = { id: 'user-uuid-1', email: 'admin@hr.local', role: 'SUPER_ADMIN' } as Express.User;
 
-      const result = controller.me(user);
+      const result = await controller.me(user);
 
-      expect(result).toBe(user);
+      expect(authService.getMe).toHaveBeenCalledWith('user-uuid-1');
+      expect(result).toEqual(mockMeResult);
+    });
+
+    it('returns profile with mustChangePassword and employee fields', async () => {
+      const user = { id: 'user-uuid-1', email: 'admin@hr.local', role: 'SUPER_ADMIN' } as Express.User;
+
+      const result = await controller.me(user);
+
+      expect(result).toHaveProperty('mustChangePassword');
+      expect(result).toHaveProperty('employeeId');
+      expect(result).toHaveProperty('employee');
+    });
+  });
+
+  describe('POST /auth/change-password', () => {
+    it('delegates to authService.changePassword with user id and dto', async () => {
+      const user = { id: 'user-uuid-1', email: 'admin@hr.local', role: 'SUPER_ADMIN' } as Express.User;
+      const dto = {
+        currentPassword: 'OldPass1!',
+        newPassword: 'NewPass1!',
+        confirmPassword: 'NewPass1!',
+      };
+
+      const result = await controller.changePassword(user, dto as any);
+
+      expect(authService.changePassword).toHaveBeenCalledWith('user-uuid-1', dto);
+      expect(result).toEqual({ success: true, mustChangePassword: false });
     });
   });
 });

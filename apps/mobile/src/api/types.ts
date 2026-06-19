@@ -13,7 +13,29 @@ export interface ApiError {
 export interface MobileUserProfile {
   id: string;
   email: string;
+  username: string | null;
   role: string;
+  mustChangePassword: boolean;
+  employeeId: string | null;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: string | null;
+    position: string | null;
+  } | null;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export interface ChangePasswordResponse {
+  success: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface DashboardSummary {

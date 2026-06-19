@@ -63,6 +63,22 @@ This prevents broken navigation while preparing the UI entry point for T-050.
 
 ---
 
+## Profile & Password Change (T-052)
+
+The "โปรไฟล์ของฉัน" card on the Home screen is now active for **all authenticated roles**. It navigates to `/profile`.
+
+The `/profile` screen shows:
+- Account info: email, username, role badge, account status
+- Employee info (if linked): full name, employee code, department, position
+- `mustChangePassword` warning card (if flag is true)
+- Password change form with inline validation rules and success/error banners
+
+If `mustChangePassword = true`, a tappable warning banner also appears on the Home screen linking to `/profile`.
+
+See [MOBILE_PROFILE_PASSWORD_CHANGE.md](MOBILE_PROFILE_PASSWORD_CHANGE.md) for full details.
+
+---
+
 ## Manager Approval (T-051)
 
 The "อนุมัติคำขอลา" card is active for MANAGER, HR_ADMIN, and SUPER_ADMIN with a "ผู้จัดการ" badge. It navigates to `/approvals`. EMPLOYEE role does not see this card.

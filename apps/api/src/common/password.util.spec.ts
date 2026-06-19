@@ -46,8 +46,12 @@ describe('validatePasswordComplexity', () => {
     expect(validatePasswordComplexity('X7#mqa2')).toBe(false);
   });
 
-  it('rejects password longer than 8', () => {
-    expect(validatePasswordComplexity('X7#mqa2Bx')).toBe(false);
+  it('accepts password longer than 8 chars that meets all rules', () => {
+    expect(validatePasswordComplexity('X7#mqa2Bx')).toBe(true);
+  });
+
+  it('accepts password with 12 chars meeting all rules', () => {
+    expect(validatePasswordComplexity('Hello1!World9')).toBe(true);
   });
 
   it('rejects password without uppercase', () => {

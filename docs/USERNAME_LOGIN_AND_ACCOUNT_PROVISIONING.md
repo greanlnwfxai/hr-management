@@ -151,9 +151,22 @@ The seed is idempotent: it upserts the admin user and ensures `username: 'admin'
 
 ---
 
+## Password Change (T-052)
+
+Employees can change their own password via `POST /auth/change-password` (JWT-protected). The endpoint:
+- Verifies the current password with bcrypt
+- Enforces password complexity: ≥8 chars, uppercase, lowercase, digit, special char
+- Sets `mustChangePassword = false` on success
+- Returns `{ success: true, mustChangePassword: false }`
+
+The mobile app `/profile` screen exposes this flow. `GET /auth/me` now returns an `employee` sub-object with `firstName`, `lastName`, `employeeCode`, `department`, and `position`.
+
+See [MOBILE_PROFILE_PASSWORD_CHANGE.md](MOBILE_PROFILE_PASSWORD_CHANGE.md) for full details.
+
+---
+
 ## Known Limitations
 
-- **First-login password change flow** is not yet implemented. `mustChangePassword` is tracked but the enforcement UI is a future task.
 - **Email invite flow** is not implemented. HR must manually communicate the temporary password to the employee.
 - **SSO / MFA** is not implemented.
 - If an employee has only Thai names with no Latin equivalents, username suggestion returns `null` and HR must enter the username manually.
@@ -163,7 +176,7 @@ The seed is idempotent: it upserts the admin user and ensures `username: 'admin'
 
 ## Future Tasks
 
-1. First-login forced password change screen (web + mobile)
-2. Email notification on account provisioning
-3. Self-service password reset
-4. Account status management (lock/unlock)
+1. Email notification on account provisioning
+2. Self-service password reset (unauthenticated, via email link)
+3. Account status management (lock/unlock)
+4. SSO / MFA

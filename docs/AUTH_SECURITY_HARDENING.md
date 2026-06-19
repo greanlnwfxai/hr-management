@@ -93,6 +93,25 @@ Login attempts (both successful and failed) count toward the `LOGIN_THROTTLE_LIM
 
 ---
 
+## Password Change Security (T-052)
+
+`POST /auth/change-password` (JWT-required):
+
+| Rule | Detail |
+|------|--------|
+| Current password verified | bcrypt compare against stored hash |
+| New = current rejected | bcrypt compare prevents no-op "changes" |
+| Confirm mismatch rejected | `400 Bad Request` |
+| Complexity enforced | ≥8 chars, uppercase, lowercase, digit, `!@#$%^&*` |
+| Hash stored | bcrypt (cost 10) — plain text never persisted |
+| mustChangePassword cleared | Set to `false` in DB on success |
+| Unauthorized wrong current | `401 Unauthorized` (not `400`) |
+| No hash in response | Only `{ success, mustChangePassword }` returned |
+
+Password complexity is also fixed in `password.util.ts`: `validatePasswordComplexity` now uses `< 8` (minimum) instead of `=== 8` (exact match), so user-set passwords longer than 8 characters are accepted.
+
+---
+
 ## JWT Safety
 
 | Property | Value |

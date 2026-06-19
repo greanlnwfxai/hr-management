@@ -126,6 +126,21 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── mustChangePassword warning banner ────────────────────────── */}
+        {(profile?.mustChangePassword ?? user?.mustChangePassword) && (
+          <Pressable
+            style={styles.mustChangeBanner}
+            onPress={() => router.push('/profile')}
+            accessibilityRole="button"
+            accessibilityLabel="เปลี่ยนรหัสผ่าน"
+          >
+            <Text style={styles.mustChangeBannerTitle}>⚠️ กรุณาเปลี่ยนรหัสผ่าน</Text>
+            <Text style={styles.mustChangeBannerText}>
+              บัญชีของคุณต้องเปลี่ยนรหัสผ่านก่อนใช้งาน แตะที่นี่เพื่อเปลี่ยนรหัสผ่าน →
+            </Text>
+          </Pressable>
+        )}
+
         {/* ── Dashboard overview — admin/manager/HR only ───────────────── */}
         {showDashboard && (
           <View style={styles.card}>
@@ -214,8 +229,8 @@ export default function HomeScreen() {
             title="โปรไฟล์ของฉัน"
             description="ข้อมูลส่วนตัวและสัญญาจ้าง"
             icon="👤"
-            enabled={false}
-            badge="เร็ว ๆ นี้"
+            enabled
+            onPress={() => router.push('/profile')}
           />
         </View>
 
@@ -526,6 +541,26 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
+  },
+
+  // mustChangePassword banner
+  mustChangeBanner: {
+    backgroundColor: '#fffbeb',
+    borderRadius: 12,
+    padding: 14,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  mustChangeBannerTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  mustChangeBannerText: {
+    fontSize: 13,
+    color: '#78350f',
+    lineHeight: 18,
   },
 
   // Shared states

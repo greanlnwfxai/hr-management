@@ -1,8 +1,13 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -54,5 +59,82 @@ export class AuthService {
         employeeId,
       },
     };
+  }
+
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        mustChangePassword: true,
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            employeeCode: true,
+            department: { select: { name: true } },
+            position: { select: { title: true } },
+          },
+        },
+      },
+    });
+
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const employeeId = user.employee?.id ?? null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+      employeeId,
+      employee: user.employee
+        ? {
+            id: user.employee.id,
+            firstName: user.employee.firstName,
+            lastName: user.employee.lastName,
+            employeeCode: user.employee.employeeCode,
+            department: user.employee.department?.name ?? null,
+            position: user.employee.position?.title ?? null,
+          }
+        : null,
+    };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true },
+    });
+
+    if (!user) throw new UnauthorizedException('User not found');
+
+    const currentValid = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!currentValid) {
+      throw new UnauthorizedException('รหัสผ่านปัจจุบันไม่ถูกต้อง');
+    }
+
+    const samePassword = await bcrypt.compare(dto.newPassword, user.password);
+    if (samePassword) {
+      throw new BadRequestException('รหัสผ่านใหม่ต้องไม่เหมือนกับรหัสผ่านปัจจุบัน');
+    }
+
+    const hashed = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed, mustChangePassword: false },
+    });
+
+    return { success: true, mustChangePassword: false };
   }
 }

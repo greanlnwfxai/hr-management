@@ -21,10 +21,11 @@ Response: `{ "status": "ok", "timestamp": "..." }`
 
 ## Auth
 
-| Method | Path        | Auth | Roles | Description                                   |
-|--------|-------------|------|-------|-----------------------------------------------|
-| POST   | /auth/login | ❌   | —     | Authenticate; returns `{ accessToken, user }` |
-| GET    | /auth/me    | ✅   | any   | Return currently authenticated user profile   |
+| Method | Path                    | Auth | Roles | Description                                             |
+|--------|-------------------------|------|-------|---------------------------------------------------------|
+| POST   | /auth/login             | ❌   | —     | Authenticate; returns `{ accessToken, user }`           |
+| GET    | /auth/me                | ✅   | any   | Return current user profile with employee details       |
+| POST   | /auth/change-password   | ✅   | any   | Change current user password                            |
 
 ### POST /auth/login
 Body: `{ "login": string, "password": string }` — `login` may be username or email. Legacy `email` field also accepted.
@@ -32,8 +33,34 @@ If identifier contains `@` → searched by email; otherwise searched by username
 Response: `{ "accessToken": string, "user": { id, email, username, role, mustChangePassword, employeeId } }`
 
 ### GET /auth/me
-Response: `{ "id": string, "email": string, "username": string|null, "role": UserRole, "mustChangePassword": boolean, "employeeId": string|null }`
-Note: Never exposes password hash.
+Response:
+```json
+{
+  "id": "uuid",
+  "email": "admin@hr.local",
+  "username": "admin",
+  "role": "SUPER_ADMIN",
+  "mustChangePassword": false,
+  "employeeId": "emp-uuid-or-null",
+  "employee": {
+    "id": "emp-uuid",
+    "firstName": "John",
+    "lastName": "Doe",
+    "employeeCode": "EMP001",
+    "department": "Engineering",
+    "position": "Developer"
+  }
+}
+```
+Note: `employee` is `null` for users not linked to an employee record. Never exposes password hash.
+
+### POST /auth/change-password
+Body: `{ "currentPassword": string, "newPassword": string, "confirmPassword": string }`
+Password policy: min 8 chars, ≥1 uppercase, ≥1 lowercase, ≥1 digit, ≥1 special char (`!@#$%^&*`).
+- Returns `{ "success": true, "mustChangePassword": false }` on success
+- Sets `mustChangePassword = false` in the database
+- Returns `401` if `currentPassword` is wrong
+- Returns `400` if passwords don't match, new password same as current, or policy violation
 
 ---
 
@@ -131,10 +158,10 @@ All fields are optional. Web clients may omit location fields entirely.
 |--------|-------------------------|------|------------------------|-----------------------------------------------|
 | POST   | /leave/request          | ✅   | any                    | Submit a leave request (own employee only)    |
 | GET    | /leave/me               | ✅   | any                    | Own leave requests (paginated)                |
-| GET    | /leave                  | ✅   | SUPER_ADMIN · HR_ADMIN | All leave requests (paginated)                |
-| GET    | /leave/:id              | ✅   | any (owner or admin)   | Single leave request                          |
-| PATCH  | /leave/:id/approve      | ✅   | SUPER_ADMIN · HR_ADMIN | Approve PENDING request (deducts balance)     |
-| PATCH  | /leave/:id/reject       | ✅   | SUPER_ADMIN · HR_ADMIN | Reject PENDING request                        |
+| GET    | /leave                  | ✅   | SUPER_ADMIN · HR_ADMIN · MANAGER | All leave requests (paginated)                   |
+| GET    | /leave/:id              | ✅   | any (owner or admin)             | Single leave request                              |
+| PATCH  | /leave/:id/approve      | ✅   | SUPER_ADMIN · HR_ADMIN · MANAGER | Approve PENDING request (deducts balance)         |
+| PATCH  | /leave/:id/reject       | ✅   | SUPER_ADMIN · HR_ADMIN · MANAGER | Reject PENDING request                            |
 
 Query params (GET /leave, GET /leave/me): `page`, `limit`, `status`, `leaveType`, `startDate`, `endDate`, `employeeId` (admin only)
 
