@@ -104,3 +104,57 @@ Every completed step produces a CTO Summary using [docs/CTO_SUMMARY_TEMPLATE.md]
 ## Next Step
 ## Recommended Commit Message
 ```
+
+---
+
+## Security Review Requirements (added T-052A.1)
+
+Every task after T-052A.1 **must** include a **Security Review** section in the CTO Summary.
+
+Required fields:
+
+| Field | Description |
+|---|---|
+| Auth impact | Does this task add/change guarded endpoints? |
+| RBAC impact | Does this task add/change role checks? |
+| Data privacy impact | Does this expose new PII or change data access? |
+| Password/token/hash impact | Any change to password, JWT, or hash handling? |
+| Mobile security impact | Does this affect mobile token storage or API calls? |
+| Dependency/advisory impact | Were new packages added? Any new audit findings? |
+| Secrets/logging check | Any risk of secrets or tokens in logs or responses? |
+| New endpoints protected | List new endpoints and their guards |
+| Risk level | LOW / MEDIUM / HIGH / CRITICAL |
+| Security decision | PASS / FAIL |
+
+**Security FAIL conditions** (task must NOT be declared PASS):
+- Password, token, or hash value exposed in logs, response, or source
+- New endpoint missing JWT guard or role check
+- RBAC bypass possible via crafted request
+- Secret committed to source control
+- HIGH or CRITICAL dependency vulnerability without patch or accepted-risk note
+- Destructive Docker command used without explicit user approval
+- Fabricated external advisory details in CTO Summary
+
+Run before declaring done:
+```bash
+./scripts/security-review.sh
+```
+
+Full policy: [docs/SECURITY_HARNESS.md](docs/SECURITY_HARNESS.md)
+Checklist:   [docs/SECURITY_REVIEW_CHECKLIST.md](docs/SECURITY_REVIEW_CHECKLIST.md)
+Patch rules: [docs/SECURITY_PATCH_POLICY.md](docs/SECURITY_PATCH_POLICY.md)
+Findings:    [docs/SECURITY_REVIEW_LOG.md](docs/SECURITY_REVIEW_LOG.md)
+
+---
+
+## Docker Safety Rules
+
+- ❌ Do NOT run `docker compose down`
+- ❌ Do NOT run `docker compose down -v`
+- ❌ Do NOT remove Docker volumes
+- ❌ Do NOT run `docker system prune`, `docker volume rm`, `docker volume prune`
+- ❌ Do NOT stop, remove, or reset containers without explicit user approval
+- ✅ Ask the user before restarting Docker or running any destructive Docker command
+
+Allowed inspection commands (no approval needed):
+`docker ps`, `docker ps -a`, `docker compose ps`, `docker compose logs`, `docker volume ls`, `docker compose config`, health check curls

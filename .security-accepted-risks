@@ -1,0 +1,51 @@
+# Security Accepted-Risk Registry
+#
+# Format: GHSA_ID  WORKSPACE  DATE  REASON
+# One entry per line. Lines starting with # are comments.
+# Workspace: api | web | mobile | all
+#
+# An advisory listed here is ACCEPTED RISK — it will not fail security-audit.sh.
+# All accepted risks must have a corresponding entry in docs/SECURITY_REVIEW_LOG.md.
+#
+# ── HOW TO ADD A NEW ENTRY ───────────────────────────────────────────────────
+# 1. Understand the vulnerability and confirm it is not reachable in production.
+# 2. Add the entry below with a clear reason.
+# 3. Add a full accepted-risk entry in docs/SECURITY_REVIEW_LOG.md.
+# 4. Get user approval before committing.
+#
+# ── REVIEW SCHEDULE ─────────────────────────────────────────────────────────
+# Review all accepted risks in T-052A.3 or when the relevant package has a safe patch.
+
+# ── API — multer DoS ─────────────────────────────────────────────────────────
+# Attack requires multipart/form-data POST requests. This API has no file upload
+# or multipart routes — all endpoints use JSON body. The only npm-suggested fix
+# is downgrading to NestJS 7.5.5, which would be a full framework major downgrade.
+# Review: when @nestjs/platform-express ships a multer update compatible with NestJS 11.
+GHSA-72gw-mp4g-v24j	api	2026-06-19	multer DoS via nested fields; no multipart routes; fix incompatible with NestJS 11
+GHSA-3p4h-7m6x-2hcm	api	2026-06-19	multer DoS via aborted upload cleanup; no multipart routes; fix incompatible with NestJS 11
+
+# ── Mobile — @xmldom/xmldom XML injection ─────────────────────────────────────
+# @xmldom/xmldom is used by @expo/config-plugins for iOS .plist / xcode XML
+# processing during Expo build-time config. It is NOT bundled into the mobile
+# app runtime. The attack would require a malicious Expo plugin executing during
+# the native build — not a production runtime risk.
+# Review: when expo@56+ is safe to adopt (full regression test required).
+GHSA-wh4c-j3r5-mjhp	mobile	2026-06-19	xmldom used by expo build tools only; not in app runtime bundle; fix requires expo@56 major
+GHSA-2v35-w6hq-6mfw	mobile	2026-06-19	xmldom used by expo build tools only; not in app runtime bundle; fix requires expo@56 major
+GHSA-f6ww-3ggp-fr8h	mobile	2026-06-19	xmldom used by expo build tools only; not in app runtime bundle; fix requires expo@56 major
+GHSA-x6wf-f3px-wcqx	mobile	2026-06-19	xmldom used by expo build tools only; not in app runtime bundle; fix requires expo@56 major
+GHSA-j759-j44w-7fr8	mobile	2026-06-19	xmldom used by expo build tools only; not in app runtime bundle; fix requires expo@56 major
+
+# ── Mobile — node-tar path traversal / file overwrite ────────────────────────
+# node-tar is used by npm's cacache (package extraction) during Expo build.
+# It is not bundled into the mobile app. The path traversal attack requires
+# extracting a malicious tar archive — only a risk during development dependency
+# installation, not at runtime. Fix requires expo@56.0.12 (major version).
+# Review: when expo@56+ is safe to adopt.
+GHSA-34x7-hfp2-rc4v	mobile	2026-06-19	tar used by npm/cacache during build only; not in app runtime; fix requires expo@56 major
+GHSA-8qq5-rm4j-mr97	mobile	2026-06-19	tar used by npm/cacache during build only; not in app runtime; fix requires expo@56 major
+GHSA-83g3-92jg-28cx	mobile	2026-06-19	tar used by npm/cacache during build only; not in app runtime; fix requires expo@56 major
+GHSA-qffp-2rhf-9h96	mobile	2026-06-19	tar used by npm/cacache during build only; not in app runtime; fix requires expo@56 major
+GHSA-9ppj-qmqm-q256	mobile	2026-06-19	tar used by npm/cacache during build only; not in app runtime; fix requires expo@56 major
+GHSA-r6q2-hw4h-h46w	mobile	2026-06-19	tar race condition on macOS APFS; build tool only; not in app runtime; fix requires expo@56 major
+GHSA-vmf3-w455-68vh	mobile	2026-06-19	tar PAX header issue; build tool only; not in app runtime; fix requires expo@56 major
