@@ -4,6 +4,44 @@ This log tracks security findings, accepted risks, and patch actions across task
 
 ---
 
+## T-054 — Force mustChangePassword Flow — 2026-06-19
+
+### Summary
+Enforced the `mustChangePassword` flag as a hard gate across Web and Mobile. Web: AppLayout redirects all non-profile routes to `/profile` when `mustChangePassword=true`; nav links are suppressed. Mobile: home screen disables feature cards; attendance/leave/approvals screens redirect to `/profile`. No backend changes, no new dependencies, no new endpoints.
+
+### Scope
+
+| Area | Change |
+|---|---|
+| Web routes affected | All protected routes — redirect to `/profile` when `mustChangePassword=true` |
+| Mobile screens affected | `home.tsx` (card disable), `attendance.tsx`, `leave.tsx`, `approvals.tsx` (redirect guard) |
+| New endpoints | None |
+| New dependencies | None |
+| New files | `apps/web/e2e/force-password.spec.ts`, `docs/FORCE_MUST_CHANGE_PASSWORD_FLOW.md` |
+| Modified files | `apps/web/components/AppLayout.tsx`, `apps/web/lib/i18n.ts`, `apps/mobile/app/home.tsx`, `apps/mobile/app/attendance.tsx`, `apps/mobile/app/leave.tsx`, `apps/mobile/app/approvals.tsx` |
+
+### Security Review Fields
+
+| Field | Assessment |
+|---|---|
+| Auth impact | No new endpoints. All enforcement is frontend-only. Backend JWT guards unchanged. `GET /auth/me` and `POST /auth/change-password` remain the guarded change path. |
+| RBAC impact | No role-check changes. Forced redirect is applied equally to all roles when `mustChangePassword=true`. Profile remains accessible to all roles. |
+| Data privacy impact | No new data access. Redirect logic reads only `user.mustChangePassword` from local auth state — no API calls added. |
+| Password/token/hash impact | No change to password hashing, JWT issuance, or token storage. Redirect logic is read-only on the local user object. |
+| Mobile security impact | Guard effects use `router.replace` (no stack accumulation). `useAuth().user.mustChangePassword` comes from SecureStore-backed AuthProvider, refreshed by `refreshUser()` after password change. No native-only APIs used; Expo web export passes. |
+| Dependency/advisory impact | No new packages added. No new audit findings. Accepted-risk advisories unchanged from T-053. |
+| Secrets/logging check | Secret scan PASS. No passwords, tokens, or hashes in logs or responses. |
+| New endpoints protected | None added. |
+| Risk level | LOW |
+| Security decision | PASS |
+
+### Notes
+
+- Enforcement is frontend-only — a malicious actor who directly crafts API calls can still reach guarded endpoints with a valid JWT. This is intentional: the API's JwtAuthGuard already enforces authentication; `mustChangePassword` is a UX policy flag, not a security boundary at the API layer. No sensitive operations are unlocked by bypassing the frontend gate.
+- If stricter enforcement is required (e.g., API should reject all non-change-password requests when `mustChangePassword=true`), a backend middleware guard should be added in a future task.
+
+---
+
 ## T-053 — Web Profile & Password Change — 2026-06-19
 
 ### Summary
