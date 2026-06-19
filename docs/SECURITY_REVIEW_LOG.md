@@ -4,6 +4,48 @@ This log tracks security findings, accepted risks, and patch actions across task
 
 ---
 
+## T-053 — Web Profile & Password Change — 2026-06-19
+
+### Summary
+Added `/profile` page to the Next.js web admin app, mirroring mobile T-052. All authenticated roles can view their account/employee info and change their password. The mustChangePassword flag drives an informational banner visible on all pages.
+
+### Scope
+
+| Area | Change |
+|---|---|
+| New endpoints used | `GET /auth/me`, `POST /auth/change-password` (both pre-existing, JWT-guarded) |
+| New web routes | `/profile` (all roles) |
+| New API client changes | `getMe()` type updated; `changePassword()` added; `no401Redirect` option added to `apiFetch` |
+| New files | `apps/web/app/(app)/profile/page.tsx`, `apps/web/e2e/profile.spec.ts` |
+| Modified files | `apps/web/lib/api.ts`, `apps/web/lib/i18n.ts`, `apps/web/components/AppLayout.tsx` |
+
+### Security Review Fields
+
+| Field | Assessment |
+|---|---|
+| Auth impact | No new guards added. Both `/auth/me` and `/auth/change-password` are already `@UseGuards(JwtAuthGuard)`. |
+| RBAC impact | No role checks added. Profile is intentionally accessible to all authenticated roles — mirrors mobile behavior. No admin-only data is exposed. |
+| Data privacy impact | `GET /auth/me` returns only the authenticated user's own data. No cross-user data access. Employee info comes from the API's own join — no raw PII list exposed. |
+| Password/token/hash impact | Passwords are held only in ephemeral React `useState` — never persisted, never logged. Cleared on success. `no401Redirect` option sends the JWT token normally — it only prevents the logout-on-401 redirect for the change-password case. |
+| Mobile security impact | No mobile code changed. |
+| Dependency/advisory impact | No new dependencies added. No new audit findings. |
+| Secrets/logging check | `secret-scan.sh` PASS. No password values, tokens, or hashes in source. |
+| New endpoints protected | None added. `/auth/me` and `/auth/change-password` were already protected in previous tasks. |
+| Risk level | LOW |
+| Security decision | PASS |
+
+### 401 Handling Note
+
+`POST /auth/change-password` returns 401 when the current password is wrong. The standard `apiFetch` helper treats 401 as session expiry and clears auth + redirects. To prevent this from logging users out on an incorrect current password, a `no401Redirect` option was added to `FetchOptions`. When set, the token is still sent (preserving the authenticated session), but 401 is thrown as `ApiError(401, message)` instead of triggering the redirect. This is narrowly scoped to `changePassword()` only.
+
+### Verification Results — T-053
+
+- `./scripts/security-review.sh`: **PASS**
+- `./scripts/verify.sh`: **PASS** (API build PASS, Prisma valid PASS, Web build PASS — /profile route included)
+- `npm --prefix apps/api test`: **PASS** (202/202)
+
+---
+
 ## T-052A.3 — CI Security Job + Dependabot Configuration — 2026-06-19
 
 ### Summary

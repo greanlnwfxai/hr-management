@@ -5,10 +5,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4002';
 type FetchOptions = Omit<RequestInit, 'headers'> & {
   headers?: Record<string, string>;
   skipAuth?: boolean;
+  /** Send the JWT token but do NOT redirect to /login on 401 — needed for change-password where wrong current password returns 401. */
+  no401Redirect?: boolean;
 };
 
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
-  const { skipAuth, headers: extraHeaders, ...rest } = options;
+  const { skipAuth, no401Redirect, headers: extraHeaders, ...rest } = options;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extraHeaders };
 
   if (!skipAuth) {
@@ -19,10 +21,9 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const res = await fetch(`${API_BASE}${path}`, { ...rest, headers });
 
   if (res.status === 401) {
-    // skipAuth is set only on the login endpoint itself — don't redirect/clear
-    // when the login call returns 401 (wrong credentials), so the login page
-    // can display its own error instead of causing a redirect loop.
-    if (!skipAuth) {
+    // skipAuth: login endpoint — don't redirect, show inline error.
+    // no401Redirect: authenticated call where 401 means bad input (e.g. wrong current password), not expired session.
+    if (!skipAuth && !no401Redirect) {
       clearAuth();
       if (typeof window !== 'undefined') window.location.href = '/login';
       throw new Error('Unauthorized');
@@ -60,8 +61,33 @@ export function login(loginId: string, password: string) {
   });
 }
 
+export type MeResponse = {
+  id: string;
+  email: string;
+  username: string | null;
+  role: string;
+  mustChangePassword: boolean;
+  employeeId: string | null;
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode: string;
+    department: string | null;
+    position: string | null;
+  } | null;
+};
+
 export function getMe() {
-  return apiFetch<{ id: string; email: string; username: string | null; role: string; employeeId: string | null }>('/auth/me');
+  return apiFetch<MeResponse>('/auth/me');
+}
+
+export function changePassword(payload: { currentPassword: string; newPassword: string; confirmPassword: string }) {
+  return apiFetch<{ success: boolean; mustChangePassword: boolean }>('/auth/change-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    no401Redirect: true,
+  });
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
