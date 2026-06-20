@@ -9,12 +9,21 @@ import {
 import { Prisma } from '@prisma/client';
 import type { AttendanceStatus as PrismaAttendanceStatus } from '@prisma/client';
 import { AttendanceStatus, UserRole } from '../common/enums';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 import { GeofenceConfigService } from './geofence-config.service';
 import { GeofenceService } from './geofence.service';
+
+export interface AttendanceAuditContext {
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
 
 const ATTENDANCE_SELECT = {
   id: true,
@@ -41,11 +50,12 @@ const ATTENDANCE_SELECT = {
 export class AttendanceService {
   constructor(
     private prisma: PrismaService,
+    private auditLog: AuditLogService,
     private geofenceService: GeofenceService,
     private geofenceConfig: GeofenceConfigService,
   ) {}
 
-  async clockIn(userId: string, dto: ClockInDto) {
+  async clockIn(userId: string, dto: ClockInDto, ctx?: AttendanceAuditContext) {
     await this.validateGeofence(dto);
 
     const employeeId = await this.requireEmployeeId(userId);
@@ -59,7 +69,7 @@ export class AttendanceService {
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 
-    return this.prisma.attendance.create({
+    const result = await this.prisma.attendance.create({
       data: {
         employeeId,
         date,
@@ -69,9 +79,33 @@ export class AttendanceService {
       },
       select: ATTENDANCE_SELECT,
     });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_CLOCK_IN',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: result.id,
+        employeeId,
+        date: result.date,
+        status: result.status,
+        clockInAt: result.checkIn,
+        hasCheckIn: true,
+        hasCheckOut: result.checkOut !== null,
+        hasNote: result.note !== null && result.note !== undefined,
+      },
+    });
+
+    return result;
   }
 
-  async clockOut(userId: string, dto: ClockOutDto) {
+  async clockOut(userId: string, dto: ClockOutDto, ctx?: AttendanceAuditContext) {
     await this.validateGeofence(dto);
 
     const employeeId = await this.requireEmployeeId(userId);
@@ -83,7 +117,7 @@ export class AttendanceService {
     if (!record) throw new NotFoundException('No clock-in found for today');
     if (record.checkOut) throw new ConflictException('Already clocked out for today');
 
-    return this.prisma.attendance.update({
+    const result = await this.prisma.attendance.update({
       where: { id: record.id },
       data: {
         checkOut: new Date(),
@@ -91,6 +125,31 @@ export class AttendanceService {
       },
       select: ATTENDANCE_SELECT,
     });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_CLOCK_OUT',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: result.id,
+        employeeId,
+        date: result.date,
+        status: result.status,
+        clockInAt: result.checkIn,
+        clockOutAt: result.checkOut,
+        hasCheckIn: result.checkIn !== null,
+        hasCheckOut: true,
+        hasNote: result.note !== null && result.note !== undefined,
+      },
+    });
+
+    return result;
   }
 
   async findMyAttendance(userId: string, query: QueryAttendanceDto) {
@@ -243,5 +302,9 @@ export class AttendanceService {
         ...(endDate && { lte: new Date(endDate) }),
       },
     };
+  }
+
+  private async recordBestEffort(event: AuditLogEvent): Promise<void> {
+    try { await this.auditLog.record(event); } catch { /* best-effort */ }
   }
 }

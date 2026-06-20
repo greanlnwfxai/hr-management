@@ -40,19 +40,29 @@ describe('AttendanceController', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  it('clockIn delegates to service with user.id and dto', async () => {
+  it('clockIn delegates to service with user.id, dto, and audit context', async () => {
     const dto = { note: 'WFH' } as any;
-    const result = await controller.clockIn(mockUser as any, dto);
+    const result = await controller.clockIn(mockUser as any, dto, undefined as any);
 
-    expect(service.clockIn).toHaveBeenCalledWith(mockUser.id, dto);
+    expect(service.clockIn).toHaveBeenCalledWith(mockUser.id, dto, {
+      actorUserId: mockUser.id,
+      actorRole: mockUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
     expect(result).toEqual(mockRecord);
   });
 
-  it('clockOut delegates to service with user.id and dto', async () => {
+  it('clockOut delegates to service with user.id, dto, and audit context', async () => {
     const dto = {} as any;
-    const result = await controller.clockOut(mockUser as any, dto);
+    const result = await controller.clockOut(mockUser as any, dto, undefined as any);
 
-    expect(service.clockOut).toHaveBeenCalledWith(mockUser.id, dto);
+    expect(service.clockOut).toHaveBeenCalledWith(mockUser.id, dto, {
+      actorUserId: mockUser.id,
+      actorRole: mockUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
     expect(result).toMatchObject({ id: 'att-uuid-1' });
   });
 

@@ -7,6 +7,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
@@ -34,6 +35,7 @@ describe('AttendanceService', () => {
   let prisma: PrismaMock;
   let geofenceConfig: jest.Mocked<GeofenceConfigService>;
   let geofenceService: jest.Mocked<GeofenceService>;
+  let mockAuditLog: { record: jest.Mock };
 
   const userId = 'user-uuid-1';
   const employeeId = 'emp-uuid-1';
@@ -58,6 +60,7 @@ describe('AttendanceService', () => {
 
   beforeEach(async () => {
     prisma = mockPrisma() as PrismaMock;
+    mockAuditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     geofenceConfig = {
       isEnabled: jest.fn().mockReturnValue(false),
@@ -75,6 +78,7 @@ describe('AttendanceService', () => {
       providers: [
         AttendanceService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditLogService, useValue: mockAuditLog },
         { provide: GeofenceService, useValue: geofenceService },
         { provide: GeofenceConfigService, useValue: geofenceConfig },
       ],
@@ -428,6 +432,199 @@ describe('AttendanceService', () => {
 
       await expect(service.clockOut(userId, { source: 'web' })).resolves.toBeDefined();
       expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── audit: clockIn ─────────────────────────────────────────────────────────
+
+  describe('audit: clockIn', () => {
+    const ctx = {
+      actorUserId: 'user-uuid-1',
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('records ATTENDANCE_CLOCK_IN after successful clock-in', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_CLOCK_IN' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on ATTENDANCE_CLOCK_IN', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: ctx.actorUserId, actorRole: ctx.actorRole }),
+      );
+    });
+
+    it('sets targetType to ATTENDANCE on ATTENDANCE_CLOCK_IN', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'ATTENDANCE' }),
+      );
+    });
+
+    it('sets targetId to the attendance record id on ATTENDANCE_CLOCK_IN', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: attendanceId }),
+      );
+    });
+
+    it('sets result to SUCCESS on ATTENDANCE_CLOCK_IN', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata.employeeId is the resolved employee id (not undefined)', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata?.employeeId).toBe(employeeId);
+    });
+
+    it('metadata excludes raw GPS coordinates and note text even when dto carries them', async () => {
+      const sensitiveDto = {
+        latitude: 13.7563,
+        longitude: 100.5018,
+        accuracy: 25,
+        note: 'private personal note',
+        source: 'mobile' as const,
+      };
+      // Geofence passes (disabled by default in beforeEach)
+      await service.clockIn(userId, sensitiveDto, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      const serialized = JSON.stringify(event.metadata);
+      expect(serialized).not.toContain('13.7563');
+      expect(serialized).not.toContain('100.5018');
+      expect(serialized).not.toContain('private personal note');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('note');
+    });
+
+    it('still clocks in and returns result when audit write fails (best-effort)', async () => {
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.clockIn(userId, {}, ctx);
+
+      expect(result).toBeDefined();
+      expect(result.status).toBe('PRESENT');
+    });
+  });
+
+  // ── audit: clockOut ────────────────────────────────────────────────────────
+
+  describe('audit: clockOut', () => {
+    const ctx = {
+      actorUserId: 'user-uuid-1',
+      actorRole: 'EMPLOYEE',
+      ipAddress: '10.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    const mockClosedRecord = {
+      ...mockAttendanceFull,
+      checkOut: new Date('2026-06-13T05:00:00.000Z'),
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+      prisma.attendance.update.mockResolvedValue(mockClosedRecord as any);
+    });
+
+    it('records ATTENDANCE_CLOCK_OUT after successful clock-out', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_CLOCK_OUT' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on ATTENDANCE_CLOCK_OUT', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: ctx.actorUserId, actorRole: ctx.actorRole }),
+      );
+    });
+
+    it('sets targetType to ATTENDANCE on ATTENDANCE_CLOCK_OUT', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'ATTENDANCE' }),
+      );
+    });
+
+    it('sets targetId to the attendance record id on ATTENDANCE_CLOCK_OUT', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: attendanceId }),
+      );
+    });
+
+    it('sets result to SUCCESS on ATTENDANCE_CLOCK_OUT', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata.employeeId is the resolved employee id (not undefined)', async () => {
+      await service.clockOut(userId, {}, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata?.employeeId).toBe(employeeId);
+    });
+
+    it('metadata excludes raw GPS coordinates and note text even when dto carries them', async () => {
+      const sensitiveDto = {
+        latitude: 13.7563,
+        longitude: 100.5018,
+        accuracy: 25,
+        note: 'private personal note',
+        source: 'mobile' as const,
+      };
+      // Geofence passes (disabled by default in beforeEach)
+      await service.clockOut(userId, sensitiveDto, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      const serialized = JSON.stringify(event.metadata);
+      expect(serialized).not.toContain('13.7563');
+      expect(serialized).not.toContain('100.5018');
+      expect(serialized).not.toContain('private personal note');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('note');
+    });
+
+    it('still clocks out and returns result when audit write fails (best-effort)', async () => {
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.clockOut(userId, {}, ctx);
+
+      expect(result).toBeDefined();
+      expect(result.checkOut).toBeTruthy();
     });
   });
 });

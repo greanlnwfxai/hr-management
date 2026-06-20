@@ -6,8 +6,10 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -40,10 +42,16 @@ export class AttendanceController {
   @ApiResponse({ status: 201, description: 'Attendance record created' })
   @ApiResponse({ status: 409, description: 'Already clocked in today' })
   clockIn(
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: ClockInDto,
+    @Req() req: Request,
   ) {
-    return this.attendance.clockIn(user.id, dto);
+    return this.attendance.clockIn(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Post('clock-out')
@@ -51,10 +59,16 @@ export class AttendanceController {
   @ApiResponse({ status: 201, description: 'Clock-out recorded' })
   @ApiResponse({ status: 409, description: 'No active clock-in for today' })
   clockOut(
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: ClockOutDto,
+    @Req() req: Request,
   ) {
-    return this.attendance.clockOut(user.id, dto);
+    return this.attendance.clockOut(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Get('me')
