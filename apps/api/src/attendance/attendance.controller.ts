@@ -36,7 +36,7 @@ export class AttendanceController {
   constructor(private attendance: AttendanceService) {}
 
   @Post('clock-in')
-  @ApiOperation({ summary: 'Clock in for today (LATE if after 09:00 Asia/Bangkok)' })
+  @ApiOperation({ summary: 'Clock in for today (LATE if after 08:30 Asia/Bangkok)' })
   @ApiResponse({ status: 201, description: 'Attendance record created' })
   @ApiResponse({ status: 409, description: 'Already clocked in today' })
   clockIn(

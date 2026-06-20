@@ -220,7 +220,7 @@ export class AttendanceService {
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   }
 
-  // Business rule: LATE if clock-in is strictly after 09:00 Asia/Bangkok.
+  // Business rule: LATE if clock-in is strictly after 08:30 Asia/Bangkok.
   // Timestamps are stored in UTC; only this evaluation uses the Bangkok offset.
   // Thailand does not observe DST → offset is always UTC+7 (420 min), never changes.
   // We shift `now` forward by 7 h so that getUTCHours/Minutes yield Bangkok wall-clock time.
@@ -229,7 +229,7 @@ export class AttendanceService {
     const bangkokWallClock = new Date(now.getTime() + BANGKOK_OFFSET_MS);
     const hour = bangkokWallClock.getUTCHours();
     const minute = bangkokWallClock.getUTCMinutes();
-    return hour > 9 || (hour === 9 && minute > 0);
+    return hour > 8 || (hour === 8 && minute > 30);
   }
 
   private buildDateFilter(

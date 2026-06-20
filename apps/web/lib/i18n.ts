@@ -140,7 +140,7 @@ const translations = {
 
     // Attendance
     page_attendance: 'Attendance',
-    att_late_after: 'Late after 09:00',
+    att_late_after: 'Late after 08:30',
     att_todays: "Today's Attendance",
     att_checkin_label: 'Check-in',
     att_checkout_label: 'Check-out',
@@ -417,7 +417,7 @@ const translations = {
 
     // Attendance
     page_attendance: 'ลงเวลา',
-    att_late_after: 'สายหลัง 09:00',
+    att_late_after: 'สายหลัง 08:30',
     att_todays: 'การเข้างานวันนี้',
     att_checkin_label: 'เวลาเข้า',
     att_checkout_label: 'เวลาออก',

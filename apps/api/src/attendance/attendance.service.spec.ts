@@ -19,12 +19,12 @@ type PrismaMock = ReturnType<typeof mockPrisma> & {
 };
 
 // Bangkok UTC offset: UTC+7 = 25200000 ms
-// Bangkok 09:00 = UTC 02:00 → PRESENT (not strictly after 09:00)
-// Bangkok 09:01 = UTC 02:01 → LATE
-// Bangkok 08:59 = UTC 01:59 → PRESENT
-const BANGKOK_PRESENT_UTC = '2026-06-13T02:00:00.000Z'; // Bangkok 09:00 — boundary: PRESENT
-const BANGKOK_LATE_UTC = '2026-06-13T02:01:00.000Z';    // Bangkok 09:01 — one minute past: LATE
-const BANGKOK_EARLY_UTC = '2026-06-13T01:59:00.000Z';   // Bangkok 08:59 — PRESENT
+// Bangkok 08:30 = UTC 01:30 → PRESENT (not strictly after 08:30)
+// Bangkok 08:31 = UTC 01:31 → LATE
+// Bangkok 08:29 = UTC 01:29 → PRESENT
+const BANGKOK_PRESENT_UTC = '2026-06-13T01:30:00.000Z'; // Bangkok 08:30 — boundary: PRESENT
+const BANGKOK_LATE_UTC = '2026-06-13T01:31:00.000Z';    // Bangkok 08:31 — one minute past: LATE
+const BANGKOK_EARLY_UTC = '2026-06-13T01:29:00.000Z';   // Bangkok 08:29 — PRESENT
 
 const COMPANY_LAT = 13.7563;
 const COMPANY_LON = 100.5018;
@@ -91,7 +91,7 @@ describe('AttendanceService', () => {
   // ── clockIn ────────────────────────────────────────────────────────────────
 
   describe('clockIn', () => {
-    it('creates a PRESENT record when clocking in at exactly Bangkok 09:00', async () => {
+    it('creates a PRESENT record when clocking in at exactly Bangkok 08:30', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(BANGKOK_PRESENT_UTC));
 
@@ -109,7 +109,7 @@ describe('AttendanceService', () => {
       );
     });
 
-    it('creates a LATE record when clocking in at Bangkok 09:01', async () => {
+    it('creates a LATE record when clocking in at Bangkok 08:31', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(BANGKOK_LATE_UTC));
 
@@ -127,7 +127,7 @@ describe('AttendanceService', () => {
       );
     });
 
-    it('creates a PRESENT record when clocking in at Bangkok 08:59', async () => {
+    it('creates a PRESENT record when clocking in at Bangkok 08:29', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date(BANGKOK_EARLY_UTC));
 
