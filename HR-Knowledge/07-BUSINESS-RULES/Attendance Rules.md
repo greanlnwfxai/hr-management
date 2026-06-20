@@ -10,11 +10,11 @@ Thailand observes no Daylight Saving Time. The +7h offset never changes.
 
 | Clock-in time (Asia/Bangkok) | Status |
 |---|---|
-| Before 09:00:00 | PRESENT |
-| Exactly 09:00:00 | PRESENT |
-| 09:00:01 or later | LATE |
+| Before 08:30:00 | PRESENT |
+| Exactly 08:30:00 | PRESENT |
+| 08:30:01 or later | LATE |
 
-**Strictly after 09:00 Bangkok time = LATE. Exactly 09:00:00 = PRESENT.**
+**Strictly after 08:30 Bangkok time = LATE. Exactly 08:30:00 = PRESENT.**
 
 ## How LATE Is Evaluated
 
@@ -27,11 +27,17 @@ private isLateInBangkok(now: Date): boolean {
   const bangkokWallClock = new Date(now.getTime() + BANGKOK_OFFSET_MS);
   const hour = bangkokWallClock.getUTCHours();
   const minute = bangkokWallClock.getUTCMinutes();
-  return hour > 9 || (hour === 9 && minute > 0);
+  return hour > 8 || (hour === 8 && minute > 30);
 }
 ```
 
 No external library. The status is computed at clock-in time and stored in the `Attendance` record.
+
+## Work Schedule
+
+The current schedule presented across web/mobile UI and attendance summaries is:
+
+- `08:30–17:30`
 
 ## Storage vs Evaluation
 
@@ -50,19 +56,6 @@ private todayUtc(): Date {
 ```
 
 The Dashboard module uses `todayBangkok()` which applies the +7h correction before extracting the calendar date.
-
-## Known Date Boundary Limitation
-
-Between **17:00–23:59 UTC** (00:00–06:59 Bangkok the following day):
-
-- A clock-in at 23:00 UTC on June 12 is stored as `date: 2026-06-12`
-- Bangkok calendar at that moment is June 13
-- Dashboard `todayDate` returns `2026-06-13`
-- Dashboard present/late/absent counts will be **0** during this window (date mismatch)
-
-**Impact**: Metrics normalise after UTC midnight (07:00 Bangkok). Acceptable for v1.0 — system is used during normal business hours (07:00–20:00 Bangkok = 00:00–13:00 UTC).
-
-**Fix planned for v1.1**: Align `todayUtc()` in AttendanceService with `todayBangkok()` in DashboardService.
 
 ## ABSENT Status
 

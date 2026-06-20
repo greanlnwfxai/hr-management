@@ -16,19 +16,12 @@ This vault is the official knowledge base for the **HR Management System** proje
 |---|---|
 | [[Project Overview]] | Stack, ports, strategy, status |
 | [[Current Status]] | What is done, what is next, known limitations |
+| [[Platform State v1.1.31]] | Current shipped product and process state through `v1.1.31` |
 | [[System Architecture]] | High-level architecture diagram + component roles |
 | [[Backend v1 Architecture]] | Module map, design patterns, API contract stability |
 | [[ADR Index]] | All 12 Architecture Decision Records with summaries |
-| [[API Route Index]] | All 30 endpoints grouped by module |
+| [[API Route Index]] | Current API route inventory grouped by module |
 | [[Database Overview]] | PostgreSQL + Prisma schema overview |
-| [[Auth Module]] | Authentication — JWT login, guards, decorators |
-| [[Employee Module]] | Employee CRUD, soft delete, org directory |
-| [[Department Module]] | Department management |
-| [[Position Module]] | Position management |
-| [[Attendance Module]] | Clock-in/out, LATE rule, Bangkok timezone |
-| [[Leave Request Module]] | Leave lifecycle, approval, overlap validation |
-| [[Leave Balance Module]] | Quota tracking, balance deduction |
-| [[Dashboard Module]] | Aggregated HR summary, 19 parallel queries |
 | [[Attendance Rules]] | Bangkok timezone LATE evaluation rules |
 | [[Leave Rules]] | Leave lifecycle and balance rules |
 | [[RBAC Rules]] | Four-role access control matrix |
@@ -60,7 +53,7 @@ HR-Knowledge/
 ## How to Use This Vault
 
 - Open the `HR-Knowledge/` folder as an **Obsidian vault**.
-- Start reading from [[Project Overview]] or [[Current Status]].
+- Start reading from [[Platform State v1.1.31]], [[Project Overview]], or [[Current Status]].
 - Use Obsidian's graph view to explore connections between modules and ADRs.
 - Tags like `#backend-v1`, `#business-rules`, and `#rag-ready` help filter notes.
 

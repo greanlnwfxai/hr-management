@@ -1,5 +1,10 @@
 # Backend v1 Architecture
 
+Historical snapshot note:
+- This note describes the original backend v1 architecture baseline.
+- It is not the full current-platform inventory for `v1.1.31`.
+- For the current cross-platform state, see [[Platform State v1.1.31]] and [[API Route Index]].
+
 ## Completed Modules
 
 | Module | Path | Endpoints | Step |
@@ -14,7 +19,7 @@
 | Dashboard | `src/dashboard/` | 1 | T-021 |
 | Health | `health.controller.ts` | 1 | — |
 
-**Total: 30 endpoints + GET /health**
+**Historical backend v1 total: 30 endpoints + GET /health**
 
 ## Module Responsibility Summary
 

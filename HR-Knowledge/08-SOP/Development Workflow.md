@@ -1,30 +1,36 @@
 # Development Workflow
 
-## Two-Party Model
+## Collaboration Model
 
-Development follows a strict two-party workflow:
+Current delivery work follows a human-controlled collaboration model:
 
 | Actor | Responsibilities |
 |---|---|
-| **Claude Code** | Write code, run builds, run tests, Docker verification, CTO Summary, recommend commit messages |
-| **User + ChatGPT** | `git add`, `git commit`, `git push`, `git tag`, branch management, PR review |
+| **Claude / Codex** | Implement scoped work, update docs, run non-destructive verification, produce summaries, recommend commit messages |
+| **User** | Own final `git add`, `git commit`, `git push`, `git tag`, branch decisions, and release decisions |
+| **ChatGPT reviewer** | Review outputs and provide PASS / FAIL guidance when used in the workflow |
 
-**Claude Code must NEVER run:**
+**Claude / Codex must NEVER run:**
 - `git add`
 - `git commit`
 - `git push`
 - `git tag`
 
-This is enforced by `CLAUDE.md` at the project root.
+This is enforced by `CLAUDE.md` and `AGENTS.md` at the project root.
 
-## Claude Code Responsibilities (Detail)
+## Workflow References
+
+- `CLAUDE.md` = Claude workflow guide
+- `AGENTS.md` = Codex / agent workflow guide
+
+## Claude / Codex Responsibilities (Detail)
 
 ### Per-Step Cycle
 
 1. **Write code** — implement the feature or fix according to the task specification
-2. **Run build** — `./scripts/verify.sh` (API build + prisma validate + web build)
-3. **Docker verification** — `./scripts/docker-verify.sh` (full stack rebuild + health check)
-4. **Smoke test** — `./scripts/api-smoke-test.sh` (runtime API verification)
+2. **Run relevant verification** — choose the smallest safe verification set for the task
+3. **Avoid destructive Docker** — never run `docker compose down` or related destructive cleanup commands
+4. **Report verification clearly** — state what was run and what was intentionally skipped
 5. **CTO Summary** — produce a structured summary per `docs/CTO_SUMMARY_TEMPLATE.md`
 6. **Recommend commit message** — conventional commit format; user uses it verbatim or adapts
 
@@ -47,9 +53,9 @@ Every completed step produces:
 ## Recommended Commit Message
 ```
 
-A step is **PASS** only if all three verification scripts exit 0.
+A step is **PASS** only when the required verification for that task has passed. Docs-only tasks should use docs-only verification, not full product verification.
 
-## User + ChatGPT Responsibilities (Detail)
+## User And Reviewer Responsibilities
 
 After receiving a PASS CTO Summary:
 
@@ -59,6 +65,7 @@ After receiving a PASS CTO Summary:
 4. `git push` — when ready to push to remote
 5. `git tag` — for milestone releases
 6. Manage branches and PRs
+7. Review PASS / FAIL judgments from ChatGPT or other reviewers as part of the human sign-off loop
 
 ## Why This Split
 
@@ -67,9 +74,16 @@ After receiving a PASS CTO Summary:
 - The human can review the diff before committing even when Claude wrote the code
 - CTO Summaries create a paper trail for commit messages and PR descriptions
 
+## Docker Safety
+
+- Do not run `docker compose down`
+- Do not run destructive Docker cleanup commands
+- Limited inspection commands are acceptable when truly needed
+- Some task briefs may allow `docker compose up -d --build`, but that does not override the ban on destructive teardown
+
 ## Naming Conventions
 
-- Branches: `feature/<name>` (current: `feature/department-module`)
+- Branches are user-managed; do not assume the old `feature/department-module` baseline is current
 - Commit style: conventional commits (`feat:`, `fix:`, `docs:`, `chore:`)
 - Task numbering: T-016, T-017, … (incremental per feature step)
 

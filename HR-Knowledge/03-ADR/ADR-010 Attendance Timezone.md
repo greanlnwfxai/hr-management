@@ -10,10 +10,15 @@ Apply **Asia/Bangkok (UTC+7, permanently fixed)** for all business-rule evaluati
 
 | Clock-in time (Bangkok) | Status |
 |---|---|
-| ≤ 09:00:00 | PRESENT |
-| 09:00:01 or later | LATE |
+| ≤ 08:30:00 | PRESENT |
+| 08:30:01 or later | LATE |
 
-Exactly 09:00:00 = PRESENT. Strictly after 09:00 = LATE.
+Exactly 08:30:00 = PRESENT. Strictly after 08:30 = LATE.
+
+## Schedule Reference
+
+Current attendance schedule reference:
+- `08:30–17:30`
 
 ## Implementation
 
@@ -24,7 +29,7 @@ private isLateInBangkok(now: Date): boolean {
   const bangkokWallClock = new Date(now.getTime() + BANGKOK_OFFSET_MS);
   const hour = bangkokWallClock.getUTCHours();
   const minute = bangkokWallClock.getUTCMinutes();
-  return hour > 9 || (hour === 9 && minute > 0);
+  return hour > 8 || (hour === 8 && minute > 30);
 }
 ```
 

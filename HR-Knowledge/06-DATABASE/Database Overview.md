@@ -4,7 +4,11 @@
 
 **PostgreSQL 16** running as the `hr-db` container on port **5432**.
 
-Named volume `postgres_data` persists data across `docker compose down/up` cycles.
+Named volume `postgres_data` persists data across normal local runtime cycles.
+
+Safety note:
+- For Claude/Codex/agent workflow, destructive Docker commands such as `docker compose down`, `docker compose down -v`, prune, remove, or reset commands are not part of normal workflow.
+- If such a command is ever considered, it requires explicit user approval.
 
 ## ORM
 

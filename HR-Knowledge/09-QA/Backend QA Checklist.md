@@ -12,6 +12,10 @@ Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
 
 ## 2. Docker Health
 
+Historical backend v1 QA snapshot:
+- This checklist mirrors the original T-022 verification flow.
+- Current agent workflow rules may forbid destructive Docker verification even if the historical backend checklist references it.
+
 - [x] `./scripts/docker-verify.sh` exits 0
 - [x] `hr-db` container: healthy
 - [x] `hr-api` container: healthy
@@ -45,9 +49,9 @@ Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
 - [x] All protected routes require JWT
 - [x] `POST/PATCH/DELETE /employees` — SUPER_ADMIN/HR_ADMIN only
 - [x] `GET /attendance` admin list — SUPER_ADMIN/HR_ADMIN only
-- [x] `PATCH /leave/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN only
+- [x] `PATCH /leave/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN/MANAGER in current product state
 - [x] `GET /dashboard` — EMPLOYEE returns 403
-- [x] Known: MANAGER cannot access `GET /leave` (asymmetry with `/leave-balances`)
+- [x] Current: MANAGER can access `GET /leave` and approve/reject leave, but there is no manager-subordinate scoping
 
 ## 6. Ownership Checks
 
@@ -78,7 +82,9 @@ Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
 
 ## 9. Timezone Checks
 
-- [x] Attendance LATE rule: strictly after 09:00 Bangkok time
+- [x] Attendance LATE rule: strictly after 08:30 Bangkok time
+- [x] Exactly 08:30:00 Bangkok time = PRESENT
+- [x] Work schedule reference: 08:30–17:30
 - [x] Bangkok date computed by shifting UTC +7h
 - [x] Dashboard uses `todayBangkok()` with same offset
 - [ ] Known: `todayBangkok()` and `todayUtc()` diverge 17:00–23:59 UTC
@@ -106,7 +112,7 @@ Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
 |---|---|---|
 | 1 | LeaveType | ANNUAL and UNPAID not in schema |
 | 2 | LeaveType | UNPAID balance bypass not implemented |
-| 3 | RBAC | MANAGER cannot access `GET /leave` |
+| 3 | RBAC | MANAGER has broad leave visibility, but still no team-only scoping |
 | 4 | Absent | No automatic absent-marking |
 | 5 | rejectReason | Accepted in DTO, not persisted |
 | 6 | Security | JWT_SECRET = "change_me" |
@@ -114,7 +120,7 @@ Source: `docs/BACKEND_QA_CHECKLIST.md` (T-022 Backend Hardening & QA)
 | 8 | Security | DB credentials plaintext |
 | 9 | Balance | `totalDays` vs `entitledDays` naming |
 | 10 | Concurrency | Balance TOCTOU window |
-| 11 | Frontend | No UI implemented |
+| 11 | Audit Log | Specification exists, but no runtime implementation yet |
 
 ## Related Notes
 

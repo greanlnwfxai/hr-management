@@ -17,7 +17,7 @@ All ADRs are **Accepted** as of 2026-06-12 (Backend v1.0). Full documents live i
 | [[ADR-007 API Standards]] | API Design Standards | API | Plural nouns, paginated shape, ValidationPipe, select projections |
 | [[ADR-008 Deployment Strategy]] | Deployment Strategy | Infrastructure | Local/dev Docker Compose; cloud target deferred |
 | [[ADR-009 Development Harness]] | Development Harness and Manual Git | Process | Claude Code writes/verifies; user handles all git operations |
-| [[ADR-010 Attendance Timezone]] | Attendance Timezone Policy | Business Rules | Asia/Bangkok UTC+7 fixed; LATE if strictly after 09:00 Bangkok |
+| [[ADR-010 Attendance Timezone]] | Attendance Timezone Policy | Business Rules | Asia/Bangkok UTC+7 fixed; LATE if strictly after 08:30 Bangkok |
 | [[ADR-011 Leave Workflow]] | Leave Workflow and Balance Integration | Business Rules | Atomic approval+balance deduction; two tightly-integrated modules |
 | [[ADR-012 Backend v1 Readiness]] | Backend v1.0 Readiness | Process | Backend declared READY for local/dev; 3 items block production |
 

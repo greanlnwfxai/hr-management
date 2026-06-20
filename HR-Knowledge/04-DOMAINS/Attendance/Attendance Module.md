@@ -28,10 +28,14 @@ Tracks daily employee attendance via clock-in and clock-out. Evaluates whether a
 
 | Clock-in time (Asia/Bangkok, UTC+7) | Status |
 |---|---|
-| 09:00:00 or earlier | PRESENT |
-| 09:00:01 or later | LATE |
+| 08:30:00 or earlier | PRESENT |
+| 08:30:01 or later | LATE |
 
-Exactly 09:00:00 = PRESENT. Strictly after 09:00 = LATE.
+Exactly 08:30:00 = PRESENT. Strictly after 08:30 = LATE.
+
+### Schedule Reference
+
+- Current work schedule: `08:30–17:30`
 
 ### Timezone Implementation
 

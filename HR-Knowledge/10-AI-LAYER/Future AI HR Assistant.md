@@ -33,7 +33,8 @@ The HR-Knowledge vault is designed to serve as the **knowledge foundation** for 
 | Use Case | Example Query |
 |---|---|
 | Team overview | "Show me the dashboard summary." |
-| Balance monitoring | "Which employees in my team have low leave balances?" |
+| Leave decisions | "Which leave requests are pending approval?" |
+| Balance monitoring | "Which employees have low leave balances?" |
 
 ## RAG-Ready Knowledge Structure
 
@@ -66,11 +67,19 @@ The AI assistant should be aware of the user's role:
 
 ### 3. Knowledge Currency
 
-The AI assistant's knowledge is based on Backend v1.0 (2026-06-12). It should:
+The AI assistant's knowledge should now align with the current `v1.1.31` product state. It should:
 
-- Acknowledge known limitations (e.g., `ANNUAL`/`UNPAID` leave types not yet in schema)
+- Acknowledge known limitations (for example, audit log work is specification-only and not yet implemented)
 - Refer users to HR staff for actions it cannot perform
 - Indicate when a feature is planned but not yet implemented
+
+Examples of current-state knowledge it should know:
+- login supports username or email
+- web and mobile profile/password change flows exist
+- `mustChangePassword` is enforced in current web/mobile UX
+- mobile app includes Home, Attendance, Leave, Calendar, Profile, and Approvals flows
+- work schedule is `08:30–17:30` and late threshold is strictly after `08:30` Bangkok time
+- audit log is still spec-only via `docs/T057_AUDIT_LOG_FOUNDATION_SPEC.md`
 
 ### 4. Scope Boundaries
 

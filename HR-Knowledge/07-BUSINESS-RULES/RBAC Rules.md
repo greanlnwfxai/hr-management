@@ -6,7 +6,7 @@
 |---|---|
 | `SUPER_ADMIN` | Full system access — all operations across all modules |
 | `HR_ADMIN` | Manage employees, leave, attendance, balances; approve and reject leave |
-| `MANAGER` | Read-only visibility into operational data (balances, dashboard); cannot approve leave or manage employees |
+| `MANAGER` | Operational visibility plus leave approval/rejection access; still cannot manage employee master data |
 | `EMPLOYEE` | Self-service: clock in/out, view own attendance, submit and view own leave requests |
 
 ## Full RBAC Matrix
@@ -28,9 +28,9 @@
 | GET /attendance/:id | ✅ | ✅ | owner only | owner only |
 | POST /leave/request | ✅ | ✅ | ✅ | ✅ |
 | GET /leave/me | ✅ | ✅ | ✅ | ✅ |
-| GET /leave (admin list) | ✅ | ✅ | ❌ | ❌ |
+| GET /leave (admin list) | ✅ | ✅ | ✅ | ❌ |
 | GET /leave/:id | ✅ | ✅ | owner only | owner only |
-| PATCH /leave/:id/approve\|reject | ✅ | ✅ | ❌ | ❌ |
+| PATCH /leave/:id/approve\|reject | ✅ | ✅ | ✅ | ❌ |
 | POST /leave-balances | ✅ | ✅ | ❌ | ❌ |
 | GET /leave-balances/my | ✅ | ✅ | ✅ | ✅ |
 | GET /leave-balances (all) | ✅ | ✅ | ✅ | ❌ |
@@ -66,16 +66,15 @@ export class ResourceController {
 }
 ```
 
-## Known Asymmetry
+## Current Access Caveat
 
-MANAGER can view `GET /leave-balances` (all employee balances) but **cannot** view `GET /leave` (all leave requests). This inconsistency was documented during T-022 hardening and requires stakeholder clarification. No MANAGER department scoping exists — MANAGER sees all employees' data.
+MANAGER can now view `GET /leave` and approve/reject leave requests, but there is still **no manager-to-subordinate scoping**. A MANAGER can see organization-wide leave requests and leave balances, not only their direct reports.
 
 ## Known Limitations
 
 - No per-department scoping for MANAGER — MANAGER sees all balances, not just their team's
-- MANAGER role has limited utility currently (dashboard + balance list only)
+- No manager-team scoping for leave approvals or leave list access
 - Role changes require re-login (JWT carries the role at login time — changes take effect on next token)
-- MANAGER cannot access `GET /leave` (leave request admin list)
 
 ## Related ADRs
 

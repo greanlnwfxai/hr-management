@@ -17,6 +17,7 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 |---|---|---|---|---|
 | POST | /auth/login | ❌ | — | Login → `{ accessToken, user }` |
 | GET | /auth/me | ✅ | Any | Current user profile (no password) |
+| POST | /auth/change-password | ✅ | Any | Change current user password |
 
 ---
 
@@ -29,6 +30,9 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 | POST | /employees | ✅ | SUPER_ADMIN, HR_ADMIN | Create employee |
 | PATCH | /employees/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Update fields |
 | DELETE | /employees/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Soft delete (status=INACTIVE) |
+| GET | /employees/:id/account | ✅ | SUPER_ADMIN, HR_ADMIN | Read linked login account summary |
+| POST | /employees/:id/account | ✅ | SUPER_ADMIN, HR_ADMIN | Provision login account; returns one-time temporary password |
+| POST | /employees/:id/account/reset-password | ✅ | SUPER_ADMIN, HR_ADMIN | Reset linked account password; returns one-time temporary password |
 
 ---
 
@@ -60,7 +64,7 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 
 | Method | Path | Auth | Roles | Description |
 |---|---|---|---|---|
-| POST | /attendance/clock-in | ✅ | Any | Clock in (LATE if > 09:00 Bangkok) |
+| POST | /attendance/clock-in | ✅ | Any | Clock in (LATE if strictly after 08:30 Bangkok) |
 | POST | /attendance/clock-out | ✅ | Any | Clock out |
 | GET | /attendance/me | ✅ | Any | Own history (paginated) |
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All records (paginated) |
@@ -74,10 +78,10 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 |---|---|---|---|---|
 | POST | /leave/request | ✅ | Any | Submit leave (own employee) |
 | GET | /leave/me | ✅ | Any | Own requests (paginated) |
-| GET | /leave | ✅ | SUPER_ADMIN, HR_ADMIN | All requests (paginated) |
+| GET | /leave | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | All requests (paginated) |
 | GET | /leave/:id | ✅ | Any (owner or admin) | Single request |
-| PATCH | /leave/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve PENDING (deducts balance) |
-| PATCH | /leave/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject PENDING |
+| PATCH | /leave/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Approve PENDING (deducts balance) |
+| PATCH | /leave/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Reject PENDING |
 
 ---
 
@@ -129,6 +133,7 @@ LeaveStatus:      PENDING | APPROVED | REJECTED
 ## Related Notes
 
 - [[Backend v1 Architecture]]
+- [[Platform State v1.1.31]]
 - [[RBAC Rules]]
 - [[ADR-007 API Standards]]
 

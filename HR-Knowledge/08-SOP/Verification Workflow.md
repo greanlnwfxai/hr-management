@@ -1,14 +1,13 @@
 # Verification Workflow
 
-## Three-Script Gate
+## Verification Principle
 
-A step is declared **PASS** only when all three scripts exit 0, in this order:
+Use the **smallest relevant verification set** for the task.
 
-```
-1. ./scripts/verify.sh
-2. ./scripts/docker-verify.sh
-3. ./scripts/api-smoke-test.sh
-```
+- Product/backend changes may require build, runtime, or smoke verification.
+- Dependency changes may require `security-audit`.
+- Docs-only tasks should use docs-only verification.
+- Full security review is **not required for every task**.
 
 ## Script 1: verify.sh
 
@@ -17,7 +16,7 @@ A step is declared **PASS** only when all three scripts exit 0, in this order:
 2. Runs `npx prisma validate` — schema validation
 3. Runs `next build` in `apps/web` — frontend build
 
-**When to run:** After every code change before committing.
+**When to run:** Product code changes that affect API/web build behavior.
 
 **PASS criteria:** All three commands exit 0. No TypeScript errors. Schema valid. Frontend builds cleanly.
 
@@ -28,21 +27,18 @@ A step is declared **PASS** only when all three scripts exit 0, in this order:
 ## Script 2: docker-verify.sh
 
 **What it does:**
-1. `docker compose down` — stop and remove containers
-2. `docker compose build --no-cache` — full rebuild
-3. `docker compose up -d` — start all services
-4. Wait for health checks:
-   - `hr-db`: `pg_isready`
-   - `hr-api`: `GET /health` → `{"status":"ok"}`
-5. Assert all containers are `healthy` / `Up`
+1. Validates the Dockerized stack flow for runtime verification
+2. Rebuilds and starts services as defined by the script
+3. Waits for health checks
+4. Confirms expected healthy service state
 
-**When to run:** After `verify.sh` passes. Required before any commit that touches Docker-related files, Dockerfile, schema, or API startup configuration.
+**When to run:** Only when the task explicitly requires Docker/runtime verification and the task rules allow it.
 
 **PASS criteria:** All containers healthy. `GET /health` returns `{"status":"ok"}`.
 
 **What it catches:** Docker build failures, Prisma generate issues, container startup failures, environment variable problems.
 
-**Note:** Uses named volume `postgres_data`. Run `docker compose down -v` for a clean-slate test.
+**Safety note:** Some repository/task rules forbid destructive Docker commands such as `docker compose down`. Follow the active task brief and root workflow guidance before running any Docker verification.
 
 ---
 
@@ -65,13 +61,28 @@ A step is declared **PASS** only when all three scripts exit 0, in this order:
 | 11 | `GET /dashboard` | `employees.totalEmployees` present |
 | 12 | `GET /dashboard` (no token) | HTTP 401 |
 
-**When to run:** After `docker-verify.sh` passes. Requires a running Docker stack.
+**When to run:** After runtime verification when API behavior needs confirmation.
 
 **PASS criteria:** All 12 checks pass. Default admin: `admin@hr.local` / `admin1234`.
 
 **What it catches:** Runtime API failures, RBAC misconfigurations, module registration errors, missing routes.
 
 ---
+
+## Security Verification Guidance
+
+- `./scripts/security-audit.sh` is especially relevant when `package.json` or lockfiles change
+- `./scripts/secret-scan.sh` is available for local secret checks
+- `./scripts/security-review.sh` is reserved for security-sensitive work or when the task requires it
+- Docs-only tasks do not need the full security review flow
+
+## Docs-Only Verification
+
+For documentation-only tasks, a valid lightweight verification set can be:
+
+1. `git status --short`
+2. `git diff --check`
+3. manual markdown review
 
 ## Failure Response
 
@@ -80,8 +91,8 @@ If any script fails:
 1. **Do not commit.**
 2. Diagnose the failure — read the error output carefully.
 3. Fix the root cause (do not bypass with `--no-verify` or similar).
-4. Re-run the failed script and all subsequent scripts.
-5. Only declare PASS when all three exit 0.
+4. Re-run the failed verification and any downstream checks that depend on it.
+5. Only declare PASS when the required verification set is clean.
 
 ## Related ADRs
 

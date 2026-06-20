@@ -3,6 +3,11 @@
 Source: `docs/BACKEND_V1_READINESS.md` (T-022 Backend Hardening & QA)  
 Generated: 2026-06-12 | Branch: `feature/department-module`
 
+Historical snapshot note:
+- This note captures the backend v1 readiness decision at the time of T-022.
+- It should not be mistaken for the full current-platform status through `v1.1.31`.
+- For current product scope, see [[Platform State v1.1.31]].
+
 ## Verdict
 
 > **Backend v1.0: READY** for local/dev use. Production deployment requires hardening.
@@ -20,7 +25,7 @@ Generated: 2026-06-12 | Branch: `feature/department-module`
 | Leave Balance | Create, list, update, ownership-aware view | ✅ |
 | Dashboard | 19 parallel queries aggregated snapshot | ✅ |
 
-**Total: 30 endpoints + /health**
+**Historical backend v1 total: 30 endpoints + /health**
 
 ## Verification Status
 

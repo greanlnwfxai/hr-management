@@ -21,14 +21,29 @@ Ports **5433** and **6380** are not used by this stack.
 - **API runs in production mode** (`npm run start:prod`) — not `start:dev`. Catches compile errors.
 - **Health-gated startup**: db → api → web. The web container does not start until the API is healthy.
 - **`prisma generate` in builder stage**: The Dockerfile runs `npx prisma generate` in the builder and copies `node_modules` to the runner. Guarantees the Prisma Client (including enum objects) is present at runtime.
-- **Named volume `postgres_data`**: Persists data across `docker compose down/up`. Use `down -v` for a clean slate.
+- **Named volume `postgres_data`**: Persists data across normal local runtime use.
+
+## Current Agent Safety Overlay
+
+This ADR documents the original local-development architecture, but it does **not** override current workflow safety rules.
+
+For Claude/Codex/agent workflow:
+- `docker compose down` is forbidden unless the user explicitly asks
+- `docker compose down -v` is forbidden unless the user explicitly asks
+- prune, remove, reset, or destructive volume cleanup commands are forbidden unless the user explicitly asks
+
+Allowed Docker interaction should stay limited to non-destructive inspection or task-approved startup flows.
 
 ## Verification
 
 ```bash
-./scripts/docker-verify.sh   # teardown → rebuild → start → health check
+./scripts/docker-verify.sh   # historical backend v1 verification script
 ./scripts/api-smoke-test.sh  # login + all module list endpoints
 ```
+
+Safety note:
+- Because `docker-verify.sh` may perform teardown operations, do not treat it as an always-safe default in agent workflow.
+- Run it only when the active task rules allow it.
 
 ## Source
 

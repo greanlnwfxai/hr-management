@@ -12,6 +12,9 @@ A full-stack HR platform built for a single company. Covers:
 - Daily attendance with clock-in/clock-out
 - Leave request workflow with balance quota enforcement
 - Aggregated HR dashboard for administrators and managers
+- Web self-service profile/password change
+- Mobile self-service attendance, leave, calendar, profile, and manager approval
+- HR-managed login account lifecycle for employees
 
 ## Tech Stack
 
@@ -33,6 +36,17 @@ A full-stack HR platform built for a single company. Covers:
 | PostgreSQL | 5432 |
 | Redis | Not used yet |
 
+## Product State
+
+The system has moved beyond the original backend-first delivery and now includes:
+- API + PostgreSQL backend
+- Next.js web admin app
+- Expo mobile app
+- security harness and CI security automation
+- audit log foundation specification for future backend work
+
+See [[Platform State v1.1.31]] for the current product snapshot.
+
 ## Backend-First Strategy
 
 The project followed a **backend-first** approach:
@@ -43,36 +57,42 @@ The project followed a **backend-first** approach:
 
 See [[ADR Index]] → ADR-004 for the full rationale.
 
-## Backend v1.0 Status
+## Current Delivery State
 
-**COMPLETE** as of 2026-06-12.
-
-All 8 backend modules implemented, verified, and documented. 30 API endpoints across 8 modules. All three verification scripts pass.
-
-See [[Current Status]] for the full module list.
+The original backend v1.0 foundation is complete, and later milestones added:
+- username/email login
+- account provisioning and password reset flows
+- web profile/password change
+- mobile manager approval
+- forced `mustChangePassword` enforcement
+- mobile UI polish through T-056A
+- audit log foundation specification through T-057-prep
 
 ## ADR Status
 
 **12 ADRs completed** covering every major architectural decision. See [[ADR Index]].
 
-## Current Branch
+## Current Baseline
 
-`feature/department-module`
+- Latest known commit for synced knowledge baseline: `8ff00b7`
+- Latest tag: `v1.1.31-audit-log-foundation-spec`
 
 ## Development Workflow
 
 | Actor | Responsibilities |
 |---|---|
-| Claude Code | Write code, run builds, run tests, Docker verification, CTO Summary, recommend commit messages |
-| User + ChatGPT | `git add`, `git commit`, `git push`, `git tag`, branch management, PR review |
+| Claude / Codex | Implement scoped work, run non-destructive verification, write CTO-style summaries, recommend commit messages |
+| User | Own final git mutations, branch decisions, release actions |
+| ChatGPT reviewer | Review work and give PASS / FAIL guidance when used in the workflow |
 
-Claude Code **must never** run git mutations. See [[Development Workflow]].
+Claude/Codex **must never** run git mutations. See [[Development Workflow]].
 
 ## Related Notes
 
 - [[Current Status]]
+- [[Platform State v1.1.31]]
 - [[System Architecture]]
 - [[ADR Index]]
 - [[API Route Index]]
 
-#hr-management #backend-v1 #project-overview
+#hr-management #project-overview #v1-1-31

@@ -17,7 +17,7 @@ Each file in HR-Knowledge is a self-contained topic. Start with file-level chunk
 | `07-BUSINESS-RULES/RBAC Rules.md` | Four-role matrix, ownership checks | ~700 |
 | `04-DOMAINS/*/` | Per-module endpoints, rules, limitations | ~400–700 each |
 | `03-ADR/*/` | Architecture decisions with rationale | ~300–600 each |
-| `05-API/API Route Index.md` | All 30 endpoints | ~1000 |
+| `05-API/API Route Index.md` | Current API inventory | ~1000 |
 
 ### Secondary: Section-Level Chunking
 
@@ -36,8 +36,8 @@ Tag each chunk with:
   "domain": "business-rules",
   "tags": ["leave", "business-rules", "rag-ready"],
   "type": "business-rule",
-  "version": "backend-v1",
-  "last_updated": "2026-06-12"
+  "version": "v1.1.31",
+  "last_updated": "2026-06-20"
 }
 ```
 
