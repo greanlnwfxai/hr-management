@@ -10,12 +10,21 @@ import type {
   LeaveStatus as PrismaLeaveStatus,
   LeaveType as PrismaLeaveType,
 } from '@prisma/client';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { LeaveStatus, UserRole } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { ApproveLeaveRequestDto } from './dto/approve-leave-request.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { QueryLeaveRequestDto } from './dto/query-leave-request.dto';
 import { RejectLeaveRequestDto } from './dto/reject-leave-request.dto';
+
+export interface LeaveAuditContext {
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
 
 const LEAVE_SELECT = {
   id: true,
@@ -50,7 +59,10 @@ const LEAVE_SELECT = {
 
 @Injectable()
 export class LeaveService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLog: AuditLogService,
+  ) {}
 
   async create(userId: string, dto: CreateLeaveRequestDto) {
     const employeeId = await this.requireEmployeeId(userId);
@@ -144,7 +156,7 @@ export class LeaveService {
     return record;
   }
 
-  async approve(id: string, userId: string, _dto: ApproveLeaveRequestDto) {
+  async approve(id: string, userId: string, _dto: ApproveLeaveRequestDto, ctx?: LeaveAuditContext) {
     const record = await this.prisma.leaveRequest.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
     if ((record.status as string) !== LeaveStatus.PENDING) {
@@ -185,7 +197,7 @@ export class LeaveService {
     }
 
     // Atomic: deduct balance and approve in a single transaction.
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.leaveBalance.update({
         where: { id: balance.id },
         data: { usedDays: { increment: record.totalDays } },
@@ -201,9 +213,32 @@ export class LeaveService {
         select: LEAVE_SELECT,
       });
     });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'LEAVE_APPROVED',
+      targetType: 'LEAVE_REQUEST',
+      targetId: record.id,
+      targetLabel: record.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        leaveRequestId: record.id,
+        employeeId: record.employeeId,
+        leaveType: record.leaveType,
+        startDate: record.startDate,
+        endDate: record.endDate,
+        totalDays: record.totalDays,
+        status: 'APPROVED',
+      },
+    });
+
+    return result;
   }
 
-  async reject(id: string, userId: string, _dto: RejectLeaveRequestDto) {
+  async reject(id: string, userId: string, dto: RejectLeaveRequestDto, ctx?: LeaveAuditContext) {
     const record = await this.prisma.leaveRequest.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
     if ((record.status as string) !== LeaveStatus.PENDING) {
@@ -215,7 +250,7 @@ export class LeaveService {
       select: { id: true },
     });
 
-    return this.prisma.leaveRequest.update({
+    const result = await this.prisma.leaveRequest.update({
       where: { id },
       data: {
         status: LeaveStatus.REJECTED as unknown as PrismaLeaveStatus,
@@ -223,6 +258,38 @@ export class LeaveService {
       },
       select: LEAVE_SELECT,
     });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'LEAVE_REJECTED',
+      targetType: 'LEAVE_REQUEST',
+      targetId: record.id,
+      targetLabel: record.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        leaveRequestId: record.id,
+        employeeId: record.employeeId,
+        leaveType: record.leaveType,
+        startDate: record.startDate,
+        endDate: record.endDate,
+        totalDays: record.totalDays,
+        status: 'REJECTED',
+        hasRejectionReason: !!dto.rejectReason,
+      },
+    });
+
+    return result;
+  }
+
+  private async recordBestEffort(event: AuditLogEvent): Promise<void> {
+    try {
+      await this.auditLog.record(event);
+    } catch {
+      // best-effort: leave workflow is never blocked by audit failure
+    }
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

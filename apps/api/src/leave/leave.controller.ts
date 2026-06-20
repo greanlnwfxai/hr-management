@@ -7,8 +7,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -91,10 +93,16 @@ export class LeaveController {
   @ApiForbiddenResponse({ description: 'Insufficient role' })
   approve(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: ApproveLeaveRequestDto,
+    @Req() req: Request,
   ) {
-    return this.leave.approve(id, user.id, dto);
+    return this.leave.approve(id, user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Patch(':id/reject')
@@ -107,9 +115,15 @@ export class LeaveController {
   @ApiForbiddenResponse({ description: 'Insufficient role' })
   reject(
     @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string },
     @Body() dto: RejectLeaveRequestDto,
+    @Req() req: Request,
   ) {
-    return this.leave.reject(id, user.id, dto);
+    return this.leave.reject(id, user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 }

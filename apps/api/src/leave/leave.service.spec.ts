@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { LeaveService } from './leave.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
@@ -15,6 +16,7 @@ type PrismaMock = ReturnType<typeof mockPrisma> & {
 describe('LeaveService', () => {
   let service: LeaveService;
   let prisma: PrismaMock;
+  let mockAuditLog: { record: jest.Mock };
 
   const userId = 'user-uuid-1';
   const employeeId = 'emp-uuid-1';
@@ -45,11 +47,13 @@ describe('LeaveService', () => {
 
   beforeEach(async () => {
     prisma = mockPrisma() as PrismaMock;
+    mockAuditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         LeaveService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditLogService, useValue: mockAuditLog },
       ],
     }).compile();
 
@@ -283,6 +287,192 @@ describe('LeaveService', () => {
       prisma.leaveRequest.findUnique.mockResolvedValue({ ...pendingRecord, status: 'APPROVED' } as any);
 
       await expect(service.reject(leaveId, userId, {} as any)).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ── audit: approve ─────────────────────────────────────────────────────────
+
+  describe('audit: approve', () => {
+    const pendingRecord = {
+      ...mockLeaveRecord,
+      status: 'PENDING',
+      totalDays: 3,
+      startDate: new Date('2026-07-01'),
+      reason: 'Unwell',
+    };
+    const balance = { id: 'bal-uuid-1', totalDays: 10, usedDays: 2, employeeId };
+    const txMock = {
+      leaveBalance: { update: jest.fn().mockResolvedValue({}) },
+      leaveRequest: { update: jest.fn().mockResolvedValue({ ...mockLeaveRecord, status: 'APPROVED' }) },
+    };
+
+    const setupApproveSuccess = () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
+      prisma.leaveBalance.findUnique.mockResolvedValue(balance as any);
+      prisma.$transaction.mockImplementation((fn: any) => fn(txMock));
+    };
+
+    it('records LEAVE_APPROVED after successful approval', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'LEAVE_APPROVED', result: 'SUCCESS' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on LEAVE_APPROVED', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' }),
+      );
+    });
+
+    it('sets targetType to LEAVE_REQUEST on LEAVE_APPROVED', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'LEAVE_REQUEST' }),
+      );
+    });
+
+    it('sets targetId to leave request id on LEAVE_APPROVED', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: leaveId }),
+      );
+    });
+
+    it('sets result to SUCCESS on LEAVE_APPROVED', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata contains safe scalar fields only — no reason field', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      expect(call.metadata).toMatchObject({
+        leaveRequestId: leaveId,
+        employeeId,
+        leaveType: 'SICK',
+        totalDays: 3,
+        status: 'APPROVED',
+      });
+      expect(call.metadata).not.toHaveProperty('reason');
+    });
+
+    it('metadata does not contain the employee leave reason value even if reason is on the record', async () => {
+      setupApproveSuccess();
+      await service.approve(leaveId, userId, {} as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      const metadataValues = Object.values(call.metadata ?? {});
+      expect(metadataValues).not.toContain('Unwell');
+    });
+
+    it('still approves when audit write fails (best-effort)', async () => {
+      setupApproveSuccess();
+      mockAuditLog.record.mockRejectedValueOnce(new Error('DB down'));
+
+      const result = await service.approve(leaveId, userId, {} as any);
+
+      expect(result.status).toBe('APPROVED');
+    });
+  });
+
+  // ── audit: reject ──────────────────────────────────────────────────────────
+
+  describe('audit: reject', () => {
+    const pendingRecord = { ...mockLeaveRecord, status: 'PENDING', reason: 'Unwell' };
+
+    const setupRejectSuccess = () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
+      prisma.leaveRequest.update.mockResolvedValue({ ...mockLeaveRecord, status: 'REJECTED' } as any);
+    };
+
+    it('records LEAVE_REJECTED after successful rejection', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'LEAVE_REJECTED', result: 'SUCCESS' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on LEAVE_REJECTED', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'actor-uuid', actorRole: 'MANAGER' }),
+      );
+    });
+
+    it('sets targetType to LEAVE_REQUEST on LEAVE_REJECTED', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'LEAVE_REQUEST' }),
+      );
+    });
+
+    it('sets targetId to leave request id on LEAVE_REJECTED', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetId: leaveId }),
+      );
+    });
+
+    it('sets result to SUCCESS on LEAVE_REJECTED', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, {} as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata uses hasRejectionReason boolean instead of raw rejection reason', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, { rejectReason: 'sensitive text' } as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      expect(call.metadata.hasRejectionReason).toBe(true);
+      expect(call.metadata).not.toHaveProperty('rejectReason');
+    });
+
+    it('metadata does not contain raw rejection reason string value', async () => {
+      setupRejectSuccess();
+      await service.reject(leaveId, userId, { rejectReason: 'sensitive text' } as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      const metadataValues = Object.values(call.metadata ?? {});
+      expect(metadataValues).not.toContain('sensitive text');
+    });
+
+    it('still rejects when audit write fails (best-effort)', async () => {
+      setupRejectSuccess();
+      mockAuditLog.record.mockRejectedValueOnce(new Error('DB down'));
+
+      const result = await service.reject(leaveId, userId, {} as any);
+
+      expect(result.status).toBe('REJECTED');
     });
   });
 });

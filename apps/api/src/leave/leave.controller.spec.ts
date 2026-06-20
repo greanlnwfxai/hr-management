@@ -73,19 +73,29 @@ describe('LeaveController', () => {
     expect(result).toEqual(mockLeave);
   });
 
-  it('approve delegates to service with id, user.id, and dto', async () => {
+  it('approve delegates to service with id, user.id, dto, and audit context', async () => {
     const dto = {} as any;
-    const result = await controller.approve('leave-uuid-1', mockUser as any, dto);
+    const result = await controller.approve('leave-uuid-1', mockUser as any, dto, undefined as any);
 
-    expect(service.approve).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto);
+    expect(service.approve).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto, {
+      actorUserId: mockUser.id,
+      actorRole: mockUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
     expect(result).toMatchObject({ status: 'APPROVED' });
   });
 
-  it('reject delegates to service with id, user.id, and dto', async () => {
+  it('reject delegates to service with id, user.id, dto, and audit context', async () => {
     const dto = {} as any;
-    const result = await controller.reject('leave-uuid-1', mockUser as any, dto);
+    const result = await controller.reject('leave-uuid-1', mockUser as any, dto, undefined as any);
 
-    expect(service.reject).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto);
+    expect(service.reject).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto, {
+      actorUserId: mockUser.id,
+      actorRole: mockUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
     expect(result).toMatchObject({ status: 'REJECTED' });
   });
 });
