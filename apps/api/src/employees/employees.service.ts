@@ -7,6 +7,8 @@ import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 // Type-only import: erased at runtime, safe even if prisma generate hasn't run.
 import type { EmployeeStatus as PrismaEmployeeStatus, UserRole as PrismaUserRole } from '@prisma/client';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { generatePassword } from '../common/password.util';
 import { normalizeUsername } from '../common/username.util';
@@ -14,6 +16,13 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { QueryEmployeeDto } from './dto/query-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { ProvisionAccountDto } from './dto/provision-account.dto';
+
+export interface EmployeeAuditContext {
+  actorUserId?: string | null;
+  actorRole?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
 
 const EMPLOYEE_SELECT = {
   id: true,
@@ -34,7 +43,10 @@ const EMPLOYEE_SELECT = {
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private auditLog: AuditLogService,
+  ) {}
 
   async findAll(query: QueryEmployeeDto) {
     const { page = 1, limit = 20, search, status, departmentId, positionId } = query;
@@ -132,7 +144,7 @@ export class EmployeesService {
     });
   }
 
-  async provisionAccount(employeeId: string, dto: ProvisionAccountDto) {
+  async provisionAccount(employeeId: string, dto: ProvisionAccountDto, ctx?: EmployeeAuditContext) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: { id: true, userId: true },
@@ -183,7 +195,7 @@ export class EmployeesService {
       });
     }
 
-    return {
+    const response = {
       userId: user.id,
       employeeId,
       username: user.username,
@@ -192,6 +204,28 @@ export class EmployeesService {
       mustChangePassword: user.mustChangePassword,
       temporaryPassword,
     };
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'EMPLOYEE_ACCOUNT_PROVISIONED',
+      targetType: 'EMPLOYEE',
+      targetId: employeeId,
+      targetLabel: user.username ?? user.email ?? null,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        employeeId,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword,
+        hasTemporaryPassword: true,
+      },
+    });
+
+    return response;
   }
 
   async getAccount(employeeId: string) {
@@ -219,7 +253,7 @@ export class EmployeesService {
     return { account: user };
   }
 
-  async resetAccountPassword(employeeId: string) {
+  async resetAccountPassword(employeeId: string, ctx?: EmployeeAuditContext) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: { id: true, userId: true },
@@ -236,7 +270,7 @@ export class EmployeesService {
       select: { id: true, username: true, email: true, role: true },
     });
 
-    return {
+    const response = {
       userId: user.id,
       employeeId,
       username: user.username,
@@ -245,5 +279,34 @@ export class EmployeesService {
       mustChangePassword: true,
       temporaryPassword,
     };
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'EMPLOYEE_TEMP_PASSWORD_RESET',
+      targetType: 'EMPLOYEE',
+      targetId: employeeId,
+      targetLabel: user.username ?? user.email ?? null,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        employeeId,
+        username: user.username,
+        email: user.email,
+        mustChangePassword: true,
+        hasTemporaryPassword: true,
+      },
+    });
+
+    return response;
+  }
+
+  private async recordBestEffort(event: AuditLogEvent): Promise<void> {
+    try {
+      await this.auditLog.record(event);
+    } catch {
+      // best-effort: audit failures must not affect employee account operations
+    }
   }
 }

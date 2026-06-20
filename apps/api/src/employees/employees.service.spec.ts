@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
@@ -10,6 +11,7 @@ jest.mock('bcrypt');
 describe('EmployeesService', () => {
   let service: EmployeesService;
   let prisma: ReturnType<typeof mockPrisma>;
+  let mockAuditLog: { record: jest.Mock };
 
   const mockEmployee = {
     id: 'emp-uuid-1',
@@ -30,11 +32,13 @@ describe('EmployeesService', () => {
 
   beforeEach(async () => {
     prisma = mockPrisma();
+    mockAuditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         EmployeesService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AuditLogService, useValue: mockAuditLog },
       ],
     }).compile();
 
@@ -433,6 +437,205 @@ describe('EmployeesService', () => {
       prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
 
       await expect(service.resetAccountPassword('emp-uuid-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ── audit: provisionAccount ────────────────────────────────────────────────
+
+  describe('audit: provisionAccount', () => {
+    const provisionDto = { username: 'j.doe', role: 'EMPLOYEE' };
+    const mockNewUser = {
+      id: 'user-uuid-1',
+      email: 'emp_emp-uuid-1@hr.local',
+      username: 'j.doe',
+      role: 'EMPLOYEE',
+      mustChangePassword: true,
+    };
+
+    beforeEach(() => {
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed_password');
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue(mockNewUser as any);
+    });
+
+    it('records EMPLOYEE_ACCOUNT_PROVISIONED after successful account creation', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledTimes(1);
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'EMPLOYEE_ACCOUNT_PROVISIONED' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on EMPLOYEE_ACCOUNT_PROVISIONED', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any, {
+        actorUserId: 'admin-uuid-1',
+        actorRole: 'HR_ADMIN',
+      });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'admin-uuid-1', actorRole: 'HR_ADMIN' }),
+      );
+    });
+
+    it('sets targetType to EMPLOYEE and targetId to employee id', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'EMPLOYEE', targetId: 'emp-uuid-1' }),
+      );
+    });
+
+    it('sets result to SUCCESS on EMPLOYEE_ACCOUNT_PROVISIONED', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata contains safe fields only (username, email, role, mustChangePassword, hasTemporaryPassword)', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      expect(call.metadata).toMatchObject({
+        employeeId: 'emp-uuid-1',
+        username: 'j.doe',
+        mustChangePassword: true,
+        hasTemporaryPassword: true,
+      });
+    });
+
+    it('metadata does not contain password, hash, or token values', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      const keys = Object.keys(call.metadata ?? {}).map((k) => k.toLowerCase());
+      for (const forbidden of ['password', 'temporarypassword', 'temppassword', 'hash', 'token', 'accesstoken', 'refreshtoken', 'authorization']) {
+        expect(keys).not.toContain(forbidden);
+      }
+    });
+
+    it('still provisions account and returns result when audit write fails', async () => {
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.provisionAccount('emp-uuid-1', provisionDto as any);
+
+      expect(result.userId).toBe('user-uuid-1');
+      expect(result.temporaryPassword).toBeDefined();
+    });
+
+    it('passes ipAddress and userAgent from context to audit record', async () => {
+      await service.provisionAccount('emp-uuid-1', provisionDto as any, {
+        actorUserId: 'admin-uuid-1',
+        actorRole: 'HR_ADMIN',
+        ipAddress: '10.0.0.1',
+        userAgent: 'TestAgent/1.0',
+      });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ ipAddress: '10.0.0.1', userAgent: 'TestAgent/1.0' }),
+      );
+    });
+  });
+
+  // ── audit: resetAccountPassword ────────────────────────────────────────────
+
+  describe('audit: resetAccountPassword', () => {
+    const mockUpdatedUser = {
+      id: 'user-uuid-1',
+      username: 'j.doe',
+      email: 'j.doe@hr.local',
+      role: 'EMPLOYEE',
+    };
+
+    beforeEach(() => {
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new_hashed_password');
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser as any);
+    });
+
+    it('records EMPLOYEE_TEMP_PASSWORD_RESET after successful password reset', async () => {
+      await service.resetAccountPassword('emp-uuid-1');
+
+      expect(mockAuditLog.record).toHaveBeenCalledTimes(1);
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'EMPLOYEE_TEMP_PASSWORD_RESET' }),
+      );
+    });
+
+    it('sets actorUserId and actorRole from context on EMPLOYEE_TEMP_PASSWORD_RESET', async () => {
+      await service.resetAccountPassword('emp-uuid-1', {
+        actorUserId: 'admin-uuid-1',
+        actorRole: 'SUPER_ADMIN',
+      });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorUserId: 'admin-uuid-1', actorRole: 'SUPER_ADMIN' }),
+      );
+    });
+
+    it('sets targetType to EMPLOYEE and targetId to employee id', async () => {
+      await service.resetAccountPassword('emp-uuid-1');
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ targetType: 'EMPLOYEE', targetId: 'emp-uuid-1' }),
+      );
+    });
+
+    it('sets result to SUCCESS on EMPLOYEE_TEMP_PASSWORD_RESET', async () => {
+      await service.resetAccountPassword('emp-uuid-1');
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'SUCCESS' }),
+      );
+    });
+
+    it('metadata contains safe fields only (username, email, mustChangePassword, hasTemporaryPassword)', async () => {
+      await service.resetAccountPassword('emp-uuid-1');
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      expect(call.metadata).toMatchObject({
+        employeeId: 'emp-uuid-1',
+        username: 'j.doe',
+        email: 'j.doe@hr.local',
+        mustChangePassword: true,
+        hasTemporaryPassword: true,
+      });
+    });
+
+    it('metadata does not contain temporaryPassword, hash, or token values', async () => {
+      await service.resetAccountPassword('emp-uuid-1');
+
+      const call = mockAuditLog.record.mock.calls[0][0];
+      const keys = Object.keys(call.metadata ?? {}).map((k) => k.toLowerCase());
+      for (const forbidden of ['password', 'temporarypassword', 'temppassword', 'hash', 'token', 'accesstoken', 'refreshtoken', 'authorization']) {
+        expect(keys).not.toContain(forbidden);
+      }
+    });
+
+    it('still resets password and returns result when audit write fails', async () => {
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.resetAccountPassword('emp-uuid-1');
+
+      expect(result.userId).toBe('user-uuid-1');
+      expect(result.mustChangePassword).toBe(true);
+      expect(result.temporaryPassword).toBeDefined();
+    });
+
+    it('passes ipAddress and userAgent from context to audit record', async () => {
+      await service.resetAccountPassword('emp-uuid-1', {
+        actorUserId: 'admin-uuid-1',
+        actorRole: 'HR_ADMIN',
+        ipAddress: '192.168.1.5',
+        userAgent: 'Mozilla/5.0',
+      });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ ipAddress: '192.168.1.5', userAgent: 'Mozilla/5.0' }),
+      );
     });
   });
 });

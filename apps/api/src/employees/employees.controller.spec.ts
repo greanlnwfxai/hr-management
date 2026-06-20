@@ -13,6 +13,8 @@ describe('EmployeesController', () => {
     update: jest.Mock;
     remove: jest.Mock;
     getAccount: jest.Mock;
+    provisionAccount: jest.Mock;
+    resetAccountPassword: jest.Mock;
   };
 
   const mockEmployee = {
@@ -34,6 +36,24 @@ describe('EmployeesController', () => {
       update: jest.fn().mockResolvedValue(mockEmployee),
       remove: jest.fn().mockResolvedValue({ id: 'emp-uuid-1', status: 'INACTIVE' }),
       getAccount: jest.fn().mockResolvedValue({ account: null }),
+      provisionAccount: jest.fn().mockResolvedValue({
+        userId: 'user-uuid-1',
+        employeeId: 'emp-uuid-1',
+        username: 'j.doe',
+        email: 'j.doe@hr.local',
+        role: 'EMPLOYEE',
+        mustChangePassword: true,
+        temporaryPassword: 'TempPass123!',
+      }),
+      resetAccountPassword: jest.fn().mockResolvedValue({
+        userId: 'user-uuid-1',
+        employeeId: 'emp-uuid-1',
+        username: 'j.doe',
+        email: 'j.doe@hr.local',
+        role: 'EMPLOYEE',
+        mustChangePassword: true,
+        temporaryPassword: 'NewTemp456!',
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -95,5 +115,31 @@ describe('EmployeesController', () => {
 
     expect(service.getAccount).toHaveBeenCalledWith('emp-uuid-1');
     expect(result).toEqual({ account: null });
+  });
+
+  it('provisionAccount delegates to service with id, dto, and audit context', async () => {
+    const dto = { username: 'j.doe', role: 'EMPLOYEE' } as any;
+    const user = { id: 'admin-uuid-1', role: 'HR_ADMIN' } as Express.User;
+
+    const result = await controller.provisionAccount('emp-uuid-1', dto, user, undefined as any);
+
+    expect(service.provisionAccount).toHaveBeenCalledWith(
+      'emp-uuid-1',
+      dto,
+      { actorUserId: 'admin-uuid-1', actorRole: 'HR_ADMIN', ipAddress: null, userAgent: null },
+    );
+    expect(result).toMatchObject({ userId: 'user-uuid-1', temporaryPassword: 'TempPass123!' });
+  });
+
+  it('resetAccountPassword delegates to service with id and audit context', async () => {
+    const user = { id: 'admin-uuid-1', role: 'SUPER_ADMIN' } as Express.User;
+
+    const result = await controller.resetAccountPassword('emp-uuid-1', user, undefined as any);
+
+    expect(service.resetAccountPassword).toHaveBeenCalledWith(
+      'emp-uuid-1',
+      { actorUserId: 'admin-uuid-1', actorRole: 'SUPER_ADMIN', ipAddress: null, userAgent: null },
+    );
+    expect(result).toMatchObject({ userId: 'user-uuid-1', mustChangePassword: true });
   });
 });

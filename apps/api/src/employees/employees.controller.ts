@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -20,6 +22,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { UserRole } from '../common/enums';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -107,8 +110,16 @@ export class EmployeesController {
   provisionAccount(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ProvisionAccountDto,
+    @CurrentUser() user: Express.User,
+    @Req() req: Request,
   ) {
-    return this.employees.provisionAccount(id, dto);
+    const actor = user as { id: string; role: string };
+    return this.employees.provisionAccount(id, dto, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Post(':id/account/reset-password')
@@ -118,7 +129,17 @@ export class EmployeesController {
   @ApiResponse({ status: 201, description: 'Password reset — temporaryPassword shown once' })
   @ApiResponse({ status: 404, description: 'Employee or linked account not found' })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
-  resetAccountPassword(@Param('id', ParseUUIDPipe) id: string) {
-    return this.employees.resetAccountPassword(id);
+  resetAccountPassword(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: Express.User,
+    @Req() req: Request,
+  ) {
+    const actor = user as { id: string; role: string };
+    return this.employees.resetAccountPassword(id, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 }
