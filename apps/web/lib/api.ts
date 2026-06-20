@@ -474,6 +474,22 @@ export function updateLeaveBalance(id: string, body: { entitledDays?: number; us
 
 // ── Account Provisioning ──────────────────────────────────────────────────────
 
+export type EmployeeAccountInfo = {
+  id: string;
+  username: string | null;
+  email: string;
+  role: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  passwordGeneratedAt: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+} | null;
+
+export function getEmployeeAccount(employeeId: string) {
+  return apiFetch<{ account: EmployeeAccountInfo }>(`/employees/${employeeId}/account`);
+}
+
 export type ProvisionedAccount = {
   userId: string;
   employeeId: string;

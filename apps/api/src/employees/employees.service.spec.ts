@@ -324,6 +324,59 @@ describe('EmployeesService', () => {
     });
   });
 
+  // ── getAccount ─────────────────────────────────────────────────────────────
+
+  describe('getAccount', () => {
+    const mockUser = {
+      id: 'user-uuid-1',
+      username: 'j.doe',
+      email: 'j.doe@hr.local',
+      role: 'EMPLOYEE',
+      isActive: true,
+      mustChangePassword: false,
+      passwordGeneratedAt: null,
+      lastLoginAt: null,
+      createdAt: new Date(),
+    };
+
+    it('returns account info when employee has a linked user', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.findUnique.mockResolvedValue(mockUser as any);
+
+      const result = await service.getAccount('emp-uuid-1');
+
+      expect(result).toEqual({ account: mockUser });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'user-uuid-1' } }),
+      );
+    });
+
+    it('returns { account: null } when employee has no linked user', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: null } as any);
+
+      const result = await service.getAccount('emp-uuid-1');
+
+      expect(result).toEqual({ account: null });
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when employee does not exist', async () => {
+      prisma.employee.findUnique.mockResolvedValue(null);
+
+      await expect(service.getAccount('missing-id')).rejects.toThrow(NotFoundException);
+    });
+
+    it('never selects password field', async () => {
+      prisma.employee.findUnique.mockResolvedValue({ id: 'emp-uuid-1', userId: 'user-uuid-1' } as any);
+      prisma.user.findUnique.mockResolvedValue(mockUser as any);
+
+      await service.getAccount('emp-uuid-1');
+
+      const selectArg = (prisma.user.findUnique as jest.Mock).mock.calls[0][0].select;
+      expect(selectArg).not.toHaveProperty('password');
+    });
+  });
+
   // ── resetAccountPassword ───────────────────────────────────────────────────
 
   describe('resetAccountPassword', () => {

@@ -12,6 +12,7 @@ describe('EmployeesController', () => {
     create: jest.Mock;
     update: jest.Mock;
     remove: jest.Mock;
+    getAccount: jest.Mock;
   };
 
   const mockEmployee = {
@@ -32,6 +33,7 @@ describe('EmployeesController', () => {
       create: jest.fn().mockResolvedValue(mockEmployee),
       update: jest.fn().mockResolvedValue(mockEmployee),
       remove: jest.fn().mockResolvedValue({ id: 'emp-uuid-1', status: 'INACTIVE' }),
+      getAccount: jest.fn().mockResolvedValue({ account: null }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -86,5 +88,12 @@ describe('EmployeesController', () => {
 
     expect(service.remove).toHaveBeenCalledWith('emp-uuid-1');
     expect(result).toEqual({ id: 'emp-uuid-1', status: 'INACTIVE' });
+  });
+
+  it('getAccount delegates to service with id', async () => {
+    const result = await controller.getAccount('emp-uuid-1');
+
+    expect(service.getAccount).toHaveBeenCalledWith('emp-uuid-1');
+    expect(result).toEqual({ account: null });
   });
 });

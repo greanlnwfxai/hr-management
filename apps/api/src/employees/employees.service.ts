@@ -194,6 +194,31 @@ export class EmployeesService {
     };
   }
 
+  async getAccount(employeeId: string) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, userId: true },
+    });
+    if (!employee) throw new NotFoundException(`Employee ${employeeId} not found`);
+    if (!employee.userId) return { account: null };
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: employee.userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        isActive: true,
+        mustChangePassword: true,
+        passwordGeneratedAt: true,
+        lastLoginAt: true,
+        createdAt: true,
+      },
+    });
+    return { account: user };
+  }
+
   async resetAccountPassword(employeeId: string) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },

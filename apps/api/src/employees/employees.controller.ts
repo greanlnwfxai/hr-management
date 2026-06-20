@@ -85,6 +85,17 @@ export class EmployeesController {
     return this.employees.remove(id);
   }
 
+  @Get(':id/account')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Get linked login account info for an employee (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Account info or null if no account linked' })
+  @ApiResponse({ status: 404, description: 'Employee not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  getAccount(@Param('id', ParseUUIDPipe) id: string) {
+    return this.employees.getAccount(id);
+  }
+
   @Post(':id/account')
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
   @ApiOperation({ summary: 'Provision a login account for an employee (SUPER_ADMIN, HR_ADMIN)' })
