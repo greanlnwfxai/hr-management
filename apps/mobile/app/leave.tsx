@@ -4,7 +4,6 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,9 +12,12 @@ import {
 } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useLeave, LEAVE_TYPE_OPTIONS, leaveTypeLabel, leaveStatusLabel, leaveStatusColor } from '../src/hooks/useLeave';
 import type { LeaveType, LeaveBalanceRecord, LeaveRequestRecord } from '../src/api/types';
+import { MobileBottomNav, MobileScreenHeader } from '../src/components';
+import { canUseManagerApproval } from '../src/utils/roles';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,15 @@ function dateToIso(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function calculateLeaveDays(startDate: string, endDate: string): number | null {
+  if (!validateDateFormat(startDate) || !validateDateFormat(endDate)) return null;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (start > end) return null;
+  const diff = end.getTime() - start.getTime();
+  return Math.floor(diff / 86400000) + 1;
 }
 
 function DatePickerField({
@@ -209,6 +220,7 @@ function LeaveForm({
   const [errors, setErrors] = useState<FormErrors>({});
 
   const isSubmitting = submitState === 'submitting';
+  const leaveDays = calculateLeaveDays(form.startDate, form.endDate);
 
   function validate(): boolean {
     const errs: FormErrors = {};
@@ -295,6 +307,13 @@ function LeaveForm({
         error={errors.endDate}
         disabled={isSubmitting}
       />
+
+      <View style={styles.leaveDaysPreview}>
+        <Text style={styles.leaveDaysPreviewLabel}>จำนวนวันที่ลา</Text>
+        <Text style={styles.leaveDaysPreviewValue}>
+          {leaveDays ? `${leaveDays} วัน` : 'เลือกช่วงวันที่เพื่อคำนวณ'}
+        </Text>
+      </View>
 
       {/* Reason */}
       <View>
@@ -390,6 +409,7 @@ export default function LeaveScreen() {
   }, [isLoading, isAuthenticated, user?.mustChangePassword]);
 
   const isRefreshing = loadState === 'loading';
+  const canApprove = canUseManagerApproval(user?.role ?? '');
 
   async function handleSubmit(values: { leaveType: LeaveType; startDate: string; endDate: string; reason: string }) {
     await submitRequest({
@@ -401,7 +421,23 @@ export default function LeaveScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <MobileScreenHeader
+        title="Leave"
+        subtitle="จัดการสิทธิ์ลาและส่งคำขอ"
+        backHref="/home"
+        action={
+          canApprove ? (
+            <Pressable
+              style={({ pressed }) => [styles.headerAction, pressed && styles.pressed]}
+              onPress={() => router.push('/approvals')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.headerActionText}>Approvals</Text>
+            </Pressable>
+          ) : undefined
+        }
+      />
       <ScrollView
         contentContainerStyle={styles.scroll}
         refreshControl={
@@ -467,6 +503,7 @@ export default function LeaveScreen() {
         )}
 
       </ScrollView>
+      <MobileBottomNav />
     </SafeAreaView>
   );
 }
@@ -480,8 +517,8 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: 16,
-    gap: 14,
-    paddingBottom: 32,
+    gap: 16,
+    paddingBottom: 24,
   },
 
   // Card
@@ -614,9 +651,9 @@ const styles = StyleSheet.create({
   dateBtn: {
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
@@ -633,11 +670,24 @@ const styles = StyleSheet.create({
   calendarIcon: {
     fontSize: 16,
   },
-  datePicker: {
+  leaveDaysPreview: {
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#ffffff',
+    borderColor: '#dbeafe',
+    backgroundColor: '#f8fbff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  leaveDaysPreviewLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#1d4ed8',
+  },
+  leaveDaysPreviewValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
   inputMultiline: {
     minHeight: 80,
@@ -671,11 +721,13 @@ const styles = StyleSheet.create({
   },
   formBtnRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginTop: 4,
   },
   clearBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 120,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 10,
@@ -689,7 +741,8 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
   submitBtn: {
-    flex: 2,
+    flexGrow: 2,
+    flexBasis: 180,
     backgroundColor: '#1a56db',
     borderRadius: 10,
     paddingVertical: 12,
@@ -774,6 +827,20 @@ const styles = StyleSheet.create({
   retryText: {
     fontSize: 13,
     fontWeight: '500',
+    color: '#1a56db',
+  },
+
+  headerAction: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  headerActionText: {
+    fontSize: 12,
+    fontWeight: '700',
     color: '#1a56db',
   },
 

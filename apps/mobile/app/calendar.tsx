@@ -2,16 +2,17 @@ import { useEffect } from 'react';
 import {
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import type { AttendanceStatus } from '../src/api/types';
+import { MobileBottomNav, MobileScreenHeader } from '../src/components';
 
 const THAI_DAY_NAMES = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 const THAI_MONTH_ABBR = [
@@ -73,7 +74,12 @@ export default function CalendarScreen() {
   const isRefreshing = loadState === 'loading';
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
+      <MobileScreenHeader
+        title="Calendar"
+        subtitle={`ภาพรวมเดือน ${THAI_MONTH_ABBR[month]} ${yearBE}`}
+        backHref="/home"
+      />
       {/* ── Tab header ─────────────────────────────────────────────── */}
       <View style={styles.tabHeader}>
         <View style={styles.tabActive}>
@@ -87,6 +93,7 @@ export default function CalendarScreen() {
 
       <ScrollView
         style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
         }
@@ -117,11 +124,24 @@ export default function CalendarScreen() {
           <View key={wi} style={styles.weekRow}>
             {week.map((day, di) => {
               const isToday = day === todayDate;
+              const isWeekendCell = di === 0 || di === 6;
               const dot = day ? dotMap.get(day) : undefined;
               return (
                 <View key={di} style={styles.calCell}>
-                  <View style={[styles.calDayCircle, isToday && styles.calDayCircleToday]}>
-                    <Text style={[styles.calDayText, isToday && styles.calDayTextToday]}>
+                  <View
+                    style={[
+                      styles.calDayCircle,
+                      isWeekendCell && styles.calDayCircleWeekend,
+                      isToday && styles.calDayCircleToday,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.calDayText,
+                        isWeekendCell && styles.calDayTextWeekend,
+                        isToday && styles.calDayTextToday,
+                      ]}
+                    >
                       {day !== null ? String(day) : ''}
                     </Text>
                   </View>
@@ -154,7 +174,7 @@ export default function CalendarScreen() {
               <Text style={styles.scheduleDayType}>
                 {isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน'}
               </Text>
-              <Text style={styles.scheduleTime}>08:30-17:30</Text>
+              <Text style={styles.scheduleTime}>08:30–17:30</Text>
               <Text style={styles.scheduleStatus}>
                 {`เข้า ${formatTime(today?.checkIn)}  ออก ${formatTime(today?.checkOut)}`}
               </Text>
@@ -173,18 +193,21 @@ export default function CalendarScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      <MobileBottomNav />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#1a56db' },
+  root: { flex: 1, backgroundColor: '#f8f9fa' },
   scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
 
   // Tab header
   tabHeader: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    backgroundColor: '#1a56db',
   },
   tab: {
     paddingHorizontal: 16,
@@ -213,10 +236,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 16,
+    paddingBottom: 18,
   },
   monthHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  monthIcon: { fontSize: 20 },
+  monthIcon: { fontSize: 18 },
   monthTitle: { fontSize: 20, fontWeight: '700', color: '#ffffff' },
   monthChevron: { fontSize: 14, color: '#e0e7ff', fontWeight: '700' },
   filterIcon: { fontSize: 18, color: '#ffffff' },
@@ -224,8 +247,9 @@ const styles = StyleSheet.create({
   // Day names row
   dayNamesRow: {
     flexDirection: 'row',
-    paddingHorizontal: 4,
-    paddingBottom: 4,
+    paddingHorizontal: 10,
+    paddingBottom: 8,
+    backgroundColor: '#1a56db',
   },
   dayNameCell: { flex: 1, alignItems: 'center' },
   dayName: {
@@ -238,21 +262,31 @@ const styles = StyleSheet.create({
   // Calendar grid
   weekRow: {
     flexDirection: 'row',
-    paddingHorizontal: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#1a56db',
   },
-  calCell: { flex: 1, alignItems: 'center', paddingVertical: 5 },
+  calCell: { flex: 1, alignItems: 'center', paddingVertical: 7 },
   calDayCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  calDayCircleToday: { backgroundColor: '#ffffff' },
+  calDayCircleWeekend: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  calDayCircleToday: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   calDayText: { fontSize: 14, color: '#ffffff', fontWeight: '400' },
+  calDayTextWeekend: { color: '#dbeafe' },
   calDayTextToday: { fontWeight: '800', fontSize: 15, color: '#1a56db' },
-  calDot: { width: 6, height: 6, borderRadius: 3, marginTop: 2 },
-  calDotSpace: { width: 6, height: 6, marginTop: 2 },
+  calDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4, opacity: 0.9 },
+  calDotSpace: { width: 6, height: 6, marginTop: 4 },
 
   // White content below calendar
   contentSection: {
@@ -261,7 +295,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     marginTop: 16,
     padding: 20,
-    gap: 14,
+    gap: 16,
     minHeight: 320,
   },
   sectionTitle: {
@@ -273,7 +307,7 @@ const styles = StyleSheet.create({
   // Schedule card
   scheduleCard: {
     backgroundColor: '#f3f4f6',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -285,10 +319,15 @@ const styles = StyleSheet.create({
   scheduleBody: { flex: 1, gap: 4 },
   scheduleDayType: { fontSize: 14, fontWeight: '600', color: '#111827' },
   scheduleTime: { fontSize: 13, color: '#6b7280' },
-  scheduleStatus: { fontSize: 12, color: '#9ca3af' },
+  scheduleStatus: { fontSize: 12, color: '#6b7280' },
   scheduleArrow: { fontSize: 22, color: '#9ca3af' },
 
   // Empty requests
-  emptyRequest: { paddingVertical: 12, alignItems: 'center' },
+  emptyRequest: {
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
+  },
   emptyRequestText: { fontSize: 13, color: '#9ca3af' },
 });

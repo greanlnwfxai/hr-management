@@ -2,16 +2,16 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useProfile } from '../src/hooks/useProfile';
 import { roleLabel } from '../src/utils/roles';
+import { MobileBottomNav, MobileScreenHeader } from '../src/components';
 
 interface Banner {
   type: 'success' | 'error';
@@ -59,7 +59,6 @@ function PasswordInput({
 }
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const { loadState, profile, error, actionLoading, refresh, changePassword } = useProfile();
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -104,21 +103,13 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <MobileScreenHeader
+        title="Profile"
+        subtitle="ข้อมูลบัญชีและการตั้งค่ารหัสผ่าน"
+        backHref="/home"
+      />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        {/* ── Header ──────────────────────────────────────────────────── */}
-        <View style={styles.header}>
-          <Pressable
-            style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
-            onPress={() => router.back()}
-            accessibilityRole="button"
-            accessibilityLabel="กลับ"
-          >
-            <Text style={styles.backBtnText}>← กลับ</Text>
-          </Pressable>
-          <Text style={styles.pageTitle}>โปรไฟล์ของฉัน</Text>
-        </View>
-
         {/* ── Loading state ────────────────────────────────────────────── */}
         {loadState === 'loading' && (
           <View style={styles.centerBox}>
@@ -299,6 +290,7 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      <MobileBottomNav />
     </SafeAreaView>
   );
 }
@@ -319,8 +311,8 @@ const styles = StyleSheet.create({
   },
   scroll: {
     padding: 16,
-    gap: 14,
-    paddingBottom: 40,
+    gap: 16,
+    paddingBottom: 24,
   },
   centerBox: {
     flex: 1,
@@ -332,32 +324,6 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: '#6b7280',
-  },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 4,
-  },
-  backBtn: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: '#ffffff',
-  },
-  backBtnText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-  },
-  pageTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
   },
 
   // Card

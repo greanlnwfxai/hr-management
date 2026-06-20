@@ -3,17 +3,18 @@ import {
   ActivityIndicator,
   Pressable,
   RefreshControl,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import type { AttendanceRecord, AttendanceStatus } from '../src/api/types';
 import type { ClockActionState } from '../src/hooks/useAttendance';
+import { MobileBottomNav } from '../src/components';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,13 @@ function statusColor(status: AttendanceStatus): string {
 
 // ─── Timeline header ──────────────────────────────────────────────────────────
 
-function AttendanceHeader({ today }: { today: AttendanceRecord | null }) {
+function AttendanceHeader({
+  today,
+  onProfilePress,
+}: {
+  today: AttendanceRecord | null;
+  onProfilePress: () => void;
+}) {
   const now = new Date();
   const dow = now.getDay();
   const isWeekend = dow === 0 || dow === 6;
@@ -71,6 +78,20 @@ function AttendanceHeader({ today }: { today: AttendanceRecord | null }) {
 
   return (
     <View style={hdr.container}>
+      <View style={hdr.topRow}>
+        <View>
+          <Text style={hdr.screenTitle}>Attendance</Text>
+          <Text style={hdr.screenSubtitle}>08:30–17:30 workday overview</Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [hdr.profileShortcut, pressed && styles.pressed]}
+          onPress={onProfilePress}
+          accessibilityRole="button"
+        >
+          <Text style={hdr.profileShortcutText}>Profile</Text>
+        </Pressable>
+      </View>
+
       {/* Time timeline */}
       <View style={hdr.timeline}>
         {/* Labels row */}
@@ -112,6 +133,16 @@ function AttendanceHeader({ today }: { today: AttendanceRecord | null }) {
       {/* Day type + date */}
       <Text style={hdr.dayType}>{dayType}</Text>
       <Text style={hdr.fullDate}>{fullDate}</Text>
+      <View style={hdr.summaryRow}>
+        <View style={hdr.summaryPill}>
+          <Text style={hdr.summaryLabel}>เช็คอิน</Text>
+          <Text style={hdr.summaryValue}>{inTime}</Text>
+        </View>
+        <View style={hdr.summaryPill}>
+          <Text style={hdr.summaryLabel}>เช็คเอาท์</Text>
+          <Text style={hdr.summaryValue}>{outTime}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -339,9 +370,9 @@ export default function AttendanceScreen() {
   const isRefreshing = loadState === 'loading';
 
   return (
-    <SafeAreaView style={styles.root}>
+    <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       {/* ── Attendance header (blue) ─────────────────────────────────── */}
-      <AttendanceHeader today={today} />
+      <AttendanceHeader today={today} onProfilePress={() => router.push('/profile')} />
 
       {/* ── Tab bar ─────────────────────────────────────────────────── */}
       <View style={styles.tabBar}>
@@ -439,6 +470,7 @@ export default function AttendanceScreen() {
           </View>
         )}
       </ScrollView>
+      <MobileBottomNav />
     </SafeAreaView>
   );
 }
@@ -451,7 +483,34 @@ const hdr = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
-    gap: 10,
+    gap: 12,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  screenTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  screenSubtitle: {
+    fontSize: 12,
+    color: '#bfdbfe',
+    marginTop: 2,
+  },
+  profileShortcut: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  profileShortcutText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
   },
   timeline: { gap: 8 },
   timelineLabels: {
@@ -522,12 +581,39 @@ const hdr = StyleSheet.create({
     fontSize: 13,
     color: '#e0e7ff',
   },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  summaryPill: {
+    flexGrow: 1,
+    minWidth: 128,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    gap: 2,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#bfdbfe',
+    fontWeight: '600',
+  },
+  summaryValue: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '700',
+  },
 });
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f0f2f5' },
   scroll: { flex: 1, backgroundColor: '#f0f2f5' },
-  scrollContent: { padding: 16, gap: 14, paddingBottom: 32 },
+  scrollContent: { padding: 16, gap: 16, paddingBottom: 24 },
 
   // Tab bar
   tabBar: {
@@ -587,9 +673,11 @@ const styles = StyleSheet.create({
   clockRow: {
     flexDirection: 'row',
     gap: 12,
+    flexWrap: 'wrap',
   },
   clockBtn: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 148,
     borderRadius: 100,
     paddingVertical: 18,
     paddingHorizontal: 12,
@@ -677,11 +765,11 @@ const styles = StyleSheet.create({
   timelineCard: {
     flex: 1,
     backgroundColor: '#f9fafb',
-    borderRadius: 10,
-    padding: 12,
-    gap: 4,
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: '#eef2f7',
   },
   timelineCardHeader: {
     flexDirection: 'row',
