@@ -1,6 +1,7 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -28,8 +29,11 @@ export class AuthController {
   })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   @ApiResponse({ status: 429, description: 'Too many login attempts' })
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.auth.login(dto, {
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Get('me')
@@ -67,7 +71,11 @@ export class AuthController {
   changePassword(
     @CurrentUser() user: Express.User,
     @Body() dto: ChangePasswordDto,
+    @Req() req: Request,
   ) {
-    return this.auth.changePassword((user as { id: string }).id, dto);
+    return this.auth.changePassword((user as { id: string }).id, dto, {
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 }

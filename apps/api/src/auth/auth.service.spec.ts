@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuthService } from './auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
@@ -12,6 +13,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let prisma: ReturnType<typeof mockPrisma>;
   let jwtService: { signAsync: jest.Mock };
+  let mockAuditLog: { record: jest.Mock };
 
   const mockUser = {
     id: 'user-uuid-1',
@@ -27,12 +29,14 @@ describe('AuthService', () => {
   beforeEach(async () => {
     prisma = mockPrisma();
     jwtService = { signAsync: jest.fn().mockResolvedValue('mock.jwt.token') };
+    mockAuditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: JwtService, useValue: jwtService },
+        { provide: AuditLogService, useValue: mockAuditLog },
       ],
     }).compile();
 
@@ -156,6 +160,163 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: mockUser.email, password: 'admin1234' }),
       ).rejects.toThrow(new UnauthorizedException('Invalid credentials'));
+    });
+
+    // ── audit: login success ──────────────────────────────────────────────────
+
+    it('records AUTH_LOGIN_SUCCESS audit event on successful login', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await service.login({ email: mockUser.email, password: 'admin1234' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'AUTH_LOGIN_SUCCESS',
+          result: 'SUCCESS',
+          targetType: 'AUTH',
+        }),
+      );
+    });
+
+    it('sets actorUserId and actorRole on login success audit', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await service.login({ email: mockUser.email, password: 'admin1234' });
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorUserId: mockUser.id,
+          actorRole: mockUser.role,
+          targetId: mockUser.id,
+        }),
+      );
+    });
+
+    it('does not include password or token in login success audit metadata', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await service.login({ email: mockUser.email, password: 'admin1234' });
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.metadata).not.toHaveProperty('password');
+      expect(recorded.metadata).not.toHaveProperty('token');
+      expect(recorded.metadata).not.toHaveProperty('accessToken');
+      expect(recorded.metadata).not.toHaveProperty('passwordHash');
+    });
+
+    it('includes loginIdentifierType and mustChangePassword in login success metadata', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      await service.login({ email: mockUser.email, password: 'admin1234' });
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.metadata).toMatchObject({
+        loginIdentifierType: 'email',
+        mustChangePassword: false,
+      });
+    });
+
+    // ── audit: login failure ──────────────────────────────────────────────────
+
+    it('records AUTH_LOGIN_FAILURE audit event when user is not found', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await service.login({ email: 'nobody@hr.local', password: 'pw' }).catch(() => {});
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'AUTH_LOGIN_FAILURE',
+          result: 'FAILURE',
+        }),
+      );
+    });
+
+    it('records AUTH_LOGIN_FAILURE audit event when password is wrong', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await service.login({ email: mockUser.email, password: 'wrong' }).catch(() => {});
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'AUTH_LOGIN_FAILURE',
+          result: 'FAILURE',
+        }),
+      );
+    });
+
+    it('sets actorUserId to null on all login failure audit events', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await service.login({ email: 'nobody@hr.local', password: 'pw' }).catch(() => {});
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.actorUserId).toBeNull();
+      expect(recorded.actorRole).toBeNull();
+      expect(recorded.targetId).toBeNull();
+      expect(recorded.targetLabel).toBeNull();
+    });
+
+    it('user-not-found and wrong-password failure audits have identical shape', async () => {
+      // user not found path
+      prisma.user.findFirst.mockResolvedValue(null);
+      await service.login({ email: 'nobody@hr.local', password: 'pw' }).catch(() => {});
+      const notFoundAudit = mockAuditLog.record.mock.calls[0][0];
+
+      jest.clearAllMocks();
+
+      // wrong password path
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+      await service.login({ email: mockUser.email, password: 'wrong' }).catch(() => {});
+      const wrongPwAudit = mockAuditLog.record.mock.calls[0][0];
+
+      // payload must be identical in all sensitive fields to prevent enumeration
+      expect(notFoundAudit.actorUserId).toBe(wrongPwAudit.actorUserId);
+      expect(notFoundAudit.targetId).toBe(wrongPwAudit.targetId);
+      expect(notFoundAudit.targetLabel).toBe(wrongPwAudit.targetLabel);
+      expect(notFoundAudit.result).toBe(wrongPwAudit.result);
+      expect(notFoundAudit.metadata?.reason).toBe(wrongPwAudit.metadata?.reason);
+    });
+
+    it('does not include password or raw credentials in login failure audit metadata', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await service.login({ email: 'nobody@hr.local', password: 'pw' }).catch(() => {});
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.metadata).not.toHaveProperty('password');
+      expect(recorded.metadata).not.toHaveProperty('token');
+      expect(recorded.metadata).not.toHaveProperty('currentPassword');
+      expect(recorded.metadata).not.toHaveProperty('newPassword');
+    });
+
+    it('still throws UnauthorizedException when audit write fails during login failure', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      mockAuditLog.record.mockRejectedValue(new Error('DB audit error'));
+
+      await expect(
+        service.login({ email: 'nobody@hr.local', password: 'pw' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('still returns result when audit write fails during login success', async () => {
+      prisma.user.findFirst.mockResolvedValue(mockUser as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      mockAuditLog.record.mockRejectedValue(new Error('DB audit error'));
+
+      const result = await service.login({ email: mockUser.email, password: 'admin1234' });
+
+      expect(result.accessToken).toBe('mock.jwt.token');
     });
   });
 
@@ -296,6 +457,85 @@ describe('AuthService', () => {
       const result = await service.changePassword(userId, dto);
 
       expect((result as any).password).toBeUndefined();
+    });
+
+    // ── audit: password change ────────────────────────────────────────────────
+
+    it('records AUTH_PASSWORD_CHANGE audit event on successful password change', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: userId, password: '$2b$10$hash', role: 'EMPLOYEE', email: 'user@hr.local', username: 'user' } as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$10$newhash');
+
+      await service.changePassword(userId, dto);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'AUTH_PASSWORD_CHANGE',
+          result: 'SUCCESS',
+          targetType: 'USER',
+          actorUserId: userId,
+        }),
+      );
+    });
+
+    it('includes actorUserId and actorRole in password change audit', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: userId, password: '$2b$10$hash', role: 'SUPER_ADMIN', email: 'admin@hr.local', username: 'admin' } as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$10$newhash');
+
+      await service.changePassword(userId, dto);
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.actorUserId).toBe(userId);
+      expect(recorded.actorRole).toBe('SUPER_ADMIN');
+    });
+
+    it('does not include password values in password change audit metadata', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: userId, password: '$2b$10$hash', role: 'EMPLOYEE' } as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$10$newhash');
+
+      await service.changePassword(userId, dto);
+
+      const recorded = mockAuditLog.record.mock.calls[0][0];
+      expect(recorded.metadata).not.toHaveProperty('password');
+      expect(recorded.metadata).not.toHaveProperty('currentPassword');
+      expect(recorded.metadata).not.toHaveProperty('newPassword');
+      expect(recorded.metadata).not.toHaveProperty('confirmPassword');
+      expect(recorded.metadata).not.toHaveProperty('passwordHash');
+      expect(recorded.metadata).not.toHaveProperty('hash');
+    });
+
+    it('does not record audit on failed password change', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: userId, password: '$2b$10$hash' } as any);
+      (bcrypt.compare as jest.Mock).mockResolvedValueOnce(false); // wrong current password
+
+      await service.changePassword(userId, dto).catch(() => {});
+
+      expect(mockAuditLog.record).not.toHaveBeenCalled();
+    });
+
+    it('still returns success when audit write fails during password change', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: userId, password: '$2b$10$hash', role: 'EMPLOYEE' } as any);
+      prisma.user.update.mockResolvedValue({} as any);
+      (bcrypt.compare as jest.Mock)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$10$newhash');
+      mockAuditLog.record.mockRejectedValue(new Error('DB audit error'));
+
+      const result = await service.changePassword(userId, dto);
+
+      expect(result).toEqual({ success: true, mustChangePassword: false });
     });
   });
 });

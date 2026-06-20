@@ -46,14 +46,14 @@ describe('AuthController', () => {
     it('delegates to auth service and returns result', async () => {
       const dto = { email: 'admin@hr.local', password: 'admin1234' };
 
-      const result = await controller.login(dto);
+      const result = await controller.login(dto as any, undefined as any);
 
-      expect(authService.login).toHaveBeenCalledWith(dto);
+      expect(authService.login).toHaveBeenCalledWith(dto, { ipAddress: null, userAgent: null });
       expect(result).toEqual(mockLoginResult);
     });
 
     it('returns an object with accessToken and user', async () => {
-      const result = await controller.login({ email: 'admin@hr.local', password: 'admin1234' });
+      const result = await controller.login({ email: 'admin@hr.local', password: 'admin1234' } as any, undefined as any);
 
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('user');
@@ -90,9 +90,9 @@ describe('AuthController', () => {
         confirmPassword: 'NewPass1!',
       };
 
-      const result = await controller.changePassword(user, dto as any);
+      const result = await controller.changePassword(user, dto as any, undefined as any);
 
-      expect(authService.changePassword).toHaveBeenCalledWith('user-uuid-1', dto);
+      expect(authService.changePassword).toHaveBeenCalledWith('user-uuid-1', dto, { ipAddress: null, userAgent: null });
       expect(result).toEqual({ success: true, mustChangePassword: false });
     });
   });
