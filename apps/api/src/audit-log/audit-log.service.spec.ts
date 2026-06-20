@@ -274,4 +274,153 @@ describe('AuditLogService', () => {
       expect(data.metadata.reason).toBeNull();
     });
   });
+
+  // ── findAll ─────────────────────────────────────────────────────────────────
+
+  describe('findAll', () => {
+    const mockRows = [{ id: 'log-1', action: 'AUTH_LOGIN_SUCCESS' }];
+
+    it('uses default page 1 and limit 20 when not provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      const result = await service.findAll({});
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.skip).toBe(0);
+      expect(call.take).toBe(20);
+      expect(result.meta.page).toBe(1);
+      expect(result.meta.limit).toBe(20);
+    });
+
+    it('applies page and limit to skip and take', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ page: 3, limit: 10 });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.skip).toBe(20);
+      expect(call.take).toBe(10);
+    });
+
+    it('orders results by createdAt descending', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({});
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.orderBy).toEqual({ createdAt: 'desc' });
+    });
+
+    it('filters by action when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ action: 'AUTH_LOGIN_SUCCESS' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.action).toBe('AUTH_LOGIN_SUCCESS');
+    });
+
+    it('filters by targetType when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ targetType: 'EMPLOYEE' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.targetType).toBe('EMPLOYEE');
+    });
+
+    it('filters by targetId when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ targetId: 'emp-uuid-1' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.targetId).toBe('emp-uuid-1');
+    });
+
+    it('filters by actorUserId when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ actorUserId: 'user-uuid-1' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.actorUserId).toBe('user-uuid-1');
+    });
+
+    it('filters by actorRole when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ actorRole: 'HR_ADMIN' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.actorRole).toBe('HR_ADMIN');
+    });
+
+    it('filters by result when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ result: 'SUCCESS' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.result).toBe('SUCCESS');
+    });
+
+    it('filters by dateFrom as createdAt gte', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ dateFrom: '2026-01-01' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.createdAt).toEqual({ gte: new Date('2026-01-01') });
+    });
+
+    it('filters by dateTo as createdAt lte', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({ dateTo: '2026-06-30' });
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where.createdAt).toEqual({ lte: new Date('2026-06-30') });
+    });
+
+    it('returns data and meta with total, page, limit, and totalPages', async () => {
+      prisma.$transaction.mockResolvedValue([mockRows, 45]);
+
+      const result = await service.findAll({ page: 2, limit: 20 });
+
+      expect(result.data).toEqual(mockRows);
+      expect(result.meta).toEqual({ total: 45, page: 2, limit: 20, totalPages: 3 });
+    });
+
+    it('omits unset filter fields from the where clause', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0]);
+
+      await service.findAll({});
+
+      const call = (prisma.auditLog.findMany as jest.Mock).mock.calls[0][0];
+      expect(call.where).not.toHaveProperty('action');
+      expect(call.where).not.toHaveProperty('targetType');
+      expect(call.where).not.toHaveProperty('createdAt');
+    });
+  });
+
+  // ── findOne ─────────────────────────────────────────────────────────────────
+
+  describe('findOne', () => {
+    it('returns the audit log record when found', async () => {
+      const mockRecord = { id: 'log-uuid-1', action: 'AUTH_LOGIN_SUCCESS' };
+      (prisma.auditLog.findUnique as jest.Mock).mockResolvedValue(mockRecord);
+
+      const result = await service.findOne('log-uuid-1');
+
+      expect(prisma.auditLog.findUnique).toHaveBeenCalledWith({ where: { id: 'log-uuid-1' } });
+      expect(result).toEqual(mockRecord);
+    });
+
+    it('throws NotFoundException when the record does not exist', async () => {
+      (prisma.auditLog.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.findOne('missing-id')).rejects.toThrow('AuditLog missing-id not found');
+    });
+  });
 });

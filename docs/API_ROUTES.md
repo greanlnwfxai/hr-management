@@ -246,6 +246,60 @@ Recent lists are capped at 5 records each.
 
 ---
 
+## Audit Logs
+
+| Method | Path              | Auth | Roles                    | Description                                   |
+|--------|-------------------|------|--------------------------|-----------------------------------------------|
+| GET    | /audit-logs       | ✅   | SUPER_ADMIN · HR_ADMIN   | Paginated, filterable audit log list          |
+| GET    | /audit-logs/:id   | ✅   | SUPER_ADMIN · HR_ADMIN   | Single audit log record by UUID               |
+
+Read-only. No POST, PATCH, or DELETE endpoints exist.
+MANAGER and EMPLOYEE receive `403 Forbidden`. Unauthenticated requests receive `401 Unauthorized`.
+
+### Query params (GET /audit-logs)
+
+| Param        | Type        | Description                                   |
+|--------------|-------------|-----------------------------------------------|
+| `page`       | integer ≥ 1 | Page number (default: 1)                      |
+| `limit`      | integer 1–100 | Items per page (default: 20, max: 100)      |
+| `action`     | string      | Exact match on `action` field                 |
+| `targetType` | string      | Exact match on `targetType` field             |
+| `targetId`   | string      | Exact match on `targetId` field               |
+| `actorUserId`| string      | Exact match on `actorUserId` field            |
+| `actorRole`  | string      | Exact match on `actorRole` field              |
+| `result`     | string      | Exact match on `result` field (e.g. SUCCESS)  |
+| `dateFrom`   | ISO 8601    | Return records where `createdAt >= dateFrom`  |
+| `dateTo`     | ISO 8601    | Return records where `createdAt <= dateTo`    |
+
+Results are sorted by `createdAt DESC`.
+
+### Response (GET /audit-logs)
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "actorUserId": "uuid-or-null",
+      "actorRole": "HR_ADMIN",
+      "action": "LEAVE_REQUEST_APPROVED",
+      "targetType": "LEAVE_REQUEST",
+      "targetId": "uuid",
+      "targetLabel": "Leave #42",
+      "result": "SUCCESS",
+      "ipAddress": "192.168.1.1",
+      "userAgent": "Mozilla/5.0 ...",
+      "metadata": {},
+      "createdAt": "2026-06-21T10:00:00.000Z"
+    }
+  ],
+  "meta": { "total": 150, "page": 1, "limit": 20, "totalPages": 8 }
+}
+```
+
+Note: `metadata` may contain contextual data recorded at write time. Sensitive keys (password, token, hash, etc.) are redacted to `[REDACTED]` at write time and never stored raw.
+
+---
+
 ## Enum Reference
 
 ```

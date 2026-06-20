@@ -46,6 +46,9 @@ export function mockPrisma() {
     },
     auditLog: {
       create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      findUnique: jest.fn(),
     },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
