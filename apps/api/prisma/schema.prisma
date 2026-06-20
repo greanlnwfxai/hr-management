@@ -200,3 +200,25 @@ model LeaveBalance {
   @@index([year])
   @@map("leave_balances")
 }
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?
+  actorRole   String?
+  action      String
+  targetType  String
+  targetId    String?
+  targetLabel String?
+  result      String
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([actorUserId])
+  @@index([targetType, targetId])
+  @@index([result])
+  @@map("audit_logs")
+}

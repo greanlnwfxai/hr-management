@@ -44,6 +44,9 @@ export function mockPrisma() {
     position: {
       count: jest.fn(),
     },
+    auditLog: {
+      create: jest.fn(),
+    },
     $transaction: jest.fn(),
   } as unknown as PrismaService;
 }
