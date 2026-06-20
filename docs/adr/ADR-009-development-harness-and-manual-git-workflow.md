@@ -7,19 +7,20 @@ Accepted
 2026-06-12
 
 ## Context
-Development on the HR Management backend is AI-assisted: Claude Code writes, builds, verifies, and documents each feature step. The user retains full control over version control history. A clear division of responsibilities is needed to prevent accidental commits, ensure verification happens before merge, and keep the git log clean and intentional.
+Development on the HR Management project is AI-assisted across backend, web, mobile, and documentation work. Later milestones added `AGENTS.md` for Codex/agent workflow, ChatGPT review checkpoints, task-scoped verification, and stricter Docker safety rules. The user retains full control over version control history. A clear division of responsibilities is needed to prevent accidental commits, ensure verification happens before merge, and keep the git log clean and intentional.
 
 ## Decision
-Adopt a **two-party workflow**: Claude Code handles implementation and verification; the user (with ChatGPT as advisor) handles all git operations.
+Adopt a **human-controlled AI collaboration workflow**: Claude/Codex implement and verify; the user performs all git mutations; ChatGPT or other reviewers may perform PASS/FAIL review, scope control, and git guidance.
 
 ### Responsibilities
 
 | Actor | Responsibilities |
 |---|---|
-| Claude Code | Write code, run builds, run tests, run Docker verification, produce CTO Summary, recommend commit message |
-| User + ChatGPT | `git add`, `git commit`, `git push`, `git tag`, branch management, PR review |
+| Claude / Codex | Implement scoped work, update docs, run non-destructive verification, produce summaries, recommend commit message |
+| User | `git add`, `git commit`, `git push`, `git tag`, branch management, final release authority |
+| ChatGPT reviewer | Review changes, enforce scope, provide PASS / FAIL guidance, advise on manual git steps when used in the workflow |
 
-Claude Code **must never** run:
+Claude / Codex **must never** run:
 - `git add`
 - `git commit`
 - `git push`
@@ -29,19 +30,21 @@ Claude Code **must never** run:
 
 | File | Purpose |
 |---|---|
-| `CLAUDE.md` | Canonical operating rules for Claude Code: module layout, enum rules, Docker rules, verification order, git restrictions |
+| `CLAUDE.md` | Canonical Claude workflow guidance |
+| `AGENTS.md` | Codex / agent workflow guidance |
 | `scripts/verify.sh` | Local build gate: `nest build` + `prisma validate` + `next build` |
-| `scripts/docker-verify.sh` | Full-stack Docker gate: tear down → rebuild → start → health check |
+| `scripts/docker-verify.sh` | Historical full-stack Docker gate; only run when the active task allows it |
 | `scripts/api-smoke-test.sh` | Runtime API gate: login + call all module list endpoints |
 | `docs/CTO_SUMMARY_TEMPLATE.md` | Standardised output format for every completed step |
 
-### Verification order (per step)
-Every step is declared **PASS** only when all three scripts exit 0:
-```
-1. ./scripts/verify.sh
-2. ./scripts/docker-verify.sh
-3. ./scripts/api-smoke-test.sh
-```
+### Verification policy (per step)
+Use the smallest relevant verification set for the task:
+- product code changes may require build, runtime, or smoke verification
+- dependency changes may require security audit checks
+- docs-only tasks may use docs-only verification
+- full security review is not required for every task
+
+Docker-based verification must follow the active task brief and current safety rules.
 
 ### CTO Summary
 Each completed step produces a CTO Summary that includes:
@@ -55,6 +58,11 @@ Each completed step produces a CTO Summary that includes:
 
 The recommended commit message is for the user to review and use verbatim or adapt — Claude does not commit it.
 
+### Docker safety overlay
+- Non-destructive inspection is acceptable when needed.
+- Destructive Docker teardown or reset actions are forbidden for Claude/Codex/agents unless the user explicitly asks.
+- Allowed startup flows such as `docker compose up -d --build` still depend on the active task brief.
+
 ### Why this split
 - Keeps final version control authority with the human developer.
 - Prevents Claude Code from accidentally committing in-progress or broken code.
@@ -65,13 +73,13 @@ The recommended commit message is for the user to review and use verbatim or ada
 
 **Positive**
 - No accidental commits; all git history is intentionally authored by the user.
-- Verification gates catch regressions before code reaches the repository.
+- Verification stays proportional to task risk instead of forcing the same heavyweight flow on every task.
 - CTO Summary gives the user full context without reading every changed file.
 - Clear responsibility boundary reduces ambiguity when something goes wrong.
 
 **Negative**
 - Slightly slower iteration cycle because git operations are manual.
-- Smoke test script requires a running Docker stack; it cannot run in a pure CI environment without Docker.
+- Review handoff can involve more than one AI persona or tool, which requires good scope discipline.
 
 ## Alternatives Considered
 
@@ -82,7 +90,6 @@ The recommended commit message is for the user to review and use verbatim or ada
 | Pre-commit hooks | Useful addition but do not replace manual review of AI-written code |
 
 ## Follow-up Tasks
-- Add a GitHub Actions workflow that runs `verify.sh` on pull requests.
-- Consider adding a `pre-commit` hook that runs `prisma validate` locally.
-- Update `api-smoke-test.sh` as new modules are added (done incrementally in T-022).
-- Document the branching strategy (currently on `feature/department-module`; merging to `main` TBD).
+- Keep `CLAUDE.md` and `AGENTS.md` aligned as workflow rules evolve.
+- Continue refining task-scoped verification guidance as security and mobile workflows mature.
+- Update smoke/build guidance when new runtime surfaces are added.

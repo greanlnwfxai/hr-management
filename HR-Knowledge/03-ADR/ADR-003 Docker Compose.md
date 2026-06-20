@@ -28,8 +28,7 @@ Ports **5433** and **6380** are not used by this stack.
 This ADR documents the original local-development architecture, but it does **not** override current workflow safety rules.
 
 For Claude/Codex/agent workflow:
-- `docker compose down` is forbidden unless the user explicitly asks
-- `docker compose down -v` is forbidden unless the user explicitly asks
+- destructive Compose teardown commands are forbidden unless the user explicitly asks
 - prune, remove, reset, or destructive volume cleanup commands are forbidden unless the user explicitly asks
 
 Allowed Docker interaction should stay limited to non-destructive inspection or task-approved startup flows.

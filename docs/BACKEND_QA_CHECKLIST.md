@@ -150,7 +150,9 @@ GlobalValidationPipe: `whitelist: true, transform: true`
 
 ## 9. Timezone Checks
 
-- [x] Attendance `LATE` rule: strictly after 09:00 in Asia/Bangkok (UTC+7, fixed — Thailand has no DST) ✓
+- [x] Attendance `LATE` rule: strictly after 08:30 in Asia/Bangkok (UTC+7, fixed — Thailand has no DST) ✓
+- [x] Exactly 08:30:00 = PRESENT ✓
+- [x] Work schedule reference: 08:30–17:30 ✓
 - [x] Bangkok date computed by shifting UTC timestamp +7h, extracting calendar date ✓
 - [x] Dashboard `todayDate` uses same `todayBangkok()` method ✓
 - [x] Dashboard `bangkokYear()` uses same offset for leave-balance year filtering ✓

@@ -12,7 +12,7 @@ All routes inspected from `apps/api/src/attendance/attendance.controller.ts` and
 
 | Method | Path | Auth | Roles | Notes |
 |--------|------|------|-------|-------|
-| POST | `/attendance/clock-in` | ✅ Bearer | any | Creates record; LATE if after 09:00 Bangkok |
+| POST | `/attendance/clock-in` | ✅ Bearer | any | Creates record; LATE if strictly after 08:30 Bangkok |
 | POST | `/attendance/clock-out` | ✅ Bearer | any | Updates checkOut time |
 | GET | `/attendance/me` | ✅ Bearer | any | Own history, paginated, filterable by date |
 | GET | `/attendance` | ✅ Bearer | SUPER_ADMIN, HR_ADMIN | All records |
@@ -73,7 +73,7 @@ The company requires that mobile clock-in/out be restricted to within 100 meters
 1. **T-046** — Backend geofence validation: accept `lat`, `lng`, `accuracy` from mobile; validate against stored company location pin and 100m radius; return 403 if outside radius.
 2. **T-047** — Mobile geofence clock-in/out: request location permission, send coordinates with clock-in/out request, handle geofence rejection gracefully.
 
-**Thailand timezone note:** Attendance status (PRESENT vs LATE) uses Asia/Bangkok (UTC+7, no DST). The backend evaluates this server-side; mobile does not need to implement timezone logic.
+**Thailand timezone note:** Attendance status (PRESENT vs LATE) uses Asia/Bangkok (UTC+7, no DST). Exactly `08:30:00` is PRESENT, strictly after `08:30` is LATE, and the current schedule reference is `08:30–17:30`. The backend evaluates this server-side; mobile does not need to implement timezone logic.
 
 ---
 

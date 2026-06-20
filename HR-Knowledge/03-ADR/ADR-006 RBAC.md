@@ -12,7 +12,7 @@ Use a **four-role RBAC model** backed by the `UserRole` enum on the `User` model
 |---|---|
 | `SUPER_ADMIN` | Full system access; all operations across all modules |
 | `HR_ADMIN` | Manage employees, leave, attendance, balances; approve/reject leave |
-| `MANAGER` | Read-only visibility into operational data (balances, dashboard); cannot approve |
+| `MANAGER` | Operational visibility plus leave approval/rejection access; still cannot manage employee master data |
 | `EMPLOYEE` | Self-service: clock in/out, own attendance, own leave |
 
 ## RBAC Matrix (Summary)
@@ -24,14 +24,14 @@ Use a **four-role RBAC model** backed by the `UserRole` enum on the `User` model
 | POST /attendance/clock-in|out | ✅ | ✅ | ✅ | ✅ |
 | GET /attendance (admin list) | ✅ | ✅ | ❌ | ❌ |
 | POST /leave/request | ✅ | ✅ | ✅ | ✅ |
-| GET /leave (admin list) | ✅ | ✅ | ❌ | ❌ |
-| PATCH /leave/approve|reject | ✅ | ✅ | ❌ | ❌ |
+| GET /leave (admin list) | ✅ | ✅ | ✅ | ❌ |
+| PATCH /leave/approve|reject | ✅ | ✅ | ✅ | ❌ |
 | GET /leave-balances | ✅ | ✅ | ✅ | ❌ |
 | GET /dashboard | ✅ | ✅ | ✅ | ❌ |
 
-## Known Asymmetry
+## Current Caveat
 
-MANAGER can view `GET /leave-balances` (all employees) but cannot view `GET /leave` (all leave requests). This was identified in T-022 and requires stakeholder clarification.
+MANAGER can now view `GET /leave` and approve/reject leave, but there is still no manager-subordinate scoping. Visibility remains organization-wide.
 
 ## Ownership Enforcement
 

@@ -9,6 +9,8 @@ Accepted
 ## Context
 The backend-first development strategy (ADR-004) required a clear definition of "done" for the backend before the frontend phase could begin. T-022 (Backend Hardening & QA) was the final backend step, producing a formal QA checklist, API route inventory, and readiness report. This ADR records the readiness decision and the conditions under which it was made.
 
+This ADR remains a historical backend-v1 snapshot. It should not be read as the current full-platform state after later web, mobile, security, and documentation milestones.
+
 ## Decision
 **Backend v1.0 is READY for local/dev use.**
 
@@ -31,7 +33,7 @@ All eight modules are implemented, passing all verification gates, and their lim
 | Hardening & QA | Docs, expanded smoke test | T-022 |
 | ADR Pack | This document | T-023 |
 
-**Total:** 30 endpoints across 8 modules + `GET /health`.
+**Historical backend-v1 route count:** thirty routes across eight modules plus `GET /health`.
 
 ### Verification results (T-022)
 
@@ -60,7 +62,7 @@ All eight modules are implemented, passing all verification gates, and their lim
 | 1 | LeaveType enum | ANNUAL and UNPAID not in schema | Enum migration in v1.1 |
 | 2 | Leave approval | UNPAID balance bypass not implemented | After UNPAID enum added |
 | 3 | LeaveRequest | `rejectReason` not persisted | Schema migration in v1.1 |
-| 4 | RBAC | MANAGER cannot access `GET /leave` | Stakeholder clarification needed |
+| 4 | RBAC | Snapshot reflects pre-T-051 manager leave-access policy | Superseded by later RBAC changes |
 | 5 | Attendance | No auto-absent marking job | Future scheduled task |
 | 6 | Dashboard | `todayAbsentCount` counts only explicit ABSENT records | Acceptable for v1.0 |
 | 7 | Dashboard | `todayBangkok()` and `todayUtc()` can differ 17:00–23:59 UTC | Fix in v1.1 |
@@ -68,7 +70,7 @@ All eight modules are implemented, passing all verification gates, and their lim
 | 9 | Security | `JWT_SECRET = change_me` | Rotate before production |
 | 10 | Security | DB credentials plaintext in docker-compose | Move to .env before production |
 | 11 | Security | CORS open | Restrict before production |
-| 12 | Frontend | No UI implemented | Next phase |
+| 12 | Frontend | No UI implemented in this historical backend snapshot | Later milestones delivered web and mobile UI |
 
 ### Required before production deployment
 1. `JWT_SECRET` → strong random value (`openssl rand -hex 32`).
@@ -106,7 +108,7 @@ All eight modules are implemented, passing all verification gates, and their lim
 | Add more modules before declaring v1.0 | Scope of v1.0 was defined upfront (T-016 through T-022); expanding scope delays frontend |
 
 ## Follow-up Tasks
-- T-024: Frontend UI Phase 1 — Dashboard, Employee List, Leave Management pages in Next.js.
+- T-024: Frontend UI Phase 1 — historical next step from the backend-v1 milestone.
 - T-025: Pre-deployment hardening — JWT_SECRET rotation, .env migration, CORS restriction.
 - T-026: Backend v1.1 — enum additions, schema migrations, absent-marking job.
 - Document the branching and merge strategy for `feature/department-module` → `main`.

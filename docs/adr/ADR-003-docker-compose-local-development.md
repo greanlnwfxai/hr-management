@@ -35,11 +35,19 @@ The API container runs in **production mode** (`npm run start:prod` from compile
 The API Dockerfile runs `npx prisma generate` in the **builder** stage and copies `node_modules` from the builder to the runner stage. This guarantees the generated Prisma Client (including its enum objects) is present at runtime, avoiding startup crashes from missing client files.
 
 ### Volume persistence
-A named volume (`postgres_data`) persists the PostgreSQL data directory across `docker compose down` / `up` cycles. Running `docker compose down -v` removes it for a clean slate.
+A named volume (`postgres_data`) persists the PostgreSQL data directory across normal local runtime use.
 
 ### Verification scripts
-- `./scripts/docker-verify.sh` — tears down, rebuilds, starts the full stack, and asserts all containers are healthy before returning.
+- `./scripts/docker-verify.sh` — historical full-stack runtime verification script.
 - `./scripts/api-smoke-test.sh` — authenticates as admin and calls all module list endpoints to confirm runtime correctness.
+
+### Current workflow safety overlay
+This ADR documents the local runtime architecture, but it does not override later workflow safety policy.
+
+For Claude/Codex/agent workflow:
+- `docker compose up -d --build` may be used only when the active task explicitly allows runtime verification.
+- Destructive Compose teardown commands are forbidden unless the user explicitly asks.
+- Prune, remove, reset, or destructive volume cleanup commands are forbidden unless the user explicitly asks.
 
 ## Consequences
 
@@ -51,7 +59,7 @@ A named volume (`postgres_data`) persists the PostgreSQL data directory across `
 
 **Negative**
 - Rebuilding the API image after every code change is slow (~60–90 s) compared to `start:dev` hot-reload.
-- `postgres_data` volume persists test data across runs; requires `-v` flag or manual cleanup for a fresh start.
+- `postgres_data` volume persists test data across runs; resetting it is intentionally outside normal agent workflow.
 - Docker is required on every developer's machine.
 
 ## Alternatives Considered

@@ -4,33 +4,38 @@
 
 ## Decision
 
-Adopt a **two-party workflow**: Claude Code handles implementation and verification; the user (with ChatGPT as advisor) handles all git operations.
+Adopt a **human-controlled AI collaboration workflow**: Claude/Codex handle scoped implementation and verification; the user handles git mutations; ChatGPT may act as reviewer and scope controller.
 
 ## Responsibilities
 
 | Actor | Responsibilities |
 |---|---|
-| Claude Code | Write code, run builds, run tests, Docker verification, CTO Summary, recommend commit message |
-| User + ChatGPT | `git add`, `git commit`, `git push`, `git tag`, branch management, PR review |
+| Claude / Codex | Implement scoped work, run non-destructive verification, produce summaries, recommend commit message |
+| User | `git add`, `git commit`, `git push`, `git tag`, branch management, final release authority |
+| ChatGPT reviewer | PASS / FAIL review, scope control, git guidance when used |
 
-**Claude Code must never run:** `git add`, `git commit`, `git push`, `git tag`.
+**Claude / Codex must never run:** `git add`, `git commit`, `git push`, `git tag`.
 
 ## Development Harness Files
 
 | File | Purpose |
 |---|---|
-| `CLAUDE.md` | Canonical operating rules for Claude Code |
+| `CLAUDE.md` | Claude workflow guidance |
+| `AGENTS.md` | Codex / agent workflow guidance |
 | `scripts/verify.sh` | API build + prisma validate + web build |
-| `scripts/docker-verify.sh` | Full-stack Docker gate |
+| `scripts/docker-verify.sh` | Historical Docker gate; only run when allowed by the active task |
 | `scripts/api-smoke-test.sh` | Runtime API gate (12 checks) |
 | `docs/CTO_SUMMARY_TEMPLATE.md` | Standardised output format per completed step |
 
-## Verification Order
+## Verification Policy
 
-Every step is PASS only when all three exit 0:
-1. `./scripts/verify.sh`
-2. `./scripts/docker-verify.sh`
-3. `./scripts/api-smoke-test.sh`
+Use the smallest relevant verification set for the task. Docker/runtime verification is not an automatic default for every task.
+
+## Docker Safety Overlay
+
+- destructive Docker teardown/reset actions are not normal agent workflow
+- task-approved startup commands may be allowed
+- follow the active task brief and root workflow files
 
 ## Why This Split
 

@@ -8,10 +8,11 @@ Use **JSON Web Tokens (JWT)** via `@nestjs/passport` + `passport-jwt` for all AP
 
 ## Login Flow
 
-1. Client sends `POST /auth/login` with `{ email, password }`
-2. API verifies with `bcrypt.compare` against stored hash
-3. On success, returns `{ accessToken, user: { id, email, role } }`
-4. Password hash is **never returned** to the caller
+1. Client sends `POST /auth/login` with `{ login, password }` or legacy `{ email, password }`
+2. API resolves username-vs-email lookup from the identifier
+3. Inactive users are rejected with the same generic invalid-credentials response
+4. On success, returns `{ accessToken, user: { id, email, username, role, mustChangePassword, employeeId } }`
+5. Password hash is **never returned** to the caller
 
 ## Token Configuration
 
@@ -27,8 +28,15 @@ Use **JSON Web Tokens (JWT)** via `@nestjs/passport` + `passport-jwt` for all AP
 
 `JwtStrategy.validate` re-queries the database on every request:
 - Confirms the user still exists
-- Returns `{ id, email, role }` — no password, no sensitive fields
+- Rejects inactive users
+- Returns `{ id, email, username, role, mustChangePassword, employeeId }` — no password, no sensitive fields
 - If user deleted after token issuance → 401 on next request
+
+## Current Auth Extensions
+
+- `GET /auth/me` returns current profile plus linked employee summary if present
+- `POST /auth/change-password` supports self-service password change
+- Username-or-email login supports HR-provisioned employee accounts
 
 ## Guards and Decorators
 

@@ -18,7 +18,7 @@ Use a **four-role RBAC model** implemented via NestJS guards and metadata decora
 |---|---|
 | `SUPER_ADMIN` | Full system access; can perform all operations across all modules |
 | `HR_ADMIN` | Manage employees, leave, attendance, balances; approve/reject leave |
-| `MANAGER` | Read-only visibility into operational data (leave balances, dashboard); cannot approve |
+| `MANAGER` | Operational visibility plus leave approval/rejection access; still cannot manage employee master data |
 | `EMPLOYEE` | Self-service only: clock in/out, view own attendance, submit and view own leave |
 
 ### Implementation pattern
@@ -53,9 +53,9 @@ export class ResourceController {              //    RolesGuard reads @Roles met
 | POST /attendance/clock-in|out | ✅ | ✅ | ✅ | ✅ |
 | GET /attendance/me | ✅ | ✅ | ✅ | ✅ |
 | POST /leave/request | ✅ | ✅ | ✅ | ✅ |
-| GET /leave (admin list) | ✅ | ✅ | ❌ | ❌ |
+| GET /leave (admin list) | ✅ | ✅ | ✅ | ❌ |
 | GET /leave/me | ✅ | ✅ | ✅ | ✅ |
-| PATCH /leave/:id/approve|reject | ✅ | ✅ | ❌ | ❌ |
+| PATCH /leave/:id/approve|reject | ✅ | ✅ | ✅ | ❌ |
 | POST /leave-balances | ✅ | ✅ | ❌ | ❌ |
 | GET /leave-balances (admin list) | ✅ | ✅ | ✅ | ❌ |
 | GET /leave-balances/my | ✅ | ✅ | ✅ | ✅ |
@@ -73,8 +73,8 @@ if (userRole !== SUPER_ADMIN && userRole !== HR_ADMIN) {
 }
 ```
 
-### Known asymmetry
-MANAGER can view `GET /leave-balances` (all employees) but cannot view `GET /leave` (all leave requests). This inconsistency was identified during T-022 hardening and requires stakeholder clarification before it is resolved.
+### Current caveat
+MANAGER can now view `GET /leave` and approve or reject leave requests, but there is still no manager-to-subordinate scoping. MANAGER visibility is organization-wide rather than team-scoped.
 
 ## Consequences
 
@@ -85,8 +85,7 @@ MANAGER can view `GET /leave-balances` (all employees) but cannot view `GET /lea
 - Ownership checks in the service layer prevent privilege escalation for individual record access.
 
 **Negative**
-- MANAGER role currently has limited utility (dashboard + balance list only); may need expansion.
-- No per-department scoping: MANAGER sees all leave balances, not just their team's.
+- No per-department or manager-subordinate scoping: MANAGER sees organization-wide leave requests and leave balances.
 - Role changes take effect on the next login (JWT carries the role at login time; live role change requires token refresh).
 
 ## Alternatives Considered
@@ -99,7 +98,6 @@ MANAGER can view `GET /leave-balances` (all employees) but cannot view `GET /lea
 | ABAC (Attribute-Based Access Control) | Too complex for the current team size and data volume |
 
 ## Follow-up Tasks
-- Clarify with stakeholders whether MANAGER should have access to `GET /leave` filtered to their department.
-- Add department-scoped leave visibility for MANAGER when the `Employee.managerId` / `Department.managerId` relations are leveraged.
+- Add manager-to-subordinate or department-scoped visibility for MANAGER when reporting-line policy is formalized.
 - Consider adding a `POST /auth/refresh` endpoint so role changes propagate without re-login.
-- Document the RBAC matrix in `docs/API_ROUTES.md` (done in T-022).
+- Continue documenting current RBAC changes in route inventory and knowledge docs as later milestones change capabilities.

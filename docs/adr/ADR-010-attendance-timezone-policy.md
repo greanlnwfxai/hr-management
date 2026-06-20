@@ -7,7 +7,7 @@ Accepted
 2026-06-12
 
 ## Context
-The HR Management system records employee clock-in and clock-out times and must evaluate whether an arrival was on-time or late. The company operates in Thailand (Asia/Bangkok, UTC+7). All database timestamps are stored in UTC, which is the PostgreSQL default. A clock-in at 09:30 local time must be correctly classified as LATE regardless of the UTC offset. The evaluation must be deterministic and consistent between the Attendance module and the Dashboard module.
+The HR Management system records employee clock-in and clock-out times and must evaluate whether an arrival was on-time or late. The company operates in Thailand (Asia/Bangkok, UTC+7). All database timestamps are stored in UTC, which is the PostgreSQL default. The current work schedule is 08:30–17:30, and a clock-in after 08:30 local time must be correctly classified as LATE regardless of the UTC offset. The evaluation must be deterministic and consistent between the Attendance module and the Dashboard module.
 
 ## Decision
 Apply the **Asia/Bangkok timezone (UTC+7, permanently fixed)** for all business-rule evaluations involving wall-clock time. All database storage remains in UTC.
@@ -16,10 +16,13 @@ Apply the **Asia/Bangkok timezone (UTC+7, permanently fixed)** for all business-
 
 | Clock-in time (Asia/Bangkok) | Status |
 |---|---|
-| ≤ 09:00:00 | PRESENT |
-| 09:00:01 or later | LATE |
+| ≤ 08:30:00 | PRESENT |
+| 08:30:01 or later | LATE |
 
-Strictly after 09:00 Bangkok time = LATE. Exactly 09:00:00 = PRESENT.
+Strictly after 08:30 Bangkok time = LATE. Exactly 08:30:00 = PRESENT.
+
+### Schedule reference
+- Work schedule: `08:30–17:30`
 
 ### Implementation (actual code)
 
@@ -32,7 +35,7 @@ private isLateInBangkok(now: Date): boolean {
   const bangkokWallClock = new Date(now.getTime() + BANGKOK_OFFSET_MS);
   const hour = bangkokWallClock.getUTCHours();
   const minute = bangkokWallClock.getUTCMinutes();
-  return hour > 9 || (hour === 9 && minute > 0);
+  return hour > 8 || (hour === 8 && minute > 30);
 }
 ```
 
@@ -75,7 +78,7 @@ The Dashboard's `todayBangkok()` applies the +7h correction before extracting th
 
 **Impact:** During this ~7-hour UTC window, the Dashboard `todayPresentCount` (and related metrics) will be 0 even if employees clocked in that day (Bangkok time). The metrics normalise after UTC midnight (07:00 Bangkok).
 
-**Decision:** This edge case is acceptable for an HR system used during normal business hours (07:00–20:00 Bangkok = 00:00–13:00 UTC). No fix is planned for v1.0. See Follow-up Tasks.
+**Decision:** This edge case is acceptable for the current system while no overnight workflow depends on exact pre-07:00 Bangkok dashboard counts. See Follow-up Tasks.
 
 ### ABSENT status
 The `ABSENT` status is not automatically assigned. It is only recorded if explicitly created (e.g., via a future admin-driven absent-marking workflow). The `todayAbsentCount` in the Dashboard counts only explicitly-created ABSENT records.

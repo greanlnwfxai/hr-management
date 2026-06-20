@@ -124,7 +124,7 @@ Query params (GET /positions): `page`, `limit`, `search`, `departmentId`
 
 Query params (GET /attendance, GET /attendance/me): `page`, `limit`, `startDate`, `endDate`, `employeeId` (admin list only), `status`
 
-Timezone rule: Clock-in status LATE if wall-clock time in Asia/Bangkok (UTC+7, fixed) is strictly after 09:00.
+Timezone rule: Clock-in status LATE if wall-clock time in Asia/Bangkok (UTC+7, fixed) is strictly after 08:30. Exactly 08:30:00 remains PRESENT. Current schedule reference: `08:30–17:30`.
 
 ### POST /attendance/clock-in and POST /attendance/clock-out — Body
 

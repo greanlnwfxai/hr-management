@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the HR Management System.
 
-All ADRs are **Accepted** as of 2026-06-12 (Backend v1.0). Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
+This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.1.32`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
 
 ## Index
 
@@ -20,6 +20,12 @@ All ADRs are **Accepted** as of 2026-06-12 (Backend v1.0). Full documents live i
 | [[ADR-010 Attendance Timezone]] | Attendance Timezone Policy | Business Rules | Asia/Bangkok UTC+7 fixed; LATE if strictly after 08:30 Bangkok |
 | [[ADR-011 Leave Workflow]] | Leave Workflow and Balance Integration | Business Rules | Atomic approval+balance deduction; two tightly-integrated modules |
 | [[ADR-012 Backend v1 Readiness]] | Backend v1.0 Readiness | Process | Backend declared READY for local/dev; 3 items block production |
+| [[ADR-013 Identity and Account Lifecycle]] | Identity and Employee Account Lifecycle | Security | Username/email login, employee-linked accounts, HR provisioning/reset flow |
+| [[ADR-014 Password Change Policy]] | Password Change and mustChangePassword Policy | Security | JWT-protected self-service password change plus UX-enforced mustChangePassword flow |
+| [[ADR-015 Security Harness]] | Security Harness and Review Policy | Security | Local scripts, CI security job, Dependabot, accepted-risk tracking, scoped review cadence |
+| [[ADR-016 Agent Workflow]] | Agent Workflow and Docker Safety Policy | Process | CLAUDE/AGENTS guidance split, manual git control, destructive Docker restrictions |
+| [[ADR-017 Mobile Expo Router]] | Mobile Expo Router and Web-Compatible Shell | Mobile | Expo Router foundation, Expo web compatibility, shared mobile shell components |
+| [[ADR-018 Audit Log Status]] | Audit Log Foundation Specification Status | Process | Audit log remains specification-only until phased backend/database implementation |
 
 ## ADR Policy
 
@@ -42,7 +48,13 @@ docs/adr/
 ├── ADR-009-development-harness-and-manual-git-workflow.md
 ├── ADR-010-attendance-timezone-policy.md
 ├── ADR-011-leave-workflow-and-balance-integration.md
-└── ADR-012-backend-v1-readiness.md
+├── ADR-012-backend-v1-readiness.md
+├── ADR-013-identity-and-employee-account-lifecycle.md
+├── ADR-014-password-change-and-must-change-password-policy.md
+├── ADR-015-security-harness-and-review-policy.md
+├── ADR-016-agent-workflow-and-docker-safety-policy.md
+├── ADR-017-mobile-expo-router-and-web-compatible-shell.md
+└── ADR-018-audit-log-foundation-specification-status.md
 ```
 
 ## Related Notes

@@ -2,6 +2,10 @@
 
 **Status:** Accepted | **Date:** 2026-06-12
 
+Historical snapshot note:
+- This ADR records the backend-v1 readiness decision.
+- It is not the full current-platform status after later web, mobile, security, and documentation milestones.
+
 ## Decision
 
 **Backend v1.0 is READY for local/dev use.**

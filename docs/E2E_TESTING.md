@@ -176,7 +176,7 @@ The API Docker image does not include `prisma/` migration files (only `dist/` an
 6. Poll `http://localhost:4002/health` and `http://localhost:3002` with `curl --retry`
 7. Run `npm run test:e2e`
 8. Upload artifacts on failure
-9. `docker compose down -v` (always)
+9. CI-only cleanup may use container teardown after the test run. This is infrastructure cleanup behavior, not a normal Claude/Codex/agent workflow step.
 
 ### Required CI environment variables
 
