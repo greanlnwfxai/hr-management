@@ -41,7 +41,8 @@
         {
           "locationWhenInUsePermission": "HR Management ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "apiBaseUrl": ""

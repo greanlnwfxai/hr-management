@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: '#1a56db' },
@@ -17,11 +17,15 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen
           name="home"
-          options={{ title: 'HR Mobile', headerBackVisible: false }}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="calendar"
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="attendance"
-          options={{ title: 'ลงเวลา' }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="leave"

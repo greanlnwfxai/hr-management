@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -10,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/auth/useAuth';
 import { useLeave, LEAVE_TYPE_OPTIONS, leaveTypeLabel, leaveStatusLabel, leaveStatusColor } from '../src/hooks/useLeave';
@@ -28,6 +30,97 @@ function validateDateFormat(value: string): boolean {
   if (!DATE_REGEX.test(value)) return false;
   const d = new Date(value);
   return !isNaN(d.getTime());
+}
+
+function isoToDate(iso: string): Date {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function dateToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function DatePickerField({
+  label,
+  value,
+  onChange,
+  error,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  disabled?: boolean;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const dateValue = value ? isoToDate(value) : new Date();
+
+  function handleChange(_event: DateTimePickerEvent, selected?: Date) {
+    if (Platform.OS !== 'ios') setShowPicker(false);
+    if (selected) onChange(dateToIso(selected));
+  }
+
+  if (Platform.OS === 'web') {
+    return (
+      <View>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {React.createElement('input', {
+          type: 'date',
+          value: value,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value),
+          disabled: disabled,
+          style: {
+            width: '100%',
+            border: `1px solid ${error ? '#f87171' : '#d1d5db'}`,
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontSize: '14px',
+            color: '#111827',
+            backgroundColor: '#ffffff',
+            boxSizing: 'border-box',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            outline: 'none',
+          },
+        })}
+        {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+      </View>
+    );
+  }
+
+  return (
+    <View>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Pressable
+        onPress={() => !disabled && setShowPicker(true)}
+        style={({ pressed }) => [
+          styles.dateBtn,
+          error ? styles.inputError : undefined,
+          pressed && !disabled ? styles.pressed : undefined,
+          disabled ? styles.disabled : undefined,
+        ]}
+      >
+        <Text style={value ? styles.dateBtnText : styles.dateBtnPlaceholder}>
+          {value ? formatShortDate(value) : 'เลือกวันที่'}
+        </Text>
+        <Text style={styles.calendarIcon}>📅</Text>
+      </Pressable>
+      {error ? <Text style={styles.fieldError}>{error}</Text> : null}
+      {showPicker && (
+        <DateTimePicker
+          value={dateValue}
+          mode="date"
+          display="default"
+          onChange={handleChange}
+        />
+      )}
+    </View>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -186,36 +279,22 @@ function LeaveForm({
       </View>
 
       {/* Start date */}
-      <View>
-        <Text style={styles.fieldLabel}>วันที่เริ่มต้น</Text>
-        <TextInput
-          style={[styles.input, errors.startDate ? styles.inputError : undefined]}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor="#9ca3af"
-          value={form.startDate}
-          onChangeText={(v) => setForm((f) => ({ ...f, startDate: v }))}
-          keyboardType="numeric"
-          maxLength={10}
-          editable={!isSubmitting}
-        />
-        {errors.startDate ? <Text style={styles.fieldError}>{errors.startDate}</Text> : null}
-      </View>
+      <DatePickerField
+        label="วันที่เริ่มต้น"
+        value={form.startDate}
+        onChange={(v) => setForm((f) => ({ ...f, startDate: v }))}
+        error={errors.startDate}
+        disabled={isSubmitting}
+      />
 
       {/* End date */}
-      <View>
-        <Text style={styles.fieldLabel}>วันที่สิ้นสุด</Text>
-        <TextInput
-          style={[styles.input, errors.endDate ? styles.inputError : undefined]}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor="#9ca3af"
-          value={form.endDate}
-          onChangeText={(v) => setForm((f) => ({ ...f, endDate: v }))}
-          keyboardType="numeric"
-          maxLength={10}
-          editable={!isSubmitting}
-        />
-        {errors.endDate ? <Text style={styles.fieldError}>{errors.endDate}</Text> : null}
-      </View>
+      <DatePickerField
+        label="วันที่สิ้นสุด"
+        value={form.endDate}
+        onChange={(v) => setForm((f) => ({ ...f, endDate: v }))}
+        error={errors.endDate}
+        disabled={isSubmitting}
+      />
 
       {/* Reason */}
       <View>
@@ -387,18 +466,6 @@ export default function LeaveScreen() {
           </View>
         )}
 
-        {/* ── Refresh ───────────────────────────────────────────────────── */}
-        <Pressable
-          style={({ pressed }) => [styles.refreshBtn, pressed && styles.pressed, isRefreshing && styles.disabled]}
-          onPress={refresh}
-          disabled={isRefreshing}
-          accessibilityRole="button"
-          accessibilityLabel="อัปเดตข้อมูล"
-        >
-          <Text style={styles.refreshBtnText}>
-            {isRefreshing ? 'กำลังโหลดข้อมูล...' : 'อัปเดตข้อมูล'}
-          </Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -431,8 +498,11 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#111827',
+    borderLeftWidth: 3,
+    borderLeftColor: '#1a56db',
+    paddingLeft: 10,
   },
 
   // Balance row
@@ -540,6 +610,34 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#f87171',
+  },
+  dateBtn: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#ffffff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dateBtnText: {
+    fontSize: 14,
+    color: '#111827',
+  },
+  dateBtnPlaceholder: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  calendarIcon: {
+    fontSize: 16,
+  },
+  datePicker: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    backgroundColor: '#ffffff',
   },
   inputMultiline: {
     minHeight: 80,
@@ -677,19 +775,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#1a56db',
-  },
-
-  // Refresh
-  refreshBtn: {
-    backgroundColor: '#1a56db',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  refreshBtnText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 
   // Shared
