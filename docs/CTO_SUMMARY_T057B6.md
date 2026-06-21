@@ -17,7 +17,7 @@ Implement a secure, read-only audit log query API. Adds `GET /audit-logs` (pagin
 
 ## Files Modified
 - `apps/api/src/audit-log/audit-log.service.ts` — added `findAll(query)` using `$transaction([findMany, count])` ordered `createdAt DESC`; added `findOne(id)` using `findUnique` with `NotFoundException` on miss
-- `apps/api/src/audit-log/audit-log.module.ts` — added `AuditLogController` to `controllers`; added `AuthModule` to `imports` (required for `JwtStrategy` / `JwtAuthGuard` / `RolesGuard` resolution)
+- `apps/api/src/audit-log/audit-log.module.ts` — added `AuditLogController` to `controllers`; intentionally does not import `AuthModule` to avoid circular dependency with auth audit integration
 - `apps/api/src/test-utils/prisma.mock.ts` — added `findMany`, `count`, `findUnique` to the `auditLog` mock
 - `apps/api/src/audit-log/audit-log.service.spec.ts` — added 15 new service tests (`findAll` × 13, `findOne` × 2)
 - `docs/API_ROUTES.md` — added `## Audit Logs` section with endpoint table, query param table, and response shape
@@ -150,6 +150,8 @@ None. Implementation was straightforward following the existing `findAll`/`findO
 ## Design Notes
 
 **`@Roles` at class level** — The `RolesGuard` uses `reflector.getAllAndOverride(ROLES_KEY, [getHandler(), getClass()])` which reads class-level metadata correctly. All routes in this controller require identical roles, so class-level placement is correct and avoids repetition.
+
+**`AuthModule` import intentionally omitted** — `AuthModule` already depends on `AuditLogModule` for auth audit events. Importing `AuthModule` back into `AuditLogModule` creates a runtime circular dependency (`AppModule -> AuditLogModule -> AuthModule -> AuditLogModule`). The controller can still use `JwtAuthGuard` and `RolesGuard` decorators while `AuthModule` remains registered at the app level.
 
 **`PrismaModule` import not needed** — `PrismaModule` is `@Global()`, so `PrismaService` is available in `AuditLogModule` without an explicit import.
 
