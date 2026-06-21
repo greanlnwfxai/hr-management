@@ -2,9 +2,9 @@
 
 Last updated: 2026-06-21
 
-## Current Product State — v1.1.44 ✅
+## Current Product State — v1.1.46 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.44-admin-geofence-settings`, it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.46-geofence-runtime-verification`, it includes:
 
 - Stable NestJS API with username/email login
 - Web admin: profile/password change, employee account management, audit log review
@@ -58,6 +58,9 @@ See [[Audit Log Module]] for full architecture details.
 | T-047 | (within geofence milestone) | Mobile GPS UI, `expo-location` permission, `source: "mobile"` clock-in/out |
 | T-059 | `v1.1.43-mobile-attendance-geofence` | Gap closure: backend-authoritative enforcement confirmed, web preserved |
 | T-060 | `v1.1.44-admin-geofence-settings` | GeofenceConfig DB singleton, `GET/PATCH /attendance/geofence-config`, admin web UI at `/attendance/geofence-settings` |
+| T-061 | `v1.1.45-geofence-knowledge-sync` | HR-Knowledge and ADR sync for full geofence pack |
+| T-062 | `v1.1.46-geofence-runtime-verification` | Full runtime verification: API, RBAC, mobile enforcement, audit privacy, web UI |
+| T-063 | (docs only) | Production geofence readiness checklist and SOP |
 
 See [[Attendance Geofence]] for full architecture details.
 
@@ -87,10 +90,13 @@ See [[Attendance Geofence]] for full architecture details.
 | 11 | Audit Log | `dateTo` filter uses UTC midnight boundary; may exclude records created after 00:00 UTC on that date | Future fix if needed |
 | 12 | Geofence | Single office location only; multi-office requires schema redesign | Future work |
 | 13 | Geofence | GPS spoofing undetectable without device integrity APIs (SafetyNet / DeviceCheck) | Future work |
+| 14 | Geofence | Rejected clock-in/out attempts (422) do not generate audit log entries | T-064 (Failed Geofence Attempt Audit Specification) |
 
 ## Next Recommended Task
 
-**T-062 — Geofence Runtime Verification**
+**T-064 — Failed Geofence Attempt Audit Specification**
+
+Specify and implement an `ATTENDANCE_GEOFENCE_REJECTED` audit event for rejected mobile clock-in/out attempts. This is a small, privacy-sensitive task: the event must capture that a rejection occurred without storing raw GPS coordinates.
 
 ## Security / Process Notes
 
@@ -110,5 +116,6 @@ See [[Attendance Geofence]] for full architecture details.
 - [[ADR Index]]
 - [[API Route Index]]
 - [[RBAC Rules]]
+- [[Production Geofence Readiness]]
 
-#hr-management #status #v1-1-44
+#hr-management #status #v1-1-46
