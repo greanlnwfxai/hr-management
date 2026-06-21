@@ -413,12 +413,51 @@ describe('AttendanceService', () => {
   });
 
   describe('geofence validation (clockOut)', () => {
-    it('enforces geofence on clock-out for mobile source', async () => {
+    const mobileDto = {
+      source: 'mobile' as const,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      accuracy: 25,
+    };
+
+    it('enforces geofence on clock-out for mobile source (missing location)', async () => {
       geofenceConfig.isEnabled.mockReturnValue(true);
 
       await expect(
         service.clockOut(userId, { source: 'mobile' }),
       ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('allows clock-out when source is "mobile", geofence enabled, and user is within radius', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
+      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceService.isWithinRadius.mockReturnValue(true);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+      prisma.attendance.update.mockResolvedValue({
+        ...mockAttendanceFull,
+        checkOut: new Date(),
+      } as any);
+
+      await expect(service.clockOut(userId, mobileDto)).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).toHaveBeenCalledWith(
+        COMPANY_LAT, COMPANY_LON, COMPANY_LAT, COMPANY_LON, 100,
+      );
+    });
+
+    it('throws 422 on clock-out when source is "mobile", geofence enabled, and user is outside radius', async () => {
+      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
+      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(service.clockOut(userId, mobileDto)).rejects.toThrow(
+        UnprocessableEntityException,
+      );
     });
 
     it('skips geofence on clock-out for web source', async () => {
