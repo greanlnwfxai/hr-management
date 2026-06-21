@@ -515,3 +515,47 @@ export function resetEmployeeAccountPassword(employeeId: string) {
     method: 'POST',
   });
 }
+
+// ── Audit Logs ────────────────────────────────────────────────────────────────
+
+export type AuditLog = {
+  id: string;
+  actorUserId: string | null;
+  actorRole: string | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  targetLabel: string | null;
+  result: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+export function getAuditLogs(params?: {
+  page?: number;
+  limit?: number;
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  actorUserId?: string;
+  actorRole?: string;
+  result?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.action) qs.set('action', params.action);
+  if (params?.targetType) qs.set('targetType', params.targetType);
+  if (params?.targetId) qs.set('targetId', params.targetId);
+  if (params?.actorUserId) qs.set('actorUserId', params.actorUserId);
+  if (params?.actorRole) qs.set('actorRole', params.actorRole);
+  if (params?.result) qs.set('result', params.result);
+  if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) qs.set('dateTo', params.dateTo);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<AuditLog>>(`/audit-logs${query}`);
+}

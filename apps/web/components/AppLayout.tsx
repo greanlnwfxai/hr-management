@@ -22,6 +22,7 @@ function navForRole(role: AuthUser['role']): NavDef[] {
         { href: '/positions',   labelKey: 'nav_positions',   testid: 'nav-positions' },
         { href: '/attendance',  labelKey: 'nav_attendance',  testid: 'nav-attendance' },
         { href: '/leave',       labelKey: 'nav_leave',       testid: 'nav-leave' },
+        { href: '/audit-logs',  labelKey: 'nav_audit_logs',  testid: 'nav-audit-logs' },
       ];
     case 'MANAGER':
       return [

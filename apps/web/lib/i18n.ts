@@ -273,6 +273,13 @@ const translations = {
     acct_load_error: 'Failed to load account info',
     acct_role_label: 'Role',
 
+    // Audit Logs
+    nav_audit_logs: 'Audit Logs',
+    page_audit_logs: 'Audit Logs',
+    loading_audit_logs: 'Loading audit logs…',
+    empty_audit_logs: 'No audit logs found.',
+    error_audit_logs: 'Failed to load audit logs.',
+
     // State components
     loading_default: 'Loading…',
     empty_default: 'No records found.',
@@ -549,6 +556,13 @@ const translations = {
     acct_loading: 'กำลังโหลดข้อมูลบัญชี…',
     acct_load_error: 'โหลดข้อมูลบัญชีล้มเหลว',
     acct_role_label: 'บทบาท',
+
+    // Audit Logs
+    nav_audit_logs: 'ประวัติตรวจสอบ',
+    page_audit_logs: 'ประวัติตรวจสอบ',
+    loading_audit_logs: 'กำลังโหลดประวัติตรวจสอบ…',
+    empty_audit_logs: 'ไม่พบประวัติตรวจสอบ',
+    error_audit_logs: 'โหลดประวัติตรวจสอบล้มเหลว',
 
     // State components
     loading_default: 'กำลังโหลด…',
