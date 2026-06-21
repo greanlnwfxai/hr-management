@@ -67,9 +67,9 @@ The AI assistant should be aware of the user's role:
 
 ### 3. Knowledge Currency
 
-The AI assistant's knowledge should now align with the current `v1.1.31` product state. It should:
+The AI assistant's knowledge should now align with the current `v1.1.41` product state. It should:
 
-- Acknowledge known limitations (for example, audit log work is specification-only and not yet implemented)
+- Acknowledge known limitations (see [[Current Status]] for the current limitation table)
 - Refer users to HR staff for actions it cannot perform
 - Indicate when a feature is planned but not yet implemented
 
@@ -79,7 +79,7 @@ Examples of current-state knowledge it should know:
 - `mustChangePassword` is enforced in current web/mobile UX
 - mobile app includes Home, Attendance, Leave, Calendar, Profile, and Approvals flows
 - work schedule is `08:30–17:30` and late threshold is strictly after `08:30` Bangkok time
-- audit log is still spec-only via `docs/T057_AUDIT_LOG_FOUNDATION_SPEC.md`
+- audit log is **fully implemented** through `v1.1.41-admin-audit-log-ui`; the admin web UI at `/audit-logs` is available for SUPER_ADMIN and HR_ADMIN; see [[Audit Log Module]]
 
 ### 4. Scope Boundaries
 

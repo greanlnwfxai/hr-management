@@ -1,6 +1,6 @@
 # ADR-018: Audit Log Foundation Specification Status
 
-**Status:** Accepted | **Date:** 2026-06-20
+**Status:** Superseded by [[ADR-019 Audit Trail and Admin Review]] | **Date:** 2026-06-20 | **Superseded:** 2026-06-21
 
 ## Decision
 

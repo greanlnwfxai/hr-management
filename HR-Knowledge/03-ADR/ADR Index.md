@@ -25,7 +25,8 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-015 Security Harness]] | Security Harness and Review Policy | Security | Local scripts, CI security job, Dependabot, accepted-risk tracking, scoped review cadence |
 | [[ADR-016 Agent Workflow]] | Agent Workflow and Docker Safety Policy | Process | CLAUDE/AGENTS guidance split, manual git control, destructive Docker restrictions |
 | [[ADR-017 Mobile Expo Router]] | Mobile Expo Router and Web-Compatible Shell | Mobile | Expo Router foundation, Expo web compatibility, shared mobile shell components |
-| [[ADR-018 Audit Log Status]] | Audit Log Foundation Specification Status | Process | Audit log remains specification-only until phased backend/database implementation |
+| [[ADR-018 Audit Log Status]] | Audit Log Foundation Specification Status | Process | ~~Audit log remains specification-only~~ — **Superseded by ADR-019** |
+| [[ADR-019 Audit Trail and Admin Review]] | Audit Trail and Admin Audit Log Review | Security | Append-only audit trail, best-effort writes, metadata denylist, RBAC-restricted read API, read-only admin UI |
 
 ## ADR Policy
 
@@ -54,7 +55,8 @@ docs/adr/
 ├── ADR-015-security-harness-and-review-policy.md
 ├── ADR-016-agent-workflow-and-docker-safety-policy.md
 ├── ADR-017-mobile-expo-router-and-web-compatible-shell.md
-└── ADR-018-audit-log-foundation-specification-status.md
+├── ADR-018-audit-log-foundation-specification-status.md
+└── ADR-019-audit-trail-and-admin-review.md
 ```
 
 ## Related Notes

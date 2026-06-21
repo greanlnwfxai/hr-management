@@ -82,6 +82,7 @@ apps/api/src/
 ├── leave/
 ├── leave-balance/
 ├── dashboard/
+├── audit-log/    # Append-only audit trail; AuditLogModule must not import AuthModule
 ├── prisma/       # Global PrismaService
 ├── common/       # Runtime-safe enums
 ├── app.module.ts

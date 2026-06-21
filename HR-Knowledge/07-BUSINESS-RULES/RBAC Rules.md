@@ -37,6 +37,8 @@
 | GET /leave-balances/:id | ✅ | ✅ | ✅ | owner only |
 | PATCH /leave-balances/:id | ✅ | ✅ | ❌ | ❌ |
 | GET /dashboard | ✅ | ✅ | ✅ | ❌ |
+| GET /audit-logs | ✅ | ✅ | ❌ | ❌ |
+| GET /audit-logs/:id | ✅ | ✅ | ❌ | ❌ |
 
 ## Ownership Enforcement
 

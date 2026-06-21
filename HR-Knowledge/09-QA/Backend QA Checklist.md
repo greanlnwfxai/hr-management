@@ -120,7 +120,7 @@ Historical backend v1 QA snapshot:
 | 8 | Security | DB credentials plaintext |
 | 9 | Balance | `totalDays` vs `entitledDays` naming |
 | 10 | Concurrency | Balance TOCTOU window |
-| 11 | Audit Log | Specification exists, but no runtime implementation yet |
+| 11 | Audit Log | ~~Specification only~~ — **Implemented** through T-057B-7 (`v1.1.41-admin-audit-log-ui`); see [[Audit Log Module]] |
 
 ## Related Notes
 

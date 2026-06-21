@@ -9,17 +9,18 @@ Historical snapshot note:
 
 | Module | Path | Endpoints | Step |
 |---|---|---|---|
-| Auth | `src/auth/` | 2 | T-005–015 |
-| Employee | `src/employees/` | 5 | T-005–015 |
+| Auth | `src/auth/` | 3 | T-005–015, T-057B-2 |
+| Employee | `src/employees/` | 8 | T-005–015, T-050, T-055, T-057B-3 |
 | Department | `src/departments/` | 5 | T-016 |
 | Position | `src/positions/` | 5 | T-017 |
-| Attendance | `src/attendance/` | 5 | T-018 |
-| Leave Request | `src/leave/` | 6 | T-019 |
+| Attendance | `src/attendance/` | 5 | T-018, T-057B-5 |
+| Leave Request | `src/leave/` | 6 | T-019, T-057B-4 |
 | Leave Balance | `src/leave-balance/` | 5 | T-020 |
 | Dashboard | `src/dashboard/` | 1 | T-021 |
+| Audit Log | `src/audit-log/` | 2 | T-057B-1, T-057B-6 |
 | Health | `health.controller.ts` | 1 | — |
 
-**Historical backend v1 total: 30 endpoints + GET /health**
+**Current total: 41 endpoints including GET /health** (historical backend v1 base was 30 + health)
 
 ## Module Responsibility Summary
 
@@ -33,6 +34,7 @@ Historical snapshot note:
 | **Leave Request** | Submit leave, overlap check, approve (with balance deduction), reject |
 | **Leave Balance** | Per-employee leave quota, entitlement tracking, used/remaining days |
 | **Dashboard** | Aggregated read-only HR snapshot via 19 parallel Prisma queries |
+| **Audit Log** | Append-only audit trail; best-effort write pattern; metadata denylist sanitizer; RBAC-restricted read API (SUPER_ADMIN/HR_ADMIN) |
 
 ## Guard Pattern
 

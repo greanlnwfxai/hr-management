@@ -105,6 +105,17 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 
 ---
 
+## Audit Logs → [[Audit Log Module]]
+
+| Method | Path | Auth | Roles | Description |
+|---|---|---|---|---|
+| GET | /audit-logs | ✅ | SUPER_ADMIN, HR_ADMIN | Paginated audit log list (filters: action, targetType, actorRole, result, actorUserId, targetId, dateFrom, dateTo) |
+| GET | /audit-logs/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Single audit log record |
+
+No `POST`, `PATCH`, or `DELETE` endpoints exist for audit logs.
+
+---
+
 ## Enum Reference
 
 ```
@@ -136,5 +147,6 @@ LeaveStatus:      PENDING | APPROVED | REJECTED
 - [[Platform State v1.1.31]]
 - [[RBAC Rules]]
 - [[ADR-007 API Standards]]
+- [[Audit Log Module]]
 
 #api #backend-v1 #rag-ready

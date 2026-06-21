@@ -1,7 +1,7 @@
 # ADR-018: Audit Log Foundation Specification Status
 
 ## Status
-Accepted
+Superseded by ADR-019 (Audit Trail and Admin Audit Log Review) — dated 2026-06-21. The specification-only phase described here is complete; the Audit Log Pack (T-057B-1 through T-057B-7) has been fully implemented and deployed through `v1.1.41-admin-audit-log-ui`.
 
 ## Date
 2026-06-20
