@@ -68,6 +68,13 @@ Results are always ordered by `createdAt DESC`.
 | `LEAVE_REJECTED` | Leave request rejected | `LEAVE_REQUEST` |
 | `ATTENDANCE_CLOCK_IN` | Employee clocks in | `ATTENDANCE` |
 | `ATTENDANCE_CLOCK_OUT` | Employee clocks out | `ATTENDANCE` |
+| `ATTENDANCE_GEOFENCE_CONFIG_UPDATED` | Admin updates geofence config | `ATTENDANCE` |
+
+### Planned Events (T-065)
+
+| Action String | Trigger | Target Type | Notes |
+|---|---|---|---|
+| `ATTENDANCE_GEOFENCE_REJECTED` | Mobile clock-in/out rejected by geofence | `ATTENDANCE` | Spec: `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`; result value: `REJECTED`; no raw GPS in metadata |
 
 ## Write Pattern — Best-Effort
 

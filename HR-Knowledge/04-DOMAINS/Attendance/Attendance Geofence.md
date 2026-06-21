@@ -165,6 +165,31 @@ Raw company coordinates are never written to `AuditLog.metadata`.
 
 ---
 
+## Planned: Geofence Rejection Audit (T-065)
+
+A specification for auditing failed mobile geofence attempts was produced in T-064.
+
+Proposed event: `ATTENDANCE_GEOFENCE_REJECTED`
+
+Safe metadata fields (no raw GPS):
+
+| Field | Description |
+|---|---|
+| `attemptType` | `CLOCK_IN` or `CLOCK_OUT` |
+| `source` | always `"mobile"` |
+| `reason` | `MISSING_LOCATION` / `POOR_ACCURACY` / `GEOFENCE_NOT_CONFIGURED` / `OUTSIDE_RADIUS` |
+| `hasCoordinates` | boolean — whether lat/lon was present |
+| `hasAccuracy` | boolean — whether accuracy was present |
+| `accuracyBucket` | `UNKNOWN` / `ACCEPTABLE` / `POOR` (coarse GPS quality signal; no raw number) |
+| `configSource` | `"db"` or `"env"` |
+| `geofenceEnabled` | boolean |
+
+**Forbidden from metadata:** `latitude`, `longitude`, `accuracy` (raw), `distance`, company coordinates, free-form `note`.
+
+See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md` for the full specification.
+
+---
+
 ## Known Limitations
 
 | Limitation | Notes |
@@ -172,7 +197,7 @@ Raw company coordinates are never written to `AuditLog.metadata`.
 | Single office only | Multi-office requires schema redesign |
 | GPS spoofing undetectable | Device integrity APIs (SafetyNet / DeviceCheck) not implemented |
 | No per-role or per-office radius | Global radius applies to all users |
-| No geofence rejection audit | Individual check-in rejections are not logged |
+| No geofence rejection audit | Specification complete (T-064); implementation planned in T-065 |
 | Elevation ignored | Haversine is 2D distance only |
 
 ---

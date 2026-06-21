@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-21
 
-## Current Product State — v1.1.46 ✅
+## Current Product State — v1.1.47 ✅
 
 The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.46-geofence-runtime-verification`, it includes:
 
@@ -61,6 +61,7 @@ See [[Audit Log Module]] for full architecture details.
 | T-061 | `v1.1.45-geofence-knowledge-sync` | HR-Knowledge and ADR sync for full geofence pack |
 | T-062 | `v1.1.46-geofence-runtime-verification` | Full runtime verification: API, RBAC, mobile enforcement, audit privacy, web UI |
 | T-063 | (docs only) | Production geofence readiness checklist and SOP |
+| T-064 | (docs only) | Failed geofence attempt audit specification (`ATTENDANCE_GEOFENCE_REJECTED`) |
 
 See [[Attendance Geofence]] for full architecture details.
 
@@ -90,13 +91,13 @@ See [[Attendance Geofence]] for full architecture details.
 | 11 | Audit Log | `dateTo` filter uses UTC midnight boundary; may exclude records created after 00:00 UTC on that date | Future fix if needed |
 | 12 | Geofence | Single office location only; multi-office requires schema redesign | Future work |
 | 13 | Geofence | GPS spoofing undetectable without device integrity APIs (SafetyNet / DeviceCheck) | Future work |
-| 14 | Geofence | Rejected clock-in/out attempts (422) do not generate audit log entries | T-064 (Failed Geofence Attempt Audit Specification) |
+| 14 | Geofence | Rejected clock-in/out attempts (422) do not generate audit log entries | Specification complete (T-064); implementation: T-065 |
 
 ## Next Recommended Task
 
-**T-064 — Failed Geofence Attempt Audit Specification**
+**T-065 — Failed Geofence Attempt Audit Implementation**
 
-Specify and implement an `ATTENDANCE_GEOFENCE_REJECTED` audit event for rejected mobile clock-in/out attempts. This is a small, privacy-sensitive task: the event must capture that a rejection occurred without storing raw GPS coordinates.
+Implement `ATTENDANCE_GEOFENCE_REJECTED` audit event per `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`. Inject `AuditLogService` into `AttendanceService`, add best-effort audit write before each geofence 422 throw, extend sanitizer denylist with GPS keys, and write all specified tests.
 
 ## Security / Process Notes
 
@@ -118,4 +119,4 @@ Specify and implement an `ATTENDANCE_GEOFENCE_REJECTED` audit event for rejected
 - [[RBAC Rules]]
 - [[Production Geofence Readiness]]
 
-#hr-management #status #v1-1-46
+#hr-management #status #v1-1-47
