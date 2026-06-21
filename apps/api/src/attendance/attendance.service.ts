@@ -57,7 +57,7 @@ export class AttendanceService {
   ) {}
 
   async clockIn(userId: string, dto: ClockInDto, ctx?: AttendanceAuditContext) {
-    await this.validateGeofence(dto);
+    await this.validateGeofence(dto, 'CLOCK_IN', ctx);
 
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
@@ -107,7 +107,7 @@ export class AttendanceService {
   }
 
   async clockOut(userId: string, dto: ClockOutDto, ctx?: AttendanceAuditContext) {
-    await this.validateGeofence(dto);
+    await this.validateGeofence(dto, 'CLOCK_OUT', ctx);
 
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
@@ -308,25 +308,62 @@ export class AttendanceService {
   // Geofence validation — only applied when source='mobile'.
   // Web and legacy (no source) requests are passed through without checks,
   // preserving backwards compatibility with the existing web attendance flow.
-  private async validateGeofence(dto: ClockInDto | ClockOutDto): Promise<void> {
+  private async validateGeofence(
+    dto: ClockInDto | ClockOutDto,
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
+    ctx?: AttendanceAuditContext,
+  ): Promise<void> {
     if (dto.source !== 'mobile') return;
 
     const config = await this.geofenceConfig.getEffectiveConfig();
     if (!config.enabled) return;
 
     if (dto.latitude === undefined || dto.longitude === undefined || dto.accuracy === undefined) {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'MISSING_LOCATION',
+        hasCoordinates: false,
+        hasAccuracy: false,
+        accuracyBucket: 'UNKNOWN',
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
       throw new UnprocessableEntityException(
         'Location is required for mobile attendance.',
       );
     }
 
     if (dto.accuracy > config.maxAccuracyMeters) {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'POOR_ACCURACY',
+        hasCoordinates: true,
+        hasAccuracy: true,
+        accuracyBucket: 'POOR',
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
       throw new UnprocessableEntityException(
         'GPS accuracy is too low. Please try again near the office.',
       );
     }
 
     if (config.latitude === null || config.longitude === null) {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'GEOFENCE_NOT_CONFIGURED',
+        hasCoordinates: true,
+        hasAccuracy: true,
+        accuracyBucket: 'ACCEPTABLE',
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
       throw new UnprocessableEntityException(
         'Attendance geofence is not configured.',
       );
@@ -341,10 +378,54 @@ export class AttendanceService {
     );
 
     if (!within) {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'OUTSIDE_RADIUS',
+        hasCoordinates: true,
+        hasAccuracy: true,
+        accuracyBucket: 'ACCEPTABLE',
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
       throw new UnprocessableEntityException(
         'You are outside the allowed company area.',
       );
     }
+  }
+
+  private async recordGeofenceRejectedAuditBestEffort(args: {
+    actorUserId: string | null;
+    actorRole: string | null;
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    reason: 'MISSING_LOCATION' | 'POOR_ACCURACY' | 'GEOFENCE_NOT_CONFIGURED' | 'OUTSIDE_RADIUS';
+    hasCoordinates: boolean;
+    hasAccuracy: boolean;
+    accuracyBucket: 'UNKNOWN' | 'ACCEPTABLE' | 'POOR';
+    configSource: 'db' | 'env';
+    geofenceEnabled: boolean;
+  }): Promise<void> {
+    await this.recordBestEffort({
+      actorUserId: args.actorUserId,
+      actorRole: args.actorRole,
+      action: 'ATTENDANCE_GEOFENCE_REJECTED',
+      targetType: 'ATTENDANCE',
+      targetId: null,
+      targetLabel: args.attemptType === 'CLOCK_IN' ? 'clock-in-geofence-rejected' : 'clock-out-geofence-rejected',
+      result: 'REJECTED',
+      metadata: {
+        attemptType: args.attemptType,
+        source: 'mobile',
+        reason: args.reason,
+        hasCoordinates: args.hasCoordinates,
+        hasAccuracy: args.hasAccuracy,
+        accuracyBucket: args.accuracyBucket,
+        configSource: args.configSource,
+        geofenceEnabled: args.geofenceEnabled,
+        result: 'REJECTED',
+      },
+    });
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

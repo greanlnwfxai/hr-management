@@ -811,4 +811,210 @@ describe('AttendanceService', () => {
       expect(result.checkOut).toBeTruthy();
     });
   });
+
+  // ── audit: geofence rejected ───────────────────────────────────────────────
+
+  describe('audit: geofence rejected', () => {
+    const ctx = {
+      actorUserId: 'user-uuid-1',
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    const enabledEnvConfig = {
+      enabled: true,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    it('emits ATTENDANCE_GEOFENCE_REJECTED with MISSING_LOCATION on mobile clock-in with no GPS fields', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+
+      await expect(service.clockIn(userId, { source: 'mobile' }, ctx)).rejects.toThrow(
+        UnprocessableEntityException,
+      );
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          result: 'REJECTED',
+          targetType: 'ATTENDANCE',
+          targetId: null,
+          targetLabel: 'clock-in-geofence-rejected',
+          actorUserId: ctx.actorUserId,
+          actorRole: ctx.actorRole,
+          metadata: expect.objectContaining({
+            attemptType: 'CLOCK_IN',
+            reason: 'MISSING_LOCATION',
+            hasCoordinates: false,
+            hasAccuracy: false,
+            accuracyBucket: 'UNKNOWN',
+          }),
+        }),
+      );
+    });
+
+    it('emits ATTENDANCE_GEOFENCE_REJECTED with POOR_ACCURACY on mobile clock-in with poor GPS', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({ ...enabledEnvConfig, maxAccuracyMeters: 50 });
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 150 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-in-geofence-rejected',
+          metadata: expect.objectContaining({
+            attemptType: 'CLOCK_IN',
+            reason: 'POOR_ACCURACY',
+            hasCoordinates: true,
+            hasAccuracy: true,
+            accuracyBucket: 'POOR',
+          }),
+        }),
+      );
+    });
+
+    it('emits ATTENDANCE_GEOFENCE_REJECTED with GEOFENCE_NOT_CONFIGURED when company location missing', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        ...enabledEnvConfig,
+        latitude: null,
+        longitude: null,
+      });
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-in-geofence-rejected',
+          metadata: expect.objectContaining({
+            attemptType: 'CLOCK_IN',
+            reason: 'GEOFENCE_NOT_CONFIGURED',
+            hasCoordinates: true,
+            hasAccuracy: true,
+            accuracyBucket: 'ACCEPTABLE',
+          }),
+        }),
+      );
+    });
+
+    it('emits ATTENDANCE_GEOFENCE_REJECTED with OUTSIDE_RADIUS on mobile clock-in outside radius', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-in-geofence-rejected',
+          metadata: expect.objectContaining({
+            attemptType: 'CLOCK_IN',
+            reason: 'OUTSIDE_RADIUS',
+            hasCoordinates: true,
+            hasAccuracy: true,
+            accuracyBucket: 'ACCEPTABLE',
+          }),
+        }),
+      );
+    });
+
+    it('emits ATTENDANCE_GEOFENCE_REJECTED with CLOCK_OUT and clock-out-geofence-rejected on rejected clock-out', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockOut(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-out-geofence-rejected',
+          metadata: expect.objectContaining({
+            attemptType: 'CLOCK_OUT',
+            reason: 'OUTSIDE_RADIUS',
+          }),
+        }),
+      );
+    });
+
+    it('still returns 422 when audit write fails (best-effort on rejection path)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('metadata contains no forbidden GPS fields', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('accuracy');
+      expect(event.metadata).not.toHaveProperty('distance');
+      expect(event.metadata).not.toHaveProperty('companyLatitude');
+      expect(event.metadata).not.toHaveProperty('companyLongitude');
+      expect(event.metadata).not.toHaveProperty('note');
+    });
+
+    it('does not emit ATTENDANCE_GEOFENCE_REJECTED for web source', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      await service.clockIn(userId, { source: 'web' }, ctx);
+
+      expect(mockAuditLog.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_REJECTED' }),
+      );
+    });
+
+    it('does not emit ATTENDANCE_GEOFENCE_REJECTED when mobile clock-in is inside radius', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      geofenceService.isWithinRadius.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+
+      await service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx);
+
+      expect(mockAuditLog.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_REJECTED' }),
+      );
+    });
+
+    it('configSource in metadata reflects effective config source', async () => {
+      const dbConfig = { ...enabledEnvConfig, source: 'db' as const };
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(dbConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).toMatchObject({ configSource: 'db', geofenceEnabled: true });
+    });
+  });
 });

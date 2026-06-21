@@ -26,4 +26,8 @@ export const AUDIT_SENSITIVE_KEYS = new Set([
   'temppassword',
   'secret',
   'apikey',
+  'latitude',
+  'longitude',
+  'accuracy',
+  'distance',
 ]);

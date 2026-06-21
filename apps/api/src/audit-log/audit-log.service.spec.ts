@@ -262,6 +262,55 @@ describe('AuditLogService', () => {
       expect(data.metadata.Authorization).toBe('[REDACTED]');
     });
 
+    it('redacts latitude from metadata (GPS privacy denylist)', async () => {
+      prisma.auditLog.create.mockResolvedValue({} as any);
+
+      await service.record({ ...baseEvent, metadata: { latitude: 13.7563 } });
+
+      const { data } = prisma.auditLog.create.mock.calls[0][0];
+      expect(data.metadata.latitude).toBe('[REDACTED]');
+    });
+
+    it('redacts longitude from metadata (GPS privacy denylist)', async () => {
+      prisma.auditLog.create.mockResolvedValue({} as any);
+
+      await service.record({ ...baseEvent, metadata: { longitude: 100.5018 } });
+
+      const { data } = prisma.auditLog.create.mock.calls[0][0];
+      expect(data.metadata.longitude).toBe('[REDACTED]');
+    });
+
+    it('redacts accuracy from metadata (GPS privacy denylist)', async () => {
+      prisma.auditLog.create.mockResolvedValue({} as any);
+
+      await service.record({ ...baseEvent, metadata: { accuracy: 25 } });
+
+      const { data } = prisma.auditLog.create.mock.calls[0][0];
+      expect(data.metadata.accuracy).toBe('[REDACTED]');
+    });
+
+    it('redacts distance from metadata (GPS privacy denylist)', async () => {
+      prisma.auditLog.create.mockResolvedValue({} as any);
+
+      await service.record({ ...baseEvent, metadata: { distance: 250.5 } });
+
+      const { data } = prisma.auditLog.create.mock.calls[0][0];
+      expect(data.metadata.distance).toBe('[REDACTED]');
+    });
+
+    it('preserves accuracyBucket while redacting accuracy (exact key matching)', async () => {
+      prisma.auditLog.create.mockResolvedValue({} as any);
+
+      await service.record({
+        ...baseEvent,
+        metadata: { accuracy: 87, accuracyBucket: 'POOR' },
+      });
+
+      const { data } = prisma.auditLog.create.mock.calls[0][0];
+      expect(data.metadata.accuracy).toBe('[REDACTED]');
+      expect(data.metadata.accuracyBucket).toBe('POOR');
+    });
+
     it('handles metadata with only null/undefined values safely', async () => {
       prisma.auditLog.create.mockResolvedValue({} as any);
 
