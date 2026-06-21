@@ -2,24 +2,25 @@
 
 Last updated: 2026-06-21
 
-## Current Product State — v1.1.47 ✅
+## Current Product State — v1.1.49 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.46-geofence-runtime-verification`, it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.49-failed-geofence-audit-implementation`, it includes:
 
 - Stable NestJS API with username/email login
 - Web admin: profile/password change, employee account management, audit log review
 - Mobile: attendance, leave, calendar, profile/password change, manager approval, and final UI polish
 - Forced `mustChangePassword` flow on web and mobile
 - Security harness scripts, security CI, Dependabot, and accepted-risk policy
-- **Full Audit Log Pack — complete**: append-only audit trail, 9 event types, RBAC-restricted read API, admin web UI
-- **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI
+- **Full Audit Log Pack — complete**: append-only audit trail, 10 event types, RBAC-restricted read API, admin web UI, failed geofence rejection audit
+- **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI, rejected-attempt audit logging
 
 ## ADR Pack — COMPLETE ✅
 
-20 Architecture Decision Records in `docs/adr/`. See [[ADR Index]].
+21 Architecture Decision Records in `docs/adr/`. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
 ADR-020 added: Attendance Geofence and Admin Configuration.
+ADR-021 added: Failed Geofence Attempt Audit.
 
 ## Major Delivered Areas
 
@@ -30,7 +31,7 @@ ADR-020 added: Attendance Geofence and Admin Configuration.
 | Mobile | Dashboard, attendance, leave request, manager approval, profile/password change, calendar, UI polish | T-044–T-056A | ✅ Done |
 | Web admin | Profile/password change, forced password change flow, employee detail account management, audit log review | T-053–T-055, T-057B-7 | ✅ Done |
 | Security process | Security harness, accepted-risk policy, CI security job, Dependabot, agent workflow docs | T-052A.1, T-052A.3, T-052A.4 | ✅ Done |
-| Audit Log Pack | Prisma model, audit service, 9 event types, read API, admin web UI, Playwright e2e | T-057B-1 through T-057B-7 | ✅ Done |
+| Audit Log Pack | Prisma model, audit service, 10 event types, read API, admin web UI, Playwright e2e, rejected geofence audit | T-057B-1 through T-057B-7, T-065 | ✅ Done |
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 
 Current documented API surface: **43 endpoints including `GET /health`** (T-060 added `GET/PATCH /attendance/geofence-config`).
@@ -62,6 +63,8 @@ See [[Audit Log Module]] for full architecture details.
 | T-062 | `v1.1.46-geofence-runtime-verification` | Full runtime verification: API, RBAC, mobile enforcement, audit privacy, web UI |
 | T-063 | (docs only) | Production geofence readiness checklist and SOP |
 | T-064 | (docs only) | Failed geofence attempt audit specification (`ATTENDANCE_GEOFENCE_REJECTED`) |
+| T-065 | `v1.1.49-failed-geofence-audit-implementation` | Failed mobile geofence attempt audit logging with privacy-safe metadata and sanitizer GPS denylist |
+| T-066 | (docs only) | Failed geofence audit knowledge and ADR sync |
 
 See [[Attendance Geofence]] for full architecture details.
 
@@ -91,13 +94,13 @@ See [[Attendance Geofence]] for full architecture details.
 | 11 | Audit Log | `dateTo` filter uses UTC midnight boundary; may exclude records created after 00:00 UTC on that date | Future fix if needed |
 | 12 | Geofence | Single office location only; multi-office requires schema redesign | Future work |
 | 13 | Geofence | GPS spoofing undetectable without device integrity APIs (SafetyNet / DeviceCheck) | Future work |
-| 14 | Geofence | Rejected clock-in/out attempts (422) do not generate audit log entries | Specification complete (T-064); implementation: T-065 |
+| 14 | Geofence | Rejected clock-in/out audit logging implemented in T-065; runtime verification and operational observation still recommended | Follow-up verification in T-067 |
 
 ## Next Recommended Task
 
-**T-065 — Failed Geofence Attempt Audit Implementation**
+**T-067 — Failed Geofence Audit Runtime Verification**
 
-Implement `ATTENDANCE_GEOFENCE_REJECTED` audit event per `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`. Inject `AuditLogService` into `AttendanceService`, add best-effort audit write before each geofence 422 throw, extend sanitizer denylist with GPS keys, and write all specified tests.
+Run targeted runtime verification for rejected mobile geofence attempts across the four rejection reasons, confirm best-effort audit behavior in practice, verify privacy-safe metadata in audit review surfaces, and confirm web/legacy flows remain unaffected.
 
 ## Security / Process Notes
 
@@ -119,4 +122,4 @@ Implement `ATTENDANCE_GEOFENCE_REJECTED` audit event per `docs/SPEC_T064_FAILED_
 - [[RBAC Rules]]
 - [[Production Geofence Readiness]]
 
-#hr-management #status #v1-1-47
+#hr-management #status #v1-1-49

@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the HR Management System.
 
-This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.1.32`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
+This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.1.49-failed-geofence-audit-implementation`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
 
 ## Index
 
@@ -28,6 +28,7 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-018 Audit Log Status]] | Audit Log Foundation Specification Status | Process | ~~Audit log remains specification-only~~ — **Superseded by ADR-019** |
 | [[ADR-019 Audit Trail and Admin Review]] | Audit Trail and Admin Audit Log Review | Security | Append-only audit trail, best-effort writes, metadata denylist, RBAC-restricted read API, read-only admin UI |
 | [[ADR-020 Attendance Geofence and Admin Configuration]] | Attendance Geofence and Admin Configuration | Security / Business Rules | Backend-enforced mobile geofence, DB-singleton config with env fallback, SUPER_ADMIN/HR_ADMIN-only admin endpoints, no raw GPS storage |
+| [[ADR-021 Failed Geofence Attempt Audit]] | Failed Geofence Attempt Audit | Security / Audit | Single rejected-geofence audit event for mobile clock-in/out, privacy-safe metadata, best-effort write, existing 422 behavior preserved |
 
 ## ADR Policy
 
@@ -58,7 +59,8 @@ docs/adr/
 ├── ADR-017-mobile-expo-router-and-web-compatible-shell.md
 ├── ADR-018-audit-log-foundation-specification-status.md
 ├── ADR-019-audit-trail-and-admin-review.md
-└── ADR-020-attendance-geofence-and-admin-configuration.md
+├── ADR-020-attendance-geofence-and-admin-configuration.md
+└── ADR-021-failed-geofence-attempt-audit.md
 ```
 
 ## Related Notes

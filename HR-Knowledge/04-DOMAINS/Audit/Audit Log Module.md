@@ -69,12 +69,42 @@ Results are always ordered by `createdAt DESC`.
 | `ATTENDANCE_CLOCK_IN` | Employee clocks in | `ATTENDANCE` |
 | `ATTENDANCE_CLOCK_OUT` | Employee clocks out | `ATTENDANCE` |
 | `ATTENDANCE_GEOFENCE_CONFIG_UPDATED` | Admin updates geofence config | `ATTENDANCE` |
+| `ATTENDANCE_GEOFENCE_REJECTED` | Mobile clock-in/out rejected by geofence | `ATTENDANCE` |
 
-### Planned Events (T-065)
+### `ATTENDANCE_GEOFENCE_REJECTED`
 
-| Action String | Trigger | Target Type | Notes |
-|---|---|---|---|
-| `ATTENDANCE_GEOFENCE_REJECTED` | Mobile clock-in/out rejected by geofence | `ATTENDANCE` | Spec: `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`; result value: `REJECTED`; no raw GPS in metadata |
+Current implemented shape:
+
+- `action`: `ATTENDANCE_GEOFENCE_REJECTED`
+- `targetType`: `ATTENDANCE`
+- `targetId`: `null`
+- `targetLabel`: `clock-in-geofence-rejected` or `clock-out-geofence-rejected`
+- `result`: `REJECTED`
+
+Metadata summary:
+
+| Field | Value |
+|---|---|
+| `attemptType` | `CLOCK_IN` or `CLOCK_OUT` |
+| `source` | always `mobile` |
+| `reason` | `MISSING_LOCATION`, `POOR_ACCURACY`, `GEOFENCE_NOT_CONFIGURED`, or `OUTSIDE_RADIUS` |
+| `hasCoordinates` | boolean |
+| `hasAccuracy` | boolean |
+| `accuracyBucket` | `UNKNOWN`, `ACCEPTABLE`, or `POOR` |
+| `configSource` | `db` or `env` |
+| `geofenceEnabled` | boolean |
+| `result` | `REJECTED` |
+
+Privacy guarantees:
+
+- No raw latitude or longitude
+- No raw numeric accuracy
+- No exact distance
+- No company coordinates
+- No free-form attendance note
+- No derived location fields
+
+This event is emitted only for failed mobile geofence checks. Web and legacy requests are unaffected, and successful inside-radius mobile attendance does not emit this rejection event.
 
 ## Write Pattern — Best-Effort
 
@@ -95,6 +125,15 @@ A failed audit write does not roll back or block the user-facing flow.
 ## Metadata Sanitizer
 
 `audit-log.sanitizer.ts` applies a **denylist** of sensitive key names before every insert. Keys in `AUDIT_SENSITIVE_KEYS` (password, token, hash, secret, apikey, etc.) have their values replaced with `'[REDACTED]'`; all other keys are stored as-is.
+
+GPS-related defense-in-depth denylist entries now include:
+
+- `latitude`
+- `longitude`
+- `accuracy`
+- `distance`
+
+`accuracyBucket` remains preserved because sanitizer matching is exact-key based rather than prefix based.
 
 **Never stored in metadata:**
 - passwords (plain, hashed, or temporary)
@@ -143,6 +182,7 @@ Route: `apps/web/app/(app)/audit-logs/page.tsx`
 ## Related ADRs
 
 - [[ADR-019 Audit Trail and Admin Review]]
+- [[ADR-021 Failed Geofence Attempt Audit]]
 - [[ADR-006 RBAC]]
 - [[ADR-013 Identity and Account Lifecycle]]
 

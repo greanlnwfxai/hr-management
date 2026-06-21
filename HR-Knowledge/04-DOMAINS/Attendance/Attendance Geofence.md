@@ -165,13 +165,22 @@ Raw company coordinates are never written to `AuditLog.metadata`.
 
 ---
 
-## Planned: Geofence Rejection Audit (T-065)
+## Failed Geofence Audit (Implemented in T-065)
 
-A specification for auditing failed mobile geofence attempts was produced in T-064.
+Failed mobile geofence clock-in and clock-out attempts now emit `ATTENDANCE_GEOFENCE_REJECTED`.
 
-Proposed event: `ATTENDANCE_GEOFENCE_REJECTED`
+Implemented behavior:
 
-Safe metadata fields (no raw GPS):
+- Event is emitted only for failed mobile geofence attempts
+- Covered attempts: `CLOCK_IN`, `CLOCK_OUT`
+- Covered rejection reasons: `MISSING_LOCATION`, `POOR_ACCURACY`, `GEOFENCE_NOT_CONFIGURED`, `OUTSIDE_RADIUS`
+- Audit write is best-effort and does not change the user-facing response
+- Existing `422` behavior is preserved
+- No attendance record is created for rejected attempts
+- Web and legacy attendance requests remain unaffected
+- Successful inside-radius mobile attendance does not emit this rejection event
+
+Safe metadata fields:
 
 | Field | Description |
 |---|---|
@@ -183,10 +192,20 @@ Safe metadata fields (no raw GPS):
 | `accuracyBucket` | `UNKNOWN` / `ACCEPTABLE` / `POOR` (coarse GPS quality signal; no raw number) |
 | `configSource` | `"db"` or `"env"` |
 | `geofenceEnabled` | boolean |
+| `result` | always `REJECTED` |
 
-**Forbidden from metadata:** `latitude`, `longitude`, `accuracy` (raw), `distance`, company coordinates, free-form `note`.
+**Privacy exclusions:** `latitude`, `longitude`, raw `accuracy`, exact `distance`, company coordinates, free-form `note`, bearing, offsets, and derived location fields are excluded from metadata.
 
-See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md` for the full specification.
+The audit sanitizer denylist now also redacts exact-key matches for:
+
+- `latitude`
+- `longitude`
+- `accuracy`
+- `distance`
+
+`accuracyBucket` is preserved because sanitizer matching is exact-key based.
+
+See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`, `docs/CTO_SUMMARY_T065.md`, and [[ADR-021 Failed Geofence Attempt Audit]].
 
 ---
 
@@ -197,7 +216,6 @@ See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md` for the full specification
 | Single office only | Multi-office requires schema redesign |
 | GPS spoofing undetectable | Device integrity APIs (SafetyNet / DeviceCheck) not implemented |
 | No per-role or per-office radius | Global radius applies to all users |
-| No geofence rejection audit | Specification complete (T-064); implementation planned in T-065 |
 | Elevation ignored | Haversine is 2D distance only |
 
 ---
