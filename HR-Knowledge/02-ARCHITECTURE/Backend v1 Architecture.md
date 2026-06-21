@@ -13,14 +13,14 @@ Historical snapshot note:
 | Employee | `src/employees/` | 8 | T-005–015, T-050, T-055, T-057B-3 |
 | Department | `src/departments/` | 5 | T-016 |
 | Position | `src/positions/` | 5 | T-017 |
-| Attendance | `src/attendance/` | 5 | T-018, T-057B-5 |
+| Attendance | `src/attendance/` | 7 | T-018, T-046, T-059, T-060, T-057B-5 |
 | Leave Request | `src/leave/` | 6 | T-019, T-057B-4 |
 | Leave Balance | `src/leave-balance/` | 5 | T-020 |
 | Dashboard | `src/dashboard/` | 1 | T-021 |
 | Audit Log | `src/audit-log/` | 2 | T-057B-1, T-057B-6 |
 | Health | `health.controller.ts` | 1 | — |
 
-**Current total: 41 endpoints including GET /health** (historical backend v1 base was 30 + health)
+**Current total: 43 endpoints including GET /health** (T-060 added GET and PATCH /attendance/geofence-config)
 
 ## Module Responsibility Summary
 
@@ -30,7 +30,7 @@ Historical snapshot note:
 | **Employee** | Employee CRUD, soft delete (status=INACTIVE), org directory |
 | **Department** | Department CRUD, safe hard delete (blocked if employees exist) |
 | **Position** | Position CRUD, safe delete (blocked if employees use it) |
-| **Attendance** | Clock-in/out with Bangkok timezone LATE rule, paginated history |
+| **Attendance** | Clock-in/out with Bangkok timezone LATE rule, paginated history; mobile geofence enforcement; DB-backed geofence config (env fallback) |
 | **Leave Request** | Submit leave, overlap check, approve (with balance deduction), reject |
 | **Leave Balance** | Per-employee leave quota, entitlement tracking, used/remaining days |
 | **Dashboard** | Aggregated read-only HR snapshot via 19 parallel Prisma queries |
@@ -98,11 +98,16 @@ As of Backend v1.0, the API contract is **stable**:
 4. **Route ordering** — declare `/me` or `/my` before `/:id` to prevent NestJS routing conflicts
 5. **Ownership checks in service layer** — not in guards, not in controllers
 
+## GeofenceConfig Singleton (T-060)
+
+The `geofence_config` DB table stores a singleton configuration row (`id = "default"`). `GeofenceConfigService.getEffectiveConfig()` returns DB values if the row exists, otherwise falls back to environment variables. This async method is called on every mobile clock-in/out. No raw employee GPS coordinates are persisted anywhere.
+
 ## Related Notes
 
 - [[System Architecture]]
 - [[API Route Index]]
 - [[Database Overview]]
 - [[ADR Index]]
+- [[Attendance Geofence]]
 
 #hr-management #backend-v1 #architecture

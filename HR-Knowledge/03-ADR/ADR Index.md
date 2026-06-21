@@ -27,6 +27,7 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-017 Mobile Expo Router]] | Mobile Expo Router and Web-Compatible Shell | Mobile | Expo Router foundation, Expo web compatibility, shared mobile shell components |
 | [[ADR-018 Audit Log Status]] | Audit Log Foundation Specification Status | Process | ~~Audit log remains specification-only~~ — **Superseded by ADR-019** |
 | [[ADR-019 Audit Trail and Admin Review]] | Audit Trail and Admin Audit Log Review | Security | Append-only audit trail, best-effort writes, metadata denylist, RBAC-restricted read API, read-only admin UI |
+| [[ADR-020 Attendance Geofence and Admin Configuration]] | Attendance Geofence and Admin Configuration | Security / Business Rules | Backend-enforced mobile geofence, DB-singleton config with env fallback, SUPER_ADMIN/HR_ADMIN-only admin endpoints, no raw GPS storage |
 
 ## ADR Policy
 
@@ -56,7 +57,8 @@ docs/adr/
 ├── ADR-016-agent-workflow-and-docker-safety-policy.md
 ├── ADR-017-mobile-expo-router-and-web-compatible-shell.md
 ├── ADR-018-audit-log-foundation-specification-status.md
-└── ADR-019-audit-trail-and-admin-review.md
+├── ADR-019-audit-trail-and-admin-review.md
+└── ADR-020-attendance-geofence-and-admin-configuration.md
 ```
 
 ## Related Notes

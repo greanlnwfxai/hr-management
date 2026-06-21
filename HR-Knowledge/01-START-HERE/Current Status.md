@@ -2,9 +2,9 @@
 
 Last updated: 2026-06-21
 
-## Current Product State — v1.1.41 ✅
+## Current Product State — v1.1.44 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.41-admin-audit-log-ui`, it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.44-admin-geofence-settings`, it includes:
 
 - Stable NestJS API with username/email login
 - Web admin: profile/password change, employee account management, audit log review
@@ -12,12 +12,14 @@ The platform is now beyond the original backend v1.0-only foundation. Through `v
 - Forced `mustChangePassword` flow on web and mobile
 - Security harness scripts, security CI, Dependabot, and accepted-risk policy
 - **Full Audit Log Pack — complete**: append-only audit trail, 9 event types, RBAC-restricted read API, admin web UI
+- **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI
 
 ## ADR Pack — COMPLETE ✅
 
-19 Architecture Decision Records in `docs/adr/`. See [[ADR Index]].
+20 Architecture Decision Records in `docs/adr/`. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
+ADR-020 added: Attendance Geofence and Admin Configuration.
 
 ## Major Delivered Areas
 
@@ -29,8 +31,9 @@ ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Tra
 | Web admin | Profile/password change, forced password change flow, employee detail account management, audit log review | T-053–T-055, T-057B-7 | ✅ Done |
 | Security process | Security harness, accepted-risk policy, CI security job, Dependabot, agent workflow docs | T-052A.1, T-052A.3, T-052A.4 | ✅ Done |
 | Audit Log Pack | Prisma model, audit service, 9 event types, read API, admin web UI, Playwright e2e | T-057B-1 through T-057B-7 | ✅ Done |
+| Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 
-Current documented API surface: **41 endpoints including `GET /health`** (was 39 before T-057B-6 added /audit-logs).
+Current documented API surface: **43 endpoints including `GET /health`** (T-060 added `GET/PATCH /attendance/geofence-config`).
 
 ## Audit Log Pack Summary
 
@@ -47,6 +50,17 @@ Current documented API surface: **41 endpoints including `GET /health`** (was 39
 
 See [[Audit Log Module]] for full architecture details.
 
+## Attendance Geofence Pack Summary
+
+| Task | Tag | Scope |
+|---|---|---|
+| T-046 | (within geofence milestone) | Backend Haversine engine, env-var geofence config, validation sequence |
+| T-047 | (within geofence milestone) | Mobile GPS UI, `expo-location` permission, `source: "mobile"` clock-in/out |
+| T-059 | `v1.1.43-mobile-attendance-geofence` | Gap closure: backend-authoritative enforcement confirmed, web preserved |
+| T-060 | `v1.1.44-admin-geofence-settings` | GeofenceConfig DB singleton, `GET/PATCH /attendance/geofence-config`, admin web UI at `/attendance/geofence-settings` |
+
+See [[Attendance Geofence]] for full architecture details.
+
 ## Current Operational Rules
 
 - Work schedule: `08:30–17:30`
@@ -54,6 +68,7 @@ See [[Audit Log Module]] for full architecture details.
 - Backend RBAC remains the source of truth; UI role gating is UX-only
 - `mustChangePassword` is enforced in current web/mobile UX flows
 - Audit writes are best-effort (try/catch); a failed audit write does not affect the business operation
+- Mobile geofence enforcement is backend-authoritative; the mobile app never decides attendance eligibility
 
 ## Current Known Limitations
 
@@ -70,12 +85,12 @@ See [[Audit Log Module]] for full architecture details.
 | 9 | Security | Monthly full security review is policy-driven; not every routine task should run the full security workflow | Continue scoped verification discipline |
 | 10 | Audit Log | No export/download, no retention/cleanup policy, no anomaly detection; actorUserId shown as UUID in UI | Future work |
 | 11 | Audit Log | `dateTo` filter uses UTC midnight boundary; may exclude records created after 00:00 UTC on that date | Future fix if needed |
+| 12 | Geofence | Single office location only; multi-office requires schema redesign | Future work |
+| 13 | Geofence | GPS spoofing undetectable without device integrity APIs (SafetyNet / DeviceCheck) | Future work |
 
 ## Next Recommended Task
 
-**T-059 — Mobile Attendance Location Enforcement**
-
-See `docs/ATTENDANCE_GEOFENCE_BACKEND.md` for geofencing backend spec.
+**T-062 — Geofence Runtime Verification**
 
 ## Security / Process Notes
 
@@ -91,8 +106,9 @@ See `docs/ATTENDANCE_GEOFENCE_BACKEND.md` for geofencing backend spec.
 - [[Project Overview]]
 - [[Platform State v1.1.31]]
 - [[Audit Log Module]]
+- [[Attendance Geofence]]
 - [[ADR Index]]
 - [[API Route Index]]
 - [[RBAC Rules]]
 
-#hr-management #status #v1-1-41
+#hr-management #status #v1-1-44

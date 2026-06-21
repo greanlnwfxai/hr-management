@@ -106,7 +106,22 @@ Historical backend v1 QA snapshot:
 - [x] No password or secret fields in response
 - [ ] Known: `todayAbsentCount` counts only explicit ABSENT records
 
-## 12. Known Limitations
+## 12. Geofence Config Tests (T-059/T-060)
+
+- [x] `GeofenceConfigService` — DB row present → `source: 'db'` and DB values returned
+- [x] `GeofenceConfigService` — no DB row → `source: 'env'` and env-var values returned
+- [x] `GeofenceConfigService` — missing/non-numeric env coords → `latitude/longitude: null`
+- [x] `AttendanceService.updateGeofenceConfig()` — upserts DB row
+- [x] `AttendanceService.updateGeofenceConfig()` — enabling without coords returns 422
+- [x] `AttendanceService.updateGeofenceConfig()` — audit metadata contains no raw coordinates
+- [x] `AttendanceController` — `@Roles(SUPER_ADMIN, HR_ADMIN)` metadata verified via `Reflect.getMetadata`
+- [x] `AttendanceController` — `getGeofenceConfig` delegates to service
+- [x] `AttendanceController` — `updateGeofenceConfig` delegates to service with audit context
+- [x] security-review.sh PASS for T-060
+- [x] verify.sh PASS (336 tests, 20 suites) for T-060
+- [ ] docker-verify.sh — NOT RUN per Docker safety rule (requires `docker compose down` internally)
+
+## 14. Known Limitations
 
 | # | Area | Limitation |
 |---|---|---|

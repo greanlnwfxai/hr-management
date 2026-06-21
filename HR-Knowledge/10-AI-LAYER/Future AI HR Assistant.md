@@ -67,7 +67,7 @@ The AI assistant should be aware of the user's role:
 
 ### 3. Knowledge Currency
 
-The AI assistant's knowledge should now align with the current `v1.1.41` product state. It should:
+The AI assistant's knowledge should now align with the current `v1.1.44` product state. It should:
 
 - Acknowledge known limitations (see [[Current Status]] for the current limitation table)
 - Refer users to HR staff for actions it cannot perform
@@ -80,6 +80,13 @@ Examples of current-state knowledge it should know:
 - mobile app includes Home, Attendance, Leave, Calendar, Profile, and Approvals flows
 - work schedule is `08:30–17:30` and late threshold is strictly after `08:30` Bangkok time
 - audit log is **fully implemented** through `v1.1.41-admin-audit-log-ui`; the admin web UI at `/audit-logs` is available for SUPER_ADMIN and HR_ADMIN; see [[Audit Log Module]]
+- attendance geofence is **fully implemented** through `v1.1.44-admin-geofence-settings`; mobile clock-in/out enforces location; admin config UI at `/attendance/geofence-settings` is available for SUPER_ADMIN and HR_ADMIN; see [[Attendance Geofence]]
+
+**Geofence AI behavior rules:**
+- The AI can explain geofence policy: what it does, how it works, which roles can configure it
+- The AI must not expose raw GPS coordinates from any source
+- Geofence configuration data (company lat/lon, radius) is admin-sensitive; the AI should not surface these values to EMPLOYEE or MANAGER roles
+- The AI should not answer "can I disable geofence for myself?" with yes — the answer is no; geofence is backend-enforced
 
 ### 4. Scope Boundaries
 
@@ -105,5 +112,6 @@ When implementing the AI assistant:
 - [[API Route Index]]
 - [[Leave Rules]]
 - [[Attendance Rules]]
+- [[Attendance Geofence]]
 
 #ai-layer #rag-ready #future

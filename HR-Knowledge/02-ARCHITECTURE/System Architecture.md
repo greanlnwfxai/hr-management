@@ -78,7 +78,7 @@ apps/api/src/
 ├── employees/
 ├── departments/
 ├── positions/
-├── attendance/
+├── attendance/   # Clock-in/out; mobile geofence enforcement; GeofenceConfig singleton (T-060)
 ├── leave/
 ├── leave-balance/
 ├── dashboard/
@@ -88,6 +88,8 @@ apps/api/src/
 ├── app.module.ts
 └── main.ts
 ```
+
+**GeofenceConfig:** The `attendance/` module owns geofence config lookup via `GeofenceConfigService.getEffectiveConfig()`. Config is DB-first (singleton `geofence_config` table) with env-var fallback. No raw employee GPS is ever persisted — coordinates are used only for validation at request time.
 
 No `src/modules/` wrapper. New features follow the pattern `src/<feature>/<feature>.module.ts`.
 

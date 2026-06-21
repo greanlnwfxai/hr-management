@@ -23,6 +23,8 @@
 | GET /departments, /positions | ✅ | ✅ | ✅ | ✅ |
 | POST/PATCH/DELETE /departments, /positions | ✅ | ✅ | ❌ | ❌ |
 | POST /attendance/clock-in\|out | ✅ | ✅ | ✅ | ✅ |
+| GET /attendance/geofence-config | ✅ | ✅ | ❌ | ❌ |
+| PATCH /attendance/geofence-config | ✅ | ✅ | ❌ | ❌ |
 | GET /attendance/me | ✅ | ✅ | ✅ | ✅ |
 | GET /attendance (admin list) | ✅ | ✅ | ❌ | ❌ |
 | GET /attendance/:id | ✅ | ✅ | owner only | owner only |
@@ -72,6 +74,13 @@ export class ResourceController {
 
 MANAGER can now view `GET /leave` and approve/reject leave requests, but there is still **no manager-to-subordinate scoping**. A MANAGER can see organization-wide leave requests and leave balances, not only their direct reports.
 
+## Geofence Config Access
+
+- `GET /attendance/geofence-config` and `PATCH /attendance/geofence-config` are restricted to SUPER_ADMIN and HR_ADMIN.
+- MANAGER and EMPLOYEE receive `403 Forbidden` from these endpoints.
+- Mobile geofence *enforcement* (validation at clock-in/out time) applies to all roles when `source === "mobile"` and geofence is enabled. Employees cannot disable the geofence for themselves.
+- The admin web page at `/attendance/geofence-settings` is gated by `isAdmin()` on the client, but backend RBAC is the authoritative control.
+
 ## Known Limitations
 
 - No per-department scoping for MANAGER — MANAGER sees all balances, not just their team's
@@ -82,11 +91,13 @@ MANAGER can now view `GET /leave` and approve/reject leave requests, but there i
 
 - [[ADR-006 RBAC]]
 - [[ADR-005 JWT Authentication]]
+- [[ADR-020 Attendance Geofence and Admin Configuration]]
 
 ## Related Notes
 
 - [[Auth Module]]
 - [[API Route Index]]
 - [[Leave Rules]]
+- [[Attendance Geofence]]
 
 #business-rules #rbac #security #rag-ready

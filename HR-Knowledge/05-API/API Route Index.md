@@ -66,6 +66,8 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 |---|---|---|---|---|
 | POST | /attendance/clock-in | ✅ | Any | Clock in (LATE if strictly after 08:30 Bangkok) |
 | POST | /attendance/clock-out | ✅ | Any | Clock out |
+| GET | /attendance/geofence-config | ✅ | SUPER_ADMIN, HR_ADMIN | Fetch effective geofence config (DB or env). No mobile/employee access. |
+| PATCH | /attendance/geofence-config | ✅ | SUPER_ADMIN, HR_ADMIN | Update company geofence config in DB |
 | GET | /attendance/me | ✅ | Any | Own history (paginated) |
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All records (paginated) |
 | GET | /attendance/:id | ✅ | Any (owner or admin) | Single record |
@@ -148,5 +150,6 @@ LeaveStatus:      PENDING | APPROVED | REJECTED
 - [[RBAC Rules]]
 - [[ADR-007 API Standards]]
 - [[Audit Log Module]]
+- [[Attendance Geofence]]
 
 #api #backend-v1 #rag-ready
