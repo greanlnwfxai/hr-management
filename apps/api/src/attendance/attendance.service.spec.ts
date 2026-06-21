@@ -63,10 +63,14 @@ describe('AttendanceService', () => {
     mockAuditLog = { record: jest.fn().mockResolvedValue(undefined) };
 
     geofenceConfig = {
-      isEnabled: jest.fn().mockReturnValue(false),
-      getCompanyLocation: jest.fn().mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON }),
-      getRadiusMeters: jest.fn().mockReturnValue(100),
-      getMaxAccuracyMeters: jest.fn().mockReturnValue(100),
+      getEffectiveConfig: jest.fn().mockResolvedValue({
+        enabled: false,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      }),
     } as unknown as jest.Mocked<GeofenceConfigService>;
 
     geofenceService = {
@@ -283,6 +287,15 @@ describe('AttendanceService', () => {
 
   // ── geofence validation ────────────────────────────────────────────────────
 
+  const enabledConfig = {
+    enabled: true,
+    latitude: COMPANY_LAT,
+    longitude: COMPANY_LON,
+    radiusMeters: 100,
+    maxAccuracyMeters: 100,
+    source: 'env' as const,
+  };
+
   describe('geofence validation (clockIn)', () => {
     const mobileDto = {
       source: 'mobile' as const,
@@ -292,7 +305,7 @@ describe('AttendanceService', () => {
     };
 
     it('skips geofence entirely when source is not "mobile" (web path)', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
       prisma.attendance.findUnique.mockResolvedValue(null);
       prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
@@ -303,7 +316,7 @@ describe('AttendanceService', () => {
     });
 
     it('skips geofence when source is "web"', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
       prisma.attendance.findUnique.mockResolvedValue(null);
       prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
@@ -313,7 +326,7 @@ describe('AttendanceService', () => {
     });
 
     it('skips geofence when source is "mobile" but geofence is disabled', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(false);
+      // default mock already has enabled: false
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
       prisma.attendance.findUnique.mockResolvedValue(null);
       prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
@@ -323,7 +336,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 when source is "mobile", geofence enabled, but location fields are missing', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
 
       await expect(service.clockIn(userId, { source: 'mobile' })).rejects.toThrow(
         UnprocessableEntityException,
@@ -331,7 +344,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 when accuracy is missing even if lat/lon are present', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
 
       await expect(
         service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON }),
@@ -339,8 +352,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 when GPS accuracy exceeds the configured maximum', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({ ...enabledConfig, maxAccuracyMeters: 100 });
 
       await expect(
         service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 150 }),
@@ -348,28 +360,24 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 when company location is not configured', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue(null);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        ...enabledConfig,
+        latitude: null,
+        longitude: null,
+      });
 
       await expect(service.clockIn(userId, mobileDto)).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('throws 422 when user is outside the allowed radius', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
-      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(false);
 
       await expect(service.clockIn(userId, mobileDto)).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('allows clock-in when source is "mobile", geofence enabled, and user is within radius', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
-      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(true);
 
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
@@ -383,10 +391,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 error message includes expected text for out-of-range', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
-      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(false);
 
       try {
@@ -399,8 +404,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 error message includes expected text for poor accuracy', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(50);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({ ...enabledConfig, maxAccuracyMeters: 50 });
 
       try {
         await service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 75 });
@@ -421,7 +425,7 @@ describe('AttendanceService', () => {
     };
 
     it('enforces geofence on clock-out for mobile source (missing location)', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
 
       await expect(
         service.clockOut(userId, { source: 'mobile' }),
@@ -429,10 +433,7 @@ describe('AttendanceService', () => {
     });
 
     it('allows clock-out when source is "mobile", geofence enabled, and user is within radius', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
-      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(true);
 
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
@@ -449,10 +450,7 @@ describe('AttendanceService', () => {
     });
 
     it('throws 422 on clock-out when source is "mobile", geofence enabled, and user is outside radius', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
-      geofenceConfig.getMaxAccuracyMeters.mockReturnValue(100);
-      geofenceConfig.getCompanyLocation.mockReturnValue({ lat: COMPANY_LAT, lon: COMPANY_LON });
-      geofenceConfig.getRadiusMeters.mockReturnValue(100);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(false);
 
       await expect(service.clockOut(userId, mobileDto)).rejects.toThrow(
@@ -461,7 +459,7 @@ describe('AttendanceService', () => {
     });
 
     it('skips geofence on clock-out for web source', async () => {
-      geofenceConfig.isEnabled.mockReturnValue(true);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
       prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
       prisma.attendance.update.mockResolvedValue({
@@ -471,6 +469,153 @@ describe('AttendanceService', () => {
 
       await expect(service.clockOut(userId, { source: 'web' })).resolves.toBeDefined();
       expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── getGeofenceConfig ──────────────────────────────────────────────────────
+
+  describe('getGeofenceConfig', () => {
+    it('returns the effective config from GeofenceConfigService', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+
+      const result = await service.getGeofenceConfig();
+
+      expect(result).toMatchObject({ enabled: true, radiusMeters: 100, source: 'env' });
+    });
+  });
+
+  // ── updateGeofenceConfig ───────────────────────────────────────────────────
+
+  describe('updateGeofenceConfig', () => {
+    const ctx = {
+      actorUserId: 'admin-uuid',
+      actorRole: 'SUPER_ADMIN',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    };
+
+    const upsertRow = {
+      id: 'default',
+      enabled: true,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 200,
+      maxAccuracyMeters: 50,
+      updatedByUserId: 'admin-uuid',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      (prisma as any).geofenceConfig.upsert.mockResolvedValue(upsertRow);
+    });
+
+    it('upserts config to DB and returns the saved row', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: null,
+        longitude: null,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+
+      const result = await service.updateGeofenceConfig(
+        { enabled: true, latitude: COMPANY_LAT, longitude: COMPANY_LON, radiusMeters: 200, maxAccuracyMeters: 50 },
+        ctx,
+      );
+
+      expect((prisma as any).geofenceConfig.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'default' },
+          create: expect.objectContaining({ enabled: true, latitude: COMPANY_LAT }),
+          update: expect.objectContaining({ enabled: true, latitude: COMPANY_LAT }),
+        }),
+      );
+      expect(result.source).toBe('db');
+    });
+
+    it('throws 422 when enabling geofence without coordinates', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: null,
+        longitude: null,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+
+      await expect(
+        service.updateGeofenceConfig({ enabled: true }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('allows enabling geofence when DB row already has coordinates (body omits them)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'db',
+      });
+
+      const result = await service.updateGeofenceConfig({ enabled: true }, ctx);
+
+      expect(result.source).toBe('db');
+    });
+
+    it('records ATTENDANCE_GEOFENCE_CONFIG_UPDATED audit event without coordinates', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+
+      await service.updateGeofenceConfig({ enabled: true }, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_CONFIG_UPDATED' }),
+      );
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      const serialized = JSON.stringify(event.metadata);
+      expect(serialized).not.toContain(String(COMPANY_LAT));
+      expect(serialized).not.toContain(String(COMPANY_LON));
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+    });
+
+    it('audit metadata contains boolean/numeric summary fields', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: null,
+        longitude: null,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+      (prisma as any).geofenceConfig.upsert.mockResolvedValue({
+        ...upsertRow,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+      });
+
+      await service.updateGeofenceConfig(
+        { enabled: true, latitude: COMPANY_LAT, longitude: COMPANY_LON },
+        ctx,
+      );
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).toMatchObject({
+        previousEnabled: false,
+        previousHasCoordinates: false,
+        newEnabled: true,
+        newHasCoordinates: true,
+      });
     });
   });
 

@@ -373,6 +373,34 @@ export function getAttendance(params?: { page?: number; limit?: number; status?:
   return apiFetch<PaginatedResponse<AttendanceRecord>>(`/attendance${query}`);
 }
 
+export type GeofenceConfig = {
+  enabled: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+  maxAccuracyMeters: number;
+  source: 'db' | 'env';
+  updatedByUserId?: string | null;
+  updatedAt?: string;
+};
+
+export function getGeofenceConfig() {
+  return apiFetch<GeofenceConfig>('/attendance/geofence-config');
+}
+
+export function updateGeofenceConfig(body: {
+  enabled?: boolean;
+  latitude?: number;
+  longitude?: number;
+  radiusMeters?: number;
+  maxAccuracyMeters?: number;
+}) {
+  return apiFetch<GeofenceConfig>('/attendance/geofence-config', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Leave ─────────────────────────────────────────────────────────────────────
 
 export type LeaveRequest = {

@@ -1,6 +1,6 @@
 # Attendance Geofence — Backend Documentation
 
-> Added in T-046. Mobile wiring (GPS UI + real clock-in/out) completed in T-047. See [MOBILE_GEOFENCE_CLOCK.md](MOBILE_GEOFENCE_CLOCK.md).
+> Added in T-046. Mobile wiring (GPS UI + real clock-in/out) completed in T-047. Admin DB-backed config UI added in T-060. See [MOBILE_GEOFENCE_CLOCK.md](MOBILE_GEOFENCE_CLOCK.md).
 
 ---
 
@@ -27,6 +27,42 @@ Mobile Clock In and Clock Out are only allowed when the employee is physically w
 **Production:** Set `ATTENDANCE_GEOFENCE_ENABLED=true` and provide real `COMPANY_LATITUDE` / `COMPANY_LONGITUDE` in the server `.env` (never committed to source control).
 
 If geofence is enabled but company coordinates are missing or invalid, the backend returns 422 with `"Attendance geofence is not configured."`.
+
+---
+
+## Database-Backed Configuration (T-060)
+
+As of T-060, geofence configuration can be stored in the `geofence_config` database table. The backend uses **DB-first precedence**:
+
+1. **If a `geofence_config` DB row exists** (id = `"default"`) → use those values.
+2. **Otherwise** → fall back to the environment variables above.
+
+### Admin API
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/attendance/geofence-config` | JWT + SUPER_ADMIN/HR_ADMIN | Fetch effective config (DB or env) |
+| `PATCH` | `/attendance/geofence-config` | JWT + SUPER_ADMIN/HR_ADMIN | Update config in DB |
+
+### PATCH body fields
+
+| Field | Type | Constraints |
+|---|---|---|
+| `enabled` | boolean | optional |
+| `latitude` | number | -90 to 90 |
+| `longitude` | number | -180 to 180 |
+| `radiusMeters` | integer | 10 to 10000 |
+| `maxAccuracyMeters` | integer | 5 to 1000 |
+
+**Cross-field rule:** enabling geofence (`enabled: true`) without coordinates (either in the PATCH body or already in the DB) returns 422.
+
+### Admin Web UI
+
+Available at `/attendance/geofence-settings` for SUPER_ADMIN and HR_ADMIN.
+
+### Audit Event
+
+Every PATCH records `ATTENDANCE_GEOFENCE_CONFIG_UPDATED` with safe metadata (no raw coordinates — only boolean flags like `newHasCoordinates`, radius/accuracy integers, and the config source).
 
 ---
 
@@ -121,7 +157,7 @@ In order:
 - Geofence radius is global — no per-office or per-role radius.
 - No audit log of geofence rejection events (planned: T-future).
 - GPS spoofing is undetectable without additional device integrity checks (SafetyNet/Play Integrity on Android, DeviceCheck on iOS).
-- No admin UI for configuring company location — env var only in this version.
+- Admin UI for configuring company location added in T-060 (DB-backed with env fallback).
 - Backend uses a fixed spherical Earth radius. Elevation is not considered.
 
 ---
@@ -144,7 +180,10 @@ In order:
 | File | Purpose |
 |---|---|
 | `apps/api/src/attendance/geofence.service.ts` | Haversine distance + radius check |
-| `apps/api/src/attendance/geofence-config.service.ts` | Reads env vars |
+| `apps/api/src/attendance/geofence-config.service.ts` | DB-first config (env fallback) — `getEffectiveConfig()` |
+| `apps/api/src/attendance/dto/patch-geofence-config.dto.ts` | PATCH request validation |
+| `apps/api/prisma/migrations/20260621000000_add_company_geofence_config/migration.sql` | DB schema for singleton config |
+| `apps/web/app/(app)/attendance/geofence-settings/page.tsx` | Admin UI page |
 | `apps/api/src/attendance/attendance.service.ts` | `validateGeofence()` method |
 | `apps/api/src/attendance/dto/clock-in.dto.ts` | Location fields + validation |
 | `apps/api/src/attendance/dto/clock-out.dto.ts` | Location fields + validation |

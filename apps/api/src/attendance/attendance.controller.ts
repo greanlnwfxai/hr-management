@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   Req,
@@ -27,6 +28,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 
 @ApiTags('Attendance')
@@ -64,6 +66,33 @@ export class AttendanceController {
     @Req() req: Request,
   ) {
     return this.attendance.clockOut(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
+  }
+
+  @Get('geofence-config')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Get effective geofence configuration (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Effective geofence config (DB or env fallback)' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  getGeofenceConfig() {
+    return this.attendance.getGeofenceConfig();
+  }
+
+  @Patch('geofence-config')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Update geofence configuration (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Updated geofence config' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  updateGeofenceConfig(
+    @Body() dto: PatchGeofenceConfigDto,
+    @CurrentUser() user: { id: string; role: string },
+    @Req() req: Request,
+  ) {
+    return this.attendance.updateGeofenceConfig(dto, {
       actorUserId: user.id,
       actorRole: user.role,
       ipAddress: req?.ip ?? null,

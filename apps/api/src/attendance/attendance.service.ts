@@ -14,6 +14,7 @@ import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 import { GeofenceConfigService } from './geofence-config.service';
 import { GeofenceService } from './geofence.service';
@@ -222,12 +223,96 @@ export class AttendanceService {
     return record;
   }
 
+  async getGeofenceConfig() {
+    return this.geofenceConfig.getEffectiveConfig();
+  }
+
+  async updateGeofenceConfig(
+    dto: PatchGeofenceConfigDto,
+    ctx?: AttendanceAuditContext,
+  ) {
+    const current = await this.geofenceConfig.getEffectiveConfig();
+
+    const merged = {
+      enabled: dto.enabled ?? current.enabled,
+      latitude: dto.latitude !== undefined ? dto.latitude : current.latitude,
+      longitude: dto.longitude !== undefined ? dto.longitude : current.longitude,
+      radiusMeters: dto.radiusMeters ?? current.radiusMeters,
+      maxAccuracyMeters: dto.maxAccuracyMeters ?? current.maxAccuracyMeters,
+    };
+
+    if (merged.enabled && (merged.latitude === null || merged.longitude === null)) {
+      throw new UnprocessableEntityException(
+        'Geofence cannot be enabled without latitude and longitude.',
+      );
+    }
+
+    const updatedByUserId = ctx?.actorUserId ?? null;
+
+    const row = await this.prisma.geofenceConfig.upsert({
+      where: { id: 'default' },
+      create: {
+        id: 'default',
+        enabled: merged.enabled,
+        latitude: merged.latitude,
+        longitude: merged.longitude,
+        radiusMeters: merged.radiusMeters,
+        maxAccuracyMeters: merged.maxAccuracyMeters,
+        updatedByUserId,
+      },
+      update: {
+        enabled: merged.enabled,
+        latitude: merged.latitude,
+        longitude: merged.longitude,
+        radiusMeters: merged.radiusMeters,
+        maxAccuracyMeters: merged.maxAccuracyMeters,
+        updatedByUserId,
+      },
+    });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_GEOFENCE_CONFIG_UPDATED',
+      targetType: 'GEOFENCE_CONFIG',
+      targetId: 'default',
+      targetLabel: 'company-geofence',
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        previousEnabled: current.enabled,
+        previousHasCoordinates: current.latitude !== null && current.longitude !== null,
+        previousRadiusMeters: current.radiusMeters,
+        previousMaxAccuracyMeters: current.maxAccuracyMeters,
+        previousSource: current.source,
+        newEnabled: row.enabled,
+        newHasCoordinates: row.latitude !== null && row.longitude !== null,
+        newRadiusMeters: row.radiusMeters,
+        newMaxAccuracyMeters: row.maxAccuracyMeters,
+      },
+    });
+
+    return {
+      enabled: row.enabled,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      radiusMeters: row.radiusMeters,
+      maxAccuracyMeters: row.maxAccuracyMeters,
+      updatedByUserId: row.updatedByUserId,
+      updatedAt: row.updatedAt,
+      source: 'db' as const,
+    };
+  }
+
   // Geofence validation — only applied when source='mobile'.
   // Web and legacy (no source) requests are passed through without checks,
   // preserving backwards compatibility with the existing web attendance flow.
   private async validateGeofence(dto: ClockInDto | ClockOutDto): Promise<void> {
     if (dto.source !== 'mobile') return;
-    if (!this.geofenceConfig.isEnabled()) return;
+
+    const config = await this.geofenceConfig.getEffectiveConfig();
+    if (!config.enabled) return;
 
     if (dto.latitude === undefined || dto.longitude === undefined || dto.accuracy === undefined) {
       throw new UnprocessableEntityException(
@@ -235,14 +320,13 @@ export class AttendanceService {
       );
     }
 
-    if (dto.accuracy > this.geofenceConfig.getMaxAccuracyMeters()) {
+    if (dto.accuracy > config.maxAccuracyMeters) {
       throw new UnprocessableEntityException(
         'GPS accuracy is too low. Please try again near the office.',
       );
     }
 
-    const company = this.geofenceConfig.getCompanyLocation();
-    if (!company) {
+    if (config.latitude === null || config.longitude === null) {
       throw new UnprocessableEntityException(
         'Attendance geofence is not configured.',
       );
@@ -251,9 +335,9 @@ export class AttendanceService {
     const within = this.geofenceService.isWithinRadius(
       dto.latitude,
       dto.longitude,
-      company.lat,
-      company.lon,
-      this.geofenceConfig.getRadiusMeters(),
+      config.latitude,
+      config.longitude,
+      config.radiusMeters,
     );
 
     if (!within) {

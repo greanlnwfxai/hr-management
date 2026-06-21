@@ -44,6 +44,10 @@ export function mockPrisma() {
     position: {
       count: jest.fn(),
     },
+    geofenceConfig: {
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+    },
     auditLog: {
       create: jest.fn(),
       findMany: jest.fn(),

@@ -117,10 +117,12 @@ Query params (GET /positions): `page`, `limit`, `search`, `departmentId`
 | Method | Path                | Auth | Roles                  | Description                              |
 |--------|---------------------|------|------------------------|------------------------------------------|
 | POST   | /attendance/clock-in  | ✅  | any                    | Clock in for today (Asia/Bangkok rules)  |
-| POST   | /attendance/clock-out | ✅  | any                    | Clock out for today                      |
-| GET    | /attendance/me      | ✅   | any                    | Own attendance history (paginated)       |
-| GET    | /attendance         | ✅   | SUPER_ADMIN · HR_ADMIN | All attendance records (paginated)       |
-| GET    | /attendance/:id     | ✅   | any (owner or admin)   | Single attendance record                 |
+| POST   | /attendance/clock-out         | ✅  | any                    | Clock out for today                      |
+| GET    | /attendance/geofence-config   | ✅  | SUPER_ADMIN · HR_ADMIN | Get effective geofence config (DB or env)|
+| PATCH  | /attendance/geofence-config   | ✅  | SUPER_ADMIN · HR_ADMIN | Update geofence config in DB             |
+| GET    | /attendance/me                | ✅  | any                    | Own attendance history (paginated)       |
+| GET    | /attendance                   | ✅  | SUPER_ADMIN · HR_ADMIN | All attendance records (paginated)       |
+| GET    | /attendance/:id               | ✅  | any (owner or admin)   | Single attendance record                 |
 
 Query params (GET /attendance, GET /attendance/me): `page`, `limit`, `startDate`, `endDate`, `employeeId` (admin list only), `status`
 

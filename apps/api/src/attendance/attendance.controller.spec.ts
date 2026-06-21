@@ -3,6 +3,8 @@ import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
+import { UserRole } from '../common/enums';
 
 describe('AttendanceController', () => {
   let controller: AttendanceController;
@@ -12,11 +14,22 @@ describe('AttendanceController', () => {
     findMyAttendance: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
+    getGeofenceConfig: jest.Mock;
+    updateGeofenceConfig: jest.Mock;
   };
 
   const mockUser = { id: 'user-uuid-1', role: 'EMPLOYEE' };
+  const mockAdminUser = { id: 'admin-uuid-1', role: 'SUPER_ADMIN' };
   const mockRecord = { id: 'att-uuid-1', status: 'PRESENT', date: '2026-06-13' };
   const mockPaginated = { data: [mockRecord], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } };
+  const mockGeofenceConfig = {
+    enabled: true,
+    latitude: 13.7563,
+    longitude: 100.5018,
+    radiusMeters: 100,
+    maxAccuracyMeters: 50,
+    source: 'db',
+  };
 
   beforeEach(async () => {
     service = {
@@ -25,6 +38,8 @@ describe('AttendanceController', () => {
       findMyAttendance: jest.fn().mockResolvedValue(mockPaginated),
       findAll: jest.fn().mockResolvedValue(mockPaginated),
       findOne: jest.fn().mockResolvedValue(mockRecord),
+      getGeofenceConfig: jest.fn().mockResolvedValue(mockGeofenceConfig),
+      updateGeofenceConfig: jest.fn().mockResolvedValue({ ...mockGeofenceConfig, radiusMeters: 200 }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,5 +102,47 @@ describe('AttendanceController', () => {
 
     expect(service.findOne).toHaveBeenCalledWith('att-uuid-1', mockUser.id, mockUser.role);
     expect(result).toEqual(mockRecord);
+  });
+
+  it('getGeofenceConfig delegates to service', async () => {
+    const result = await controller.getGeofenceConfig();
+
+    expect(service.getGeofenceConfig).toHaveBeenCalled();
+    expect(result).toEqual(mockGeofenceConfig);
+  });
+
+  it('updateGeofenceConfig delegates to service with dto and audit context', async () => {
+    const dto = { radiusMeters: 200 } as any;
+    const result = await controller.updateGeofenceConfig(dto, mockAdminUser as any, undefined as any);
+
+    expect(service.updateGeofenceConfig).toHaveBeenCalledWith(dto, {
+      actorUserId: mockAdminUser.id,
+      actorRole: mockAdminUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
+    expect(result).toMatchObject({ radiusMeters: 200 });
+  });
+
+  describe('RBAC metadata — @Roles decorator', () => {
+    it('getGeofenceConfig is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.getGeofenceConfig);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+    });
+
+    it('updateGeofenceConfig is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.updateGeofenceConfig);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+    });
+
+    it('findAll is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.findAll);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+    });
+
+    it('findMy has no role restriction (any authenticated user)', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.findMy);
+      expect(roles).toBeUndefined();
+    });
   });
 });

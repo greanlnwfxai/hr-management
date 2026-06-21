@@ -201,6 +201,20 @@ model LeaveBalance {
   @@map("leave_balances")
 }
 
+model GeofenceConfig {
+  id                String   @id @default("default")
+  enabled           Boolean  @default(false)
+  latitude          Float?
+  longitude         Float?
+  radiusMeters      Int      @default(100)
+  maxAccuracyMeters Int      @default(100)
+  updatedByUserId   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("geofence_config")
+}
+
 model AuditLog {
   id          String   @id @default(uuid())
   actorUserId String?
