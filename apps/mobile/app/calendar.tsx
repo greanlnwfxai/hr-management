@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Pressable,
   RefreshControl,
@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
-import type { AttendanceStatus } from '../src/api/types';
+import type { AttendanceRecord, AttendanceStatus } from '../src/api/types';
 import { MobileBottomNav, MobileScreenHeader } from '../src/components';
 
 const THAI_DAY_NAMES = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
@@ -24,6 +24,24 @@ function dotColor(status: AttendanceStatus): string {
   if (status === 'PRESENT') return '#22c55e';
   if (status === 'LATE') return '#f59e0b';
   return '#ef4444';
+}
+
+function statusLabel(status: AttendanceStatus): string {
+  if (status === 'PRESENT') return 'มาทำงาน';
+  if (status === 'LATE') return 'มาสาย';
+  return 'ขาดงาน';
+}
+
+function statusBg(status: AttendanceStatus): string {
+  if (status === 'PRESENT') return '#dcfce7';
+  if (status === 'LATE') return '#fef3c7';
+  return '#fee2e2';
+}
+
+function statusFg(status: AttendanceStatus): string {
+  if (status === 'PRESENT') return '#15803d';
+  if (status === 'LATE') return '#b45309';
+  return '#b91c1c';
 }
 
 function formatTime(iso: string | null | undefined): string {
@@ -46,7 +64,8 @@ export default function CalendarScreen() {
   const month = now.getMonth();
   const yearBE = year + 543;
   const todayDate = now.getDate();
-  const todayDow = now.getDay();
+
+  const [selectedDay, setSelectedDay] = useState<number>(todayDate);
 
   // Build calendar weeks
   const firstDow = new Date(year, month, 1).getDay();
@@ -61,26 +80,34 @@ export default function CalendarScreen() {
     weeks.push(allDays.slice(i, i + 7));
   }
 
-  // Map attendance records to day → status color
+  // Map attendance records to day → status
   const dotMap = new Map<number, string>();
+  const recordMap = new Map<number, AttendanceRecord>();
   for (const rec of history) {
     const d = new Date(rec.date);
     if (d.getMonth() === month && d.getFullYear() === year) {
       dotMap.set(d.getDate(), dotColor(rec.status));
+      recordMap.set(d.getDate(), rec);
     }
   }
+  if (today) {
+    recordMap.set(todayDate, today);
+    dotMap.set(todayDate, dotColor(today.status));
+  }
 
-  const isWeekend = todayDow === 0 || todayDow === 6;
+  const selectedRecord = recordMap.get(selectedDay) ?? null;
+  const selectedDow = new Date(year, month, selectedDay).getDay();
+  const isSelectedWeekend = selectedDow === 0 || selectedDow === 6;
   const isRefreshing = loadState === 'loading';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
       <MobileScreenHeader
-        title="Calendar"
+        title="ปฏิทิน"
         subtitle={`ภาพรวมเดือน ${THAI_MONTH_ABBR[month]} ${yearBE}`}
         backHref="/home"
       />
-      {/* ── Tab header ─────────────────────────────────────────────── */}
+      {/* Tab header */}
       <View style={styles.tabHeader}>
         <View style={styles.tabActive}>
           <Text style={styles.tabTextActive}>ปฏิทิน</Text>
@@ -95,22 +122,19 @@ export default function CalendarScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#3b82f6" />
         }
       >
-        {/* ── Month header ────────────────────────────────────────────── */}
+        {/* Month header */}
         <View style={styles.monthHeader}>
           <View style={styles.monthHeaderLeft}>
-            <Text style={styles.monthIcon}>📅</Text>
             <Text style={styles.monthTitle}>
               {THAI_MONTH_ABBR[month]} {yearBE}
             </Text>
-            <Text style={styles.monthChevron}>∨</Text>
           </View>
-          <Text style={styles.filterIcon}>☰</Text>
         </View>
 
-        {/* ── Day names ───────────────────────────────────────────────── */}
+        {/* Day names */}
         <View style={styles.dayNamesRow}>
           {THAI_DAY_NAMES.map((d) => (
             <View key={d} style={styles.dayNameCell}>
@@ -119,19 +143,26 @@ export default function CalendarScreen() {
           ))}
         </View>
 
-        {/* ── Calendar grid ───────────────────────────────────────────── */}
+        {/* Calendar grid */}
         {weeks.map((week, wi) => (
           <View key={wi} style={styles.weekRow}>
             {week.map((day, di) => {
               const isToday = day === todayDate;
+              const isSelected = day === selectedDay && !isToday;
               const isWeekendCell = di === 0 || di === 6;
               const dot = day ? dotMap.get(day) : undefined;
               return (
-                <View key={di} style={styles.calCell}>
+                <Pressable
+                  key={di}
+                  style={styles.calCell}
+                  onPress={() => { if (day !== null) setSelectedDay(day); }}
+                  disabled={day === null}
+                >
                   <View
                     style={[
                       styles.calDayCircle,
                       isWeekendCell && styles.calDayCircleWeekend,
+                      isSelected && styles.calDayCircleSelected,
                       isToday && styles.calDayCircleToday,
                     ]}
                   >
@@ -139,6 +170,7 @@ export default function CalendarScreen() {
                       style={[
                         styles.calDayText,
                         isWeekendCell && styles.calDayTextWeekend,
+                        isSelected && styles.calDayTextSelected,
                         isToday && styles.calDayTextToday,
                       ]}
                     >
@@ -150,36 +182,75 @@ export default function CalendarScreen() {
                   ) : (
                     <View style={styles.calDotSpace} />
                   )}
-                </View>
+                </Pressable>
               );
             })}
           </View>
         ))}
 
-        {/* ── White content section ───────────────────────────────────── */}
+        {/* Detail section */}
         <View style={styles.contentSection}>
-          {/* Schedule */}
-          <Text style={styles.sectionTitle}>ตารางการทำงาน</Text>
+          {/* Selected day detail card */}
           <Pressable
-            style={({ pressed }) => [styles.scheduleCard, pressed && { opacity: 0.82 }]}
-            onPress={() => router.push('/attendance')}
+            style={({ pressed }) => [styles.dayDetailCard, pressed && { opacity: 0.85 }]}
+            onPress={() => {
+              if (!selectedRecord) return;
+              const dateStr = selectedRecord.date.slice(0, 10);
+              router.push({ pathname: '/attendance-detail', params: { date: dateStr } });
+            }}
             accessibilityRole="button"
             accessibilityLabel="ดูรายละเอียดการลงเวลา"
           >
-            <View style={styles.scheduleLeft}>
-              <Text style={styles.scheduleDayNum}>{todayDate}</Text>
-              <Text style={styles.scheduleDayShort}>{THAI_DAY_NAMES[todayDow]}</Text>
+            {/* Card header */}
+            <View style={styles.cardHeader}>
+              <View>
+                <Text style={styles.cardHeaderDate}>
+                  {selectedDay} {THAI_MONTH_ABBR[month]} {yearBE}
+                </Text>
+                <Text style={styles.cardHeaderDay}>
+                  {selectedDay === todayDate ? 'วันนี้' : THAI_DAY_NAMES[selectedDow]}
+                  {' · '}
+                  {isSelectedWeekend ? 'วันหยุดสุดสัปดาห์' : 'วันทำงาน'}
+                </Text>
+              </View>
+              {selectedRecord && (
+                <View style={[styles.statusBadge, { backgroundColor: statusBg(selectedRecord.status) }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusFg(selectedRecord.status) }]}>
+                    {statusLabel(selectedRecord.status)}
+                  </Text>
+                </View>
+              )}
             </View>
-            <View style={styles.scheduleBody}>
-              <Text style={styles.scheduleDayType}>
-                {isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน'}
-              </Text>
-              <Text style={styles.scheduleTime}>08:30–17:30</Text>
-              <Text style={styles.scheduleStatus}>
-                {`เข้า ${formatTime(today?.checkIn)}  ออก ${formatTime(today?.checkOut)}`}
-              </Text>
-            </View>
-            <Text style={styles.scheduleArrow}>›</Text>
+
+            <View style={styles.cardDivider} />
+
+            {/* Card body */}
+            {isSelectedWeekend && !selectedRecord ? (
+              <View style={styles.cardEmpty}>
+                <Text style={styles.cardEmptyText}>ไม่มีข้อมูลการลงเวลา</Text>
+              </View>
+            ) : selectedRecord ? (
+              <View style={styles.cardBody}>
+                <View style={styles.timeRow}>
+                  <View style={[styles.timeAccent, { backgroundColor: '#3b82f6' }]} />
+                  <View style={styles.timeInfo}>
+                    <Text style={styles.timeLabel}>เวลาเข้างาน</Text>
+                    <Text style={styles.timeValue}>{formatTime(selectedRecord.checkIn)}</Text>
+                  </View>
+                </View>
+                <View style={styles.timeRow}>
+                  <View style={[styles.timeAccent, { backgroundColor: '#f59e0b' }]} />
+                  <View style={styles.timeInfo}>
+                    <Text style={styles.timeLabel}>เวลาออกงาน</Text>
+                    <Text style={styles.timeValue}>{formatTime(selectedRecord.checkOut)}</Text>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.cardEmpty}>
+                <Text style={styles.cardEmptyText}>ไม่มีข้อมูลการลงเวลา</Text>
+              </View>
+            )}
           </Pressable>
 
           {/* Leave requests */}
@@ -198,6 +269,8 @@ export default function CalendarScreen() {
   );
 }
 
+const CAL_BG = '#3b82f6';
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8f9fa' },
   scroll: { flex: 1 },
@@ -207,7 +280,7 @@ const styles = StyleSheet.create({
   tabHeader: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    backgroundColor: '#1a56db',
+    backgroundColor: CAL_BG,
   },
   tab: {
     paddingHorizontal: 16,
@@ -237,19 +310,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 18,
+    backgroundColor: CAL_BG,
   },
   monthHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  monthIcon: { fontSize: 18 },
   monthTitle: { fontSize: 20, fontWeight: '700', color: '#ffffff' },
-  monthChevron: { fontSize: 14, color: '#e0e7ff', fontWeight: '700' },
-  filterIcon: { fontSize: 18, color: '#ffffff' },
 
   // Day names row
   dayNamesRow: {
     flexDirection: 'row',
     paddingHorizontal: 10,
     paddingBottom: 8,
-    backgroundColor: '#1a56db',
+    backgroundColor: CAL_BG,
   },
   dayNameCell: { flex: 1, alignItems: 'center' },
   dayName: {
@@ -263,7 +334,7 @@ const styles = StyleSheet.create({
   weekRow: {
     flexDirection: 'row',
     paddingHorizontal: 10,
-    backgroundColor: '#1a56db',
+    backgroundColor: CAL_BG,
   },
   calCell: { flex: 1, alignItems: 'center', paddingVertical: 7 },
   calDayCircle: {
@@ -274,6 +345,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   calDayCircleWeekend: { backgroundColor: 'rgba(255,255,255,0.06)' },
+  calDayCircleSelected: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
   calDayCircleToday: {
     backgroundColor: '#ffffff',
     shadowColor: '#0f172a',
@@ -284,7 +360,8 @@ const styles = StyleSheet.create({
   },
   calDayText: { fontSize: 14, color: '#ffffff', fontWeight: '400' },
   calDayTextWeekend: { color: '#dbeafe' },
-  calDayTextToday: { fontWeight: '800', fontSize: 15, color: '#1a56db' },
+  calDayTextSelected: { color: '#ffffff', fontWeight: '700' },
+  calDayTextToday: { fontWeight: '800', fontSize: 15, color: CAL_BG },
   calDot: { width: 6, height: 6, borderRadius: 3, marginTop: 4, opacity: 0.9 },
   calDotSpace: { width: 6, height: 6, marginTop: 4 },
 
@@ -304,23 +381,42 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
 
-  // Schedule card
-  scheduleCard: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 14,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
+  // Day detail card
+  dayDetailCard: {
+    backgroundColor: '#f9fafb',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  scheduleLeft: { alignItems: 'center', gap: 2, minWidth: 36 },
-  scheduleDayNum: { fontSize: 26, fontWeight: '700', color: '#111827', lineHeight: 30 },
-  scheduleDayShort: { fontSize: 12, color: '#6b7280' },
-  scheduleBody: { flex: 1, gap: 4 },
-  scheduleDayType: { fontSize: 14, fontWeight: '600', color: '#111827' },
-  scheduleTime: { fontSize: 13, color: '#6b7280' },
-  scheduleStatus: { fontSize: 12, color: '#6b7280' },
-  scheduleArrow: { fontSize: 22, color: '#9ca3af' },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: 16,
+  },
+  cardHeaderDate: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  cardHeaderDay: { fontSize: 12, color: '#6b7280', marginTop: 3 },
+  cardDivider: { height: 1, backgroundColor: '#f3f4f6' },
+  cardBody: { padding: 16, gap: 14 },
+  cardEmpty: { paddingVertical: 20, alignItems: 'center' },
+  cardEmptyText: { fontSize: 13, color: '#9ca3af' },
+  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  timeAccent: { width: 4, height: 36, borderRadius: 2 },
+  timeInfo: { flex: 1 },
+  timeLabel: { fontSize: 12, color: '#9ca3af', fontWeight: '500' },
+  timeValue: { fontSize: 17, fontWeight: '700', color: '#111827', marginTop: 2 },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  statusBadgeText: { fontSize: 13, fontWeight: '600' },
 
   // Empty requests
   emptyRequest: {

@@ -156,7 +156,7 @@ export class LeaveService {
     return record;
   }
 
-  async approve(id: string, userId: string, _dto: ApproveLeaveRequestDto, ctx?: LeaveAuditContext) {
+  async approve(id: string, userId: string, userRole: string, _dto: ApproveLeaveRequestDto, ctx?: LeaveAuditContext) {
     const record = await this.prisma.leaveRequest.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
     if ((record.status as string) !== LeaveStatus.PENDING) {
@@ -165,8 +165,18 @@ export class LeaveService {
 
     const approverEmp = await this.prisma.employee.findFirst({
       where: { userId },
-      select: { id: true },
+      select: { id: true, managedDepartment: { select: { id: true } } },
     });
+
+    if (userRole === UserRole.MANAGER) {
+      const leaveEmployee = await this.prisma.employee.findUnique({
+        where: { id: record.employeeId },
+        select: { departmentId: true },
+      });
+      if (!approverEmp?.managedDepartment || approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
+        throw new ForbiddenException('คุณสามารถอนุมัติลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
+    }
 
     // Require a matching leave balance record and sufficient remaining days.
     // Decision: all leave types (SICK/VACATION/PERSONAL/OTHER) require a balance.
@@ -238,7 +248,7 @@ export class LeaveService {
     return result;
   }
 
-  async reject(id: string, userId: string, dto: RejectLeaveRequestDto, ctx?: LeaveAuditContext) {
+  async reject(id: string, userId: string, userRole: string, dto: RejectLeaveRequestDto, ctx?: LeaveAuditContext) {
     const record = await this.prisma.leaveRequest.findUnique({ where: { id } });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
     if ((record.status as string) !== LeaveStatus.PENDING) {
@@ -247,8 +257,18 @@ export class LeaveService {
 
     const approverEmp = await this.prisma.employee.findFirst({
       where: { userId },
-      select: { id: true },
+      select: { id: true, managedDepartment: { select: { id: true } } },
     });
+
+    if (userRole === UserRole.MANAGER) {
+      const leaveEmployee = await this.prisma.employee.findUnique({
+        where: { id: record.employeeId },
+        select: { departmentId: true },
+      });
+      if (!approverEmp?.managedDepartment || approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
+        throw new ForbiddenException('คุณสามารถปฏิเสธลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
+    }
 
     const result = await this.prisma.leaveRequest.update({
       where: { id },
@@ -277,7 +297,7 @@ export class LeaveService {
         endDate: record.endDate,
         totalDays: record.totalDays,
         status: 'REJECTED',
-        hasRejectionReason: !!dto.rejectReason,
+        hasRejectionReason: !!(dto?.rejectReason),
       },
     });
 

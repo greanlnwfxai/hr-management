@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsEnum,
   IsIn,
   IsNumber,
   IsOptional,
@@ -10,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { WorkMode } from '../../common/enums';
 
 export class ClockInDto {
   @ApiPropertyOptional({ example: 'Working from home today', maxLength: 500 })
@@ -48,4 +50,9 @@ export class ClockInDto {
   @IsPositive()
   @Type(() => Number)
   accuracy?: number;
+
+  @ApiPropertyOptional({ enum: WorkMode, description: 'OFFSITE bypasses geofence radius (requires an approved off-site request for today)' })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  workMode?: WorkMode;
 }

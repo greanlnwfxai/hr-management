@@ -19,7 +19,10 @@ async function getItem(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
     return localStorage.getItem(key);
   }
-  return SecureStore.getItemAsync(key);
+  return Promise.race([
+    SecureStore.getItemAsync(key),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+  ]);
 }
 
 async function removeItem(key: string): Promise<void> {

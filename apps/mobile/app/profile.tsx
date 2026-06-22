@@ -51,7 +51,7 @@ function PasswordInput({
           accessibilityRole="button"
           accessibilityLabel={show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
         >
-          <Text style={styles.eyeText}>{show ? '🙈' : '👁'}</Text>
+          <Text style={styles.eyeText}>{show ? 'ซ่อน' : 'แสดง'}</Text>
         </Pressable>
       </View>
     </View>
@@ -105,9 +105,10 @@ export default function ProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <MobileScreenHeader
-        title="Profile"
+        title="โปรไฟล์"
         subtitle="ข้อมูลบัญชีและการตั้งค่ารหัสผ่าน"
         backHref="/home"
+        dark
       />
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         {/* ── Loading state ────────────────────────────────────────────── */}
@@ -152,7 +153,9 @@ export default function ProfileScreen() {
 
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>อีเมล</Text>
-                <Text style={styles.infoValue}>{profile.email}</Text>
+                <Text style={styles.infoValue}>
+                  {profile.employee?.email ?? profile.email}
+                </Text>
               </View>
 
               {profile.username && (
@@ -481,7 +484,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   eyeText: {
-    fontSize: 16,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6b7280',
   },
 
   // Password rules

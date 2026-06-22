@@ -33,3 +33,14 @@ export enum LeaveStatus {
   APPROVED = 'APPROVED',
   REJECTED = 'REJECTED',
 }
+
+export enum OffSiteStatus {
+  PENDING  = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export enum WorkMode {
+  ONSITE  = 'ONSITE',
+  OFFSITE = 'OFFSITE',
+}

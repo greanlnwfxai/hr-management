@@ -73,6 +73,13 @@ export class AttendanceController {
     });
   }
 
+  @Get('geofence-location')
+  @ApiOperation({ summary: 'Get company geofence location for mobile map display (all authenticated users)' })
+  @ApiResponse({ status: 200, description: 'Company location and radius for map display' })
+  getGeofenceLocation() {
+    return this.attendance.getGeofenceConfig();
+  }
+
   @Get('geofence-config')
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
   @ApiOperation({ summary: 'Get effective geofence configuration (SUPER_ADMIN, HR_ADMIN)' })

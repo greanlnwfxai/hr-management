@@ -1,7 +1,6 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -9,13 +8,16 @@ import {
   Text,
   View,
 } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useDashboard } from '../src/hooks/useDashboard';
 import { useAttendance } from '../src/hooks/useAttendance';
+import { useHomeSummaries } from '../src/hooks/useHomeSummaries';
 import { roleLabel } from '../src/utils/roles';
-import { MobileBottomNav } from '../src/components';
+import { GeofenceMapModal, MobileBottomNav } from '../src/components';
+import type { ClockAction } from '../src/components/GeofenceMapModal';
 
 const THAI_DAY_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
@@ -79,46 +81,32 @@ function TodayScheduleCard({
 }
 
 function DonutRing({ pct, color, size = 72 }: { pct: number; color: string; size?: number }) {
-  const safe = Math.min(100, Math.max(0, Math.round(pct)));
-  if (Platform.OS === 'web') {
-    return React.createElement(
-      'div',
-      {
-        style: {
-          width: size,
-          height: size,
-          minWidth: size,
-          borderRadius: '50%',
-          background:
-            safe > 0
-              ? `conic-gradient(${color} ${safe}%, #e5e7eb ${safe}%)`
-              : '#e5e7eb',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexShrink: 0,
-        },
-      },
-      React.createElement('div', {
-        style: {
-          width: size * 0.65,
-          height: size * 0.65,
-          borderRadius: '50%',
-          backgroundColor: '#fff',
-        },
-      }),
-    );
-  }
+  const safe = Math.min(100, Math.max(0, pct));
+  const strokeWidth = Math.round(size * 0.22);
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDash = (safe / 100) * circumference;
+  const cx = size / 2;
+  const cy = size / 2;
+
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth: Math.max(5, Math.round(size * 0.11)),
-        borderColor: safe > 0 ? color : '#e5e7eb',
-      }}
-    />
+    <Svg width={size} height={size} style={{ flexShrink: 0 }}>
+      {/* track */}
+      <Circle cx={cx} cy={cy} r={radius} stroke="#e5e7eb" strokeWidth={strokeWidth} fill="none" />
+      {/* fill */}
+      {safe > 0 && (
+        <Circle
+          cx={cx} cy={cy} r={radius}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${strokeDash} ${circumference}`}
+          strokeLinecap="round"
+          rotation={-90}
+          origin={`${cx}, ${cy}`}
+        />
+      )}
+    </Svg>
   );
 }
 
@@ -137,24 +125,101 @@ function AttendanceStatCard({
   const totalHoursInt = Math.floor(totalMinutes / 60);
   return (
     <View style={styles.statCard}>
-      <DonutRing pct={pct} color={color} size={72} />
+      <DonutRing pct={pct} color={color} size={40} />
       <View style={styles.statCardText}>
         <Text style={styles.statCardLabel}>{label}</Text>
         <Text style={styles.statCardValue}>
           {formatHours(valueMinutes)}{' '}
           <Text style={styles.statCardUnit}>ชั่วโมง</Text>
         </Text>
-        <Text style={styles.statCardSub}>จากทั้งหมด {totalHoursInt} ชั่วโมง</Text>
+        <Text style={styles.statCardSub} numberOfLines={1}>จากทั้งหมด {totalHoursInt} ชม.</Text>
       </View>
     </View>
   );
 }
 
+function LeaveSummaryCard({
+  title,
+  totalDays,
+  usedDays,
+}: {
+  title: string;
+  availableDays: number;
+  totalDays: number;
+  usedDays: number;
+}) {
+  const pct = totalDays > 0 ? Math.min(100, (usedDays / totalDays) * 100) : 0;
+  return (
+    <View style={styles.statCard}>
+      <DonutRing pct={pct} color="#3399FF" size={40} />
+      <View style={styles.statCardText}>
+        <Text style={styles.statCardLabel} numberOfLines={2}>{title}</Text>
+        <Text style={styles.statCardValue}>
+          {formatDays(totalDays)}{' '}
+          <Text style={styles.statCardUnit}>วัน</Text>
+        </Text>
+        <Text style={styles.statCardSub}>{formatDays(usedDays)} วันที่ใช้ไป</Text>
+      </View>
+    </View>
+  );
+}
+
+function OvertimeSummaryCard({
+  overtimeMinutes,
+  totalWorkMinutes,
+}: {
+  overtimeMinutes: number;
+  totalWorkMinutes: number;
+}) {
+  const pct = totalWorkMinutes > 0 ? Math.min(100, (overtimeMinutes / totalWorkMinutes) * 100) : 0;
+  return (
+    <View style={styles.otCard}>
+      <DonutRing pct={pct} color="#3399FF" size={40} />
+      <View style={styles.statCardText}>
+        <Text style={styles.statCardLabel}>เดือนนี้</Text>
+        <Text style={styles.statCardValue}>
+          {formatHours(overtimeMinutes)}{' '}
+          <Text style={styles.statCardUnit}>ชั่วโมง</Text>
+        </Text>
+        <Text style={styles.statCardSub} numberOfLines={1}>
+          จากทั้งหมด {formatHours(totalWorkMinutes)} ชม.
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function formatDays(value: number): string {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, signOut } = useAuth();
+  const { token, user, isAuthenticated, isLoading, signOut } = useAuth();
   const { profile, refresh: dashRefresh } = useDashboard();
-  const { loadState, today, history, refresh: attRefresh } = useAttendance();
+  const {
+    loadState,
+    today,
+    refresh: attRefresh,
+    clockInState,
+    clockOutState,
+    clockActionError,
+    clockActionMessage,
+    performClockIn,
+    performClockOut,
+  } = useAttendance();
+  const {
+    loadState: summaryLoadState,
+    leaveCards,
+    overtime,
+    monthAttendance,
+    refresh: summaryRefresh,
+  } = useHomeSummaries();
+
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [mapModalAction, setMapModalAction] = useState<ClockAction>('in');
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.replace('/login');
@@ -168,11 +233,17 @@ export default function HomeScreen() {
   const refresh = () => {
     dashRefresh();
     attRefresh();
+    summaryRefresh();
   };
-  const isRefreshing = loadState === 'loading';
-  const forced = !!(profile?.mustChangePassword ?? user?.mustChangePassword);
-
+  const isRefreshing = loadState === 'loading' || summaryLoadState === 'loading';
   const displayUser = profile ?? user;
+  const forced = !!(profile?.mustChangePassword ?? user?.mustChangePassword);
+  const inBusy  = clockInState  === 'locating' || clockInState  === 'submitting';
+  const outBusy = clockOutState === 'locating' || clockOutState === 'submitting';
+  const alreadyClockedIn  = Boolean(today?.checkIn);
+  const alreadyClockedOut = Boolean(today?.checkOut);
+  const inDisabled  = forced || !displayUser || inBusy  || outBusy || alreadyClockedIn;
+  const outDisabled = forced || !displayUser || inBusy  || outBusy || !alreadyClockedIn || alreadyClockedOut;
   const employeeName = profile?.employee
     ? `${profile.employee.firstName} ${profile.employee.lastName}`
     : null;
@@ -190,7 +261,7 @@ export default function HomeScreen() {
     .filter(Boolean)
     .join(' · ');
 
-  // Monthly attendance stats computed from history
+  // Monthly attendance stats computed from the full current-month history.
   const stats = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -199,7 +270,7 @@ export default function HomeScreen() {
     const wDays = countWorkingDays(year, month, todayDate);
     const totalMinutes = wDays * 8 * 60;
 
-    const thisMonth = history.filter((r) => {
+    const thisMonth = monthAttendance.filter((r) => {
       const d = new Date(r.date);
       return d.getMonth() === month && d.getFullYear() === year;
     });
@@ -231,7 +302,7 @@ export default function HomeScreen() {
     }
 
     return { totalMinutes, workMinutes, lateMinutes, earlyOutMinutes, absentMinutes };
-  }, [history]);
+  }, [monthAttendance]);
 
   if (isLoading) {
     return (
@@ -240,13 +311,6 @@ export default function HomeScreen() {
       </View>
     );
   }
-
-  const quickLinks = [
-    { label: 'Attendance', subtitle: 'ลงเวลาและดูประวัติ', href: '/attendance' as const },
-    { label: 'Leave', subtitle: 'ส่งคำขอและติดตามผล', href: '/leave' as const },
-    { label: 'Calendar', subtitle: 'ตารางงานประจำเดือน', href: '/calendar' as const },
-    { label: 'Profile', subtitle: 'ข้อมูลบัญชีและรหัสผ่าน', href: '/profile' as const },
-  ];
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -292,30 +356,54 @@ export default function HomeScreen() {
           <Pressable
             style={({ pressed }) => [
               styles.heroCheckInBtn,
-              (forced || !displayUser) && styles.heroActionDisabled,
-              pressed && !forced && { opacity: 0.85 },
+              inDisabled && styles.heroActionDisabled,
+              pressed && !inDisabled && { opacity: 0.85 },
             ]}
-            onPress={() => !forced && router.push('/attendance')}
+            onPress={() => { if (!inDisabled) { setMapModalAction('in'); setMapModalVisible(true); } }}
+            disabled={inDisabled}
             accessibilityRole="button"
             accessibilityLabel="เช็คอิน"
           >
-            <Text style={styles.heroActionIcon}>▶</Text>
-            <Text style={styles.heroActionBtnText}>เช็คอิน</Text>
+            {inBusy ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.heroActionIcon}>▶</Text>
+            )}
+            <Text style={styles.heroActionBtnText}>
+              {alreadyClockedIn ? 'เช็คอินแล้ว' : 'เช็คอิน'}
+            </Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [
               styles.heroCheckOutBtn,
-              (forced || !displayUser) && styles.heroActionDisabled,
-              pressed && !forced && { opacity: 0.85 },
+              outDisabled && styles.heroActionDisabled,
+              pressed && !outDisabled && { opacity: 0.85 },
             ]}
-            onPress={() => !forced && router.push('/attendance')}
+            onPress={() => { if (!outDisabled) { setMapModalAction('out'); setMapModalVisible(true); } }}
+            disabled={outDisabled}
             accessibilityRole="button"
             accessibilityLabel="เช็คเอาท์"
           >
-            <Text style={styles.heroActionIcon}>◀</Text>
-            <Text style={styles.heroActionBtnText}>เช็คเอาท์</Text>
+            {outBusy ? (
+              <ActivityIndicator size="small" color="#ffffff" />
+            ) : (
+              <Text style={styles.heroActionIcon}>◀</Text>
+            )}
+            <Text style={styles.heroActionBtnText}>
+              {alreadyClockedOut ? 'เช็คเอาท์แล้ว' : 'เช็คเอาท์'}
+            </Text>
           </Pressable>
         </View>
+
+        {clockActionError ? (
+          <View style={styles.heroFeedbackError}>
+            <Text style={styles.heroFeedbackErrorText}>{clockActionError}</Text>
+          </View>
+        ) : clockActionMessage ? (
+          <View style={styles.heroFeedbackSuccess}>
+            <Text style={styles.heroFeedbackSuccessText}>{clockActionMessage}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* ── Scrollable Content ───────────────────────────────────────── */}
@@ -343,20 +431,6 @@ export default function HomeScreen() {
 
         {!forced && (
           <>
-            <View style={styles.quickLinksSection}>
-              {quickLinks.map((link) => (
-                <Pressable
-                  key={link.href}
-                  style={({ pressed }) => [styles.quickLinkCard, pressed && styles.pressed]}
-                  onPress={() => router.push(link.href)}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.quickLinkLabel}>{link.label}</Text>
-                  <Text style={styles.quickLinkSubtitle}>{link.subtitle}</Text>
-                </Pressable>
-              ))}
-            </View>
-
             {/* ── ปฏิทิน ──────────────────────────────────────────────── */}
             <View style={styles.calSectionHeader}>
               <View style={styles.calSectionLeft}>
@@ -406,37 +480,90 @@ export default function HomeScreen() {
                 label="ปฏิบัติงาน"
                 valueMinutes={stats.workMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#1a56db"
+                color="#3399FF"
               />
               <AttendanceStatCard
                 label="เข้าสาย"
                 valueMinutes={stats.lateMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#f59e0b"
+                color="#3399FF"
               />
               <AttendanceStatCard
                 label="ออกก่อน"
                 valueMinutes={stats.earlyOutMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#f59e0b"
+                color="#3399FF"
               />
               <AttendanceStatCard
                 label="ขาดงาน"
                 valueMinutes={stats.absentMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#ef4444"
+                color="#3399FF"
               />
               <AttendanceStatCard
                 label="ลางาน"
                 valueMinutes={0}
                 totalMinutes={stats.totalMinutes}
-                color="#1a56db"
+                color="#3399FF"
+              />
+            </ScrollView>
+
+            <View style={styles.summarySectionHeader}>
+              <Text style={styles.summarySectionTitle}>สรุปการลา (ปีนี้)</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cardScrollContent}
+              style={styles.cardScrollView}
+              decelerationRate="fast"
+              snapToAlignment="start"
+            >
+              {leaveCards.map((card) => (
+                <LeaveSummaryCard
+                  key={card.key}
+                  title={card.title}
+                  availableDays={card.availableDays}
+                  totalDays={card.totalDays}
+                  usedDays={card.usedDays}
+                />
+              ))}
+            </ScrollView>
+
+            <View style={styles.summarySectionHeader}>
+              <Text style={styles.summarySectionTitle}>สรุปการทำงานล่วงเวลา (เดือนนี้)</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.cardScrollContent}
+              style={styles.cardScrollView}
+              decelerationRate="fast"
+              snapToAlignment="start"
+            >
+              <OvertimeSummaryCard
+                overtimeMinutes={overtime.overtimeMinutes}
+                totalWorkMinutes={overtime.totalWorkMinutes}
               />
             </ScrollView>
           </>
         )}
       </ScrollView>
       <MobileBottomNav />
+
+      {token && (
+        <GeofenceMapModal
+          visible={mapModalVisible}
+          action={mapModalAction}
+          token={token}
+          onConfirm={() => {
+            setMapModalVisible(false);
+            if (mapModalAction === 'in') void performClockIn();
+            else void performClockOut();
+          }}
+          onCancel={() => setMapModalVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -542,42 +669,26 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   heroActionDisabled: { opacity: 0.4 },
+  heroFeedbackError: {
+    backgroundColor: 'rgba(220,38,38,0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroFeedbackErrorText: { fontSize: 12, color: '#fca5a5', lineHeight: 17 },
+  heroFeedbackSuccess: {
+    backgroundColor: 'rgba(22,163,74,0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  heroFeedbackSuccessText: { fontSize: 12, color: '#86efac', lineHeight: 17 },
   heroActionIcon: { fontSize: 13, color: '#ffffff', fontWeight: '700' },
   heroActionBtnText: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
 
   // Scroll area
   scroll: { flex: 1, backgroundColor: '#f0f2f5' },
-  scrollContent: { padding: 16, gap: 20, paddingBottom: 24 },
-
-  quickLinksSection: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickLinkCard: {
-    width: '48%',
-    minWidth: 148,
-    flexGrow: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 14,
-    gap: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  quickLinkLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  quickLinkSubtitle: {
-    fontSize: 12,
-    color: '#6b7280',
-    lineHeight: 18,
-  },
+  scrollContent: { padding: 16, gap: 14, paddingBottom: 80 },
 
   // mustChangePassword banner
   mustChangeBanner: {
@@ -656,12 +767,12 @@ const styles = StyleSheet.create({
   // Individual stat card
   statCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 16,
-    width: 164,
+    borderRadius: 12,
+    padding: 8,
+    width: 200,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07,
@@ -673,5 +784,27 @@ const styles = StyleSheet.create({
   statCardValue: { fontSize: 18, fontWeight: '700', color: '#111827', lineHeight: 24 },
   statCardUnit: { fontSize: 13, fontWeight: '600', color: '#111827' },
   statCardSub: { fontSize: 11, color: '#9ca3af', lineHeight: 16 },
+
+  summarySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+  },
+  summarySectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+
+  otCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 8,
+    width: 200,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
   pressed: { opacity: 0.8 },
 });

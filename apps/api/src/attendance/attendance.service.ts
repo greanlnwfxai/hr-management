@@ -7,8 +7,8 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AttendanceStatus as PrismaAttendanceStatus } from '@prisma/client';
-import { AttendanceStatus, UserRole } from '../common/enums';
+import type { AttendanceStatus as PrismaAttendanceStatus, OffSiteStatus as PrismaOffSiteStatus, WorkMode as PrismaWorkMode } from '@prisma/client';
+import { AttendanceStatus, OffSiteStatus, UserRole, WorkMode } from '../common/enums';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -32,6 +32,7 @@ const ATTENDANCE_SELECT = {
   checkIn: true,
   checkOut: true,
   status: true,
+  workMode: true,
   note: true,
   employee: {
     select: {
@@ -57,11 +58,33 @@ export class AttendanceService {
   ) {}
 
   async clockIn(userId: string, dto: ClockInDto, ctx?: AttendanceAuditContext) {
-    await this.validateGeofence(dto, 'CLOCK_IN', ctx);
-
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
     const now = new Date();
+
+    let offSiteRequestId: string | undefined;
+
+    if (dto.workMode === WorkMode.OFFSITE) {
+      // Off-site mode: GPS required but radius check skipped.
+      // Verify there is an APPROVED off-site request for today.
+      if (dto.latitude === undefined || dto.longitude === undefined || dto.accuracy === undefined) {
+        throw new UnprocessableEntityException('Location is required for off-site attendance.');
+      }
+      const approved = await this.prisma.offSiteRequest.findFirst({
+        where: {
+          employeeId,
+          date,
+          status: OffSiteStatus.APPROVED as unknown as PrismaOffSiteStatus,
+        },
+        select: { id: true },
+      });
+      if (!approved) {
+        throw new ForbiddenException('ไม่พบคำขอทำงานนอกสถานที่ที่อนุมัติแล้วสำหรับวันนี้');
+      }
+      offSiteRequestId = approved.id;
+    } else {
+      await this.validateGeofence(dto, 'CLOCK_IN', ctx);
+    }
 
     const existing = await this.prisma.attendance.findUnique({
       where: { employeeId_date: { employeeId, date } },
@@ -69,6 +92,7 @@ export class AttendanceService {
     if (existing) throw new ConflictException('Already clocked in for today');
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+    const workMode = dto.workMode ?? WorkMode.ONSITE;
 
     const result = await this.prisma.attendance.create({
       data: {
@@ -76,6 +100,7 @@ export class AttendanceService {
         date,
         checkIn: now,
         status: status as unknown as PrismaAttendanceStatus,
+        workMode: workMode as unknown as PrismaWorkMode,
         note: dto.note,
       },
       select: ATTENDANCE_SELECT,
@@ -96,10 +121,13 @@ export class AttendanceService {
         employeeId,
         date: result.date,
         status: result.status,
+        workMode,
         clockInAt: result.checkIn,
         hasCheckIn: true,
         hasCheckOut: result.checkOut !== null,
         hasNote: result.note !== null && result.note !== undefined,
+        hasCoordinates: !!(dto.latitude),
+        ...(offSiteRequestId && { offSiteRequestId }),
       },
     });
 

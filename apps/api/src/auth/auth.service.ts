@@ -128,6 +128,7 @@ export class AuthService {
             firstName: true,
             lastName: true,
             employeeCode: true,
+            email: true,
             department: { select: { name: true } },
             position: { select: { title: true } },
           },
@@ -152,6 +153,7 @@ export class AuthService {
             firstName: user.employee.firstName,
             lastName: user.employee.lastName,
             employeeCode: user.employee.employeeCode,
+            email: user.employee.email,
             department: user.employee.department?.name ?? null,
             position: user.employee.position?.title ?? null,
           }

@@ -97,7 +97,7 @@ export class LeaveController {
     @Body() dto: ApproveLeaveRequestDto,
     @Req() req: Request,
   ) {
-    return this.leave.approve(id, user.id, dto, {
+    return this.leave.approve(id, user.id, user.role, dto, {
       actorUserId: user.id,
       actorRole: user.role,
       ipAddress: req?.ip ?? null,
@@ -119,7 +119,7 @@ export class LeaveController {
     @Body() dto: RejectLeaveRequestDto,
     @Req() req: Request,
   ) {
-    return this.leave.reject(id, user.id, dto, {
+    return this.leave.reject(id, user.id, user.role, dto, {
       actorUserId: user.id,
       actorRole: user.role,
       ipAddress: req?.ip ?? null,

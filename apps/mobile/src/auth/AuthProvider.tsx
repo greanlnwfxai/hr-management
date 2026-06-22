@@ -32,7 +32,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>(INITIAL_STATE);
 
   useEffect(() => {
-    void restoreSession();
+    const timer = setTimeout(() => {
+      setState((s) => (s.isLoading ? { ...s, isLoading: false } : s));
+    }, 4000);
+    void restoreSession().finally(() => clearTimeout(timer));
+    return () => clearTimeout(timer);
   }, []);
 
   async function restoreSession() {

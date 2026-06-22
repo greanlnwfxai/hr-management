@@ -304,6 +304,10 @@ describe('AttendanceService', () => {
       accuracy: 25,
     };
 
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+    });
+
     it('skips geofence entirely when source is not "mobile" (web path)', async () => {
       geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
@@ -821,6 +825,10 @@ describe('AttendanceService', () => {
       ipAddress: '127.0.0.1',
       userAgent: 'jest-test',
     };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+    });
 
     const enabledEnvConfig = {
       enabled: true,

@@ -43,6 +43,17 @@ enum LeaveStatus {
   REJECTED
 }
 
+enum OffSiteStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkMode {
+  ONSITE
+  OFFSITE
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,10 +137,12 @@ model Employee {
   managedDepartment Department? @relation("DepartmentManager")
 
   // Activity relations
-  attendances    Attendance[]
-  leaveRequests  LeaveRequest[] @relation("EmployeeLeaveRequests")
-  approvedLeaves LeaveRequest[] @relation("ApprovedLeaveRequests")
-  leaveBalances  LeaveBalance[]
+  attendances             Attendance[]
+  leaveRequests           LeaveRequest[]  @relation("EmployeeLeaveRequests")
+  approvedLeaves          LeaveRequest[]  @relation("ApprovedLeaveRequests")
+  leaveBalances           LeaveBalance[]
+  offSiteRequests         OffSiteRequest[] @relation("EmployeeOffSiteRequests")
+  approvedOffSiteRequests OffSiteRequest[] @relation("EmployeeApprovedOffSite")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -149,6 +162,7 @@ model Attendance {
   checkIn    DateTime?
   checkOut   DateTime?
   status     AttendanceStatus @default(PRESENT)
+  workMode   WorkMode         @default(ONSITE)
   note       String?
   createdAt  DateTime         @default(now())
   updatedAt  DateTime         @updatedAt
@@ -199,6 +213,26 @@ model LeaveBalance {
   @@index([employeeId])
   @@index([year])
   @@map("leave_balances")
+}
+
+model OffSiteRequest {
+  id           String        @id @default(uuid())
+  employeeId   String
+  employee     Employee      @relation("EmployeeOffSiteRequests", fields: [employeeId], references: [id])
+  date         DateTime      @db.Date
+  reason       String?
+  status       OffSiteStatus @default(PENDING)
+  approvedById String?
+  approvedBy   Employee?     @relation("EmployeeApprovedOffSite", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([date])
+  @@map("off_site_requests")
 }
 
 model GeofenceConfig {

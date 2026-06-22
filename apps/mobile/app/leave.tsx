@@ -23,6 +23,13 @@ import { canUseManagerApproval } from '../src/utils/roles';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
+const LEAVE_TYPE_COLOR: Record<LeaveType, string> = {
+  SICK:     '#ef4444',
+  VACATION: '#10b981',
+  PERSONAL: '#3b82f6',
+  OTHER:    '#8b5cf6',
+};
+
 function formatShortDate(iso: string): string {
   const d = new Date(iso);
   return d.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -119,7 +126,7 @@ function DatePickerField({
         <Text style={value ? styles.dateBtnText : styles.dateBtnPlaceholder}>
           {value ? formatShortDate(value) : 'เลือกวันที่'}
         </Text>
-        <Text style={styles.calendarIcon}>📅</Text>
+        <Text style={styles.dateBtnArrow}>›</Text>
       </Pressable>
       {error ? <Text style={styles.fieldError}>{error}</Text> : null}
       {showPicker && (
@@ -136,37 +143,56 @@ function DatePickerField({
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function BalanceRow({ record }: { record: LeaveBalanceRecord }) {
+function BalanceCard({ record }: { record: LeaveBalanceRecord }) {
+  const color = LEAVE_TYPE_COLOR[record.leaveType];
+  const pct = record.totalDays > 0
+    ? Math.round((record.remainingDays / record.totalDays) * 100)
+    : 0;
+
   return (
-    <View style={styles.balanceRow}>
-      <View style={styles.balanceLeft}>
-        <Text style={styles.balanceType}>{leaveTypeLabel(record.leaveType)}</Text>
-        <Text style={styles.balanceYear}>ปี {record.year}</Text>
+    <View style={[styles.balanceCard, { borderTopColor: color }]}>
+      <View style={[styles.balanceCardAccent, { backgroundColor: color + '18' }]}>
+        <Text style={[styles.balanceCardType, { color }]}>{leaveTypeLabel(record.leaveType)}</Text>
+        <Text style={styles.balanceCardYear}>ปี {record.year}</Text>
       </View>
-      <View style={styles.balanceRight}>
-        <View style={styles.balanceStat}>
-          <Text style={styles.balanceStatValue}>{record.totalDays}</Text>
-          <Text style={styles.balanceStatLabel}>วันทั้งหมด</Text>
+      <View style={styles.balanceCardBody}>
+        <View style={styles.balanceStatGroup}>
+          <Text style={[styles.balanceStatBig, { color }]}>{record.remainingDays}</Text>
+          <Text style={styles.balanceStatSub}>คงเหลือ</Text>
         </View>
-        <View style={styles.balanceStat}>
-          <Text style={[styles.balanceStatValue, { color: '#d97706' }]}>{record.usedDays}</Text>
-          <Text style={styles.balanceStatLabel}>ใช้ไปแล้ว</Text>
+        <View style={styles.balanceDividerV} />
+        <View style={styles.balanceStatGroup}>
+          <Text style={[styles.balanceStatBig, { color: '#d97706' }]}>{record.usedDays}</Text>
+          <Text style={styles.balanceStatSub}>ใช้ไปแล้ว</Text>
         </View>
-        <View style={styles.balanceStat}>
-          <Text style={[styles.balanceStatValue, { color: '#16a34a' }]}>{record.remainingDays}</Text>
-          <Text style={styles.balanceStatLabel}>คงเหลือ</Text>
+        <View style={styles.balanceDividerV} />
+        <View style={styles.balanceStatGroup}>
+          <Text style={styles.balanceStatBig}>{record.totalDays}</Text>
+          <Text style={styles.balanceStatSub}>ทั้งหมด</Text>
         </View>
+      </View>
+      {/* Progress bar */}
+      <View style={styles.balanceBarBg}>
+        <View style={[styles.balanceBarFill, { width: `${pct}%` as any, backgroundColor: color }]} />
       </View>
     </View>
   );
 }
 
 function RequestRow({ record }: { record: LeaveRequestRecord }) {
-  const statusColor = leaveStatusColor(record.status);
+  const sc = leaveStatusColor(record.status);
+  const tc = LEAVE_TYPE_COLOR[record.leaveType];
   return (
-    <View style={styles.requestRow}>
-      <View style={styles.requestLeft}>
-        <Text style={styles.requestType}>{leaveTypeLabel(record.leaveType)}</Text>
+    <View style={[styles.requestRow, { borderLeftColor: tc }]}>
+      <View style={styles.requestMain}>
+        <View style={styles.requestTopRow}>
+          <Text style={[styles.requestType, { color: tc }]}>{leaveTypeLabel(record.leaveType)}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: sc + '18' }]}>
+            <Text style={[styles.statusBadgeText, { color: sc }]}>
+              {leaveStatusLabel(record.status)}
+            </Text>
+          </View>
+        </View>
         <Text style={styles.requestDates}>
           {formatShortDate(record.startDate)} — {formatShortDate(record.endDate)}
         </Text>
@@ -174,11 +200,6 @@ function RequestRow({ record }: { record: LeaveRequestRecord }) {
           <Text style={styles.requestReason} numberOfLines={1}>{record.reason}</Text>
         ) : null}
         <Text style={styles.requestDays}>{record.totalDays} วัน</Text>
-      </View>
-      <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
-        <Text style={[styles.statusBadgeText, { color: statusColor }]}>
-          {leaveStatusLabel(record.status)}
-        </Text>
       </View>
     </View>
   );
@@ -221,6 +242,7 @@ function LeaveForm({
 
   const isSubmitting = submitState === 'submitting';
   const leaveDays = calculateLeaveDays(form.startDate, form.endDate);
+  const activeColor = LEAVE_TYPE_COLOR[form.leaveType];
 
   function validate(): boolean {
     const errs: FormErrors = {};
@@ -266,50 +288,59 @@ function LeaveForm({
       <View>
         <Text style={styles.fieldLabel}>ประเภทการลา</Text>
         <View style={styles.typeRow}>
-          {LEAVE_TYPE_OPTIONS.map((opt) => (
-            <Pressable
-              key={opt.value}
-              style={({ pressed }) => [
-                styles.typeBtn,
-                form.leaveType === opt.value && styles.typeBtnActive,
-                pressed && styles.pressed,
-              ]}
-              onPress={() => setForm((f) => ({ ...f, leaveType: opt.value }))}
-            >
-              <Text
-                style={[
-                  styles.typeBtnText,
-                  form.leaveType === opt.value && styles.typeBtnTextActive,
+          {LEAVE_TYPE_OPTIONS.map((opt) => {
+            const isActive = form.leaveType === opt.value;
+            const color = LEAVE_TYPE_COLOR[opt.value];
+            return (
+              <Pressable
+                key={opt.value}
+                style={({ pressed }) => [
+                  styles.typeBtn,
+                  isActive && { borderColor: color, backgroundColor: color + '12' },
+                  pressed && styles.pressed,
                 ]}
+                onPress={() => setForm((f) => ({ ...f, leaveType: opt.value }))}
               >
-                {opt.label}
-              </Text>
-            </Pressable>
-          ))}
+                <View style={[styles.typeDot, { backgroundColor: color }]} />
+                <Text
+                  style={[
+                    styles.typeBtnText,
+                    isActive && { color, fontWeight: '700' },
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
         {errors.leaveType ? <Text style={styles.fieldError}>{errors.leaveType}</Text> : null}
       </View>
 
-      {/* Start date */}
-      <DatePickerField
-        label="วันที่เริ่มต้น"
-        value={form.startDate}
-        onChange={(v) => setForm((f) => ({ ...f, startDate: v }))}
-        error={errors.startDate}
-        disabled={isSubmitting}
-      />
+      {/* Start / End date row */}
+      <View style={styles.dateRow}>
+        <View style={styles.dateRowItem}>
+          <DatePickerField
+            label="วันที่เริ่มต้น"
+            value={form.startDate}
+            onChange={(v) => setForm((f) => ({ ...f, startDate: v }))}
+            error={errors.startDate}
+            disabled={isSubmitting}
+          />
+        </View>
+        <View style={styles.dateRowItem}>
+          <DatePickerField
+            label="วันที่สิ้นสุด"
+            value={form.endDate}
+            onChange={(v) => setForm((f) => ({ ...f, endDate: v }))}
+            error={errors.endDate}
+            disabled={isSubmitting}
+          />
+        </View>
+      </View>
 
-      {/* End date */}
-      <DatePickerField
-        label="วันที่สิ้นสุด"
-        value={form.endDate}
-        onChange={(v) => setForm((f) => ({ ...f, endDate: v }))}
-        error={errors.endDate}
-        disabled={isSubmitting}
-      />
-
-      <View style={styles.leaveDaysPreview}>
-        <Text style={styles.leaveDaysPreviewLabel}>จำนวนวันที่ลา</Text>
+      <View style={[styles.leaveDaysPreview, { borderColor: activeColor + '40', backgroundColor: activeColor + '08' }]}>
+        <Text style={[styles.leaveDaysPreviewLabel, { color: activeColor }]}>จำนวนวันที่ลา</Text>
         <Text style={styles.leaveDaysPreviewValue}>
           {leaveDays ? `${leaveDays} วัน` : 'เลือกช่วงวันที่เพื่อคำนวณ'}
         </Text>
@@ -332,14 +363,12 @@ function LeaveForm({
         {errors.reason ? <Text style={styles.fieldError}>{errors.reason}</Text> : null}
       </View>
 
-      {/* Submit error */}
       {submitError ? (
         <View style={styles.submitErrorBox}>
           <Text style={styles.submitErrorText}>{submitError}</Text>
         </View>
       ) : null}
 
-      {/* Submit success */}
       {submitMessage ? (
         <View style={styles.submitSuccessBox}>
           <Text style={styles.submitSuccessText}>{submitMessage}</Text>
@@ -358,6 +387,7 @@ function LeaveForm({
         <Pressable
           style={({ pressed }) => [
             styles.submitBtn,
+            { backgroundColor: activeColor },
             isSubmitting && styles.disabled,
             pressed && !isSubmitting && styles.pressed,
           ]}
@@ -423,9 +453,10 @@ export default function LeaveScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <MobileScreenHeader
-        title="Leave"
+        title="การลา"
         subtitle="จัดการสิทธิ์ลาและส่งคำขอ"
         backHref="/home"
+        dark
         action={
           canApprove ? (
             <Pressable
@@ -433,7 +464,7 @@ export default function LeaveScreen() {
               onPress={() => router.push('/approvals')}
               accessibilityRole="button"
             >
-              <Text style={styles.headerActionText}>Approvals</Text>
+              <Text style={styles.headerActionText}>อนุมัติ</Text>
             </Pressable>
           ) : undefined
         }
@@ -444,7 +475,6 @@ export default function LeaveScreen() {
           <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
         }
       >
-        {/* ── Load state ───────────────────────────────────────────────── */}
         {loadState === 'loading' && (
           <View style={styles.loadingRow}>
             <ActivityIndicator color="#1a56db" size="small" />
@@ -465,7 +495,7 @@ export default function LeaveScreen() {
           </View>
         )}
 
-        {/* ── Leave Balance ────────────────────────────────────────────── */}
+        {/* Leave Balance */}
         {(loadState === 'success' || loadState === 'idle') && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>สิทธิ์การลา</Text>
@@ -474,12 +504,14 @@ export default function LeaveScreen() {
                 <Text style={styles.emptyText}>ไม่พบข้อมูลสิทธิ์การลา</Text>
               </View>
             ) : (
-              balances.map((b) => <BalanceRow key={b.id} record={b} />)
+              <View style={styles.balanceGrid}>
+                {balances.map((b) => <BalanceCard key={b.id} record={b} />)}
+              </View>
             )}
           </View>
         )}
 
-        {/* ── Create Leave Request Form ─────────────────────────────────── */}
+        {/* Create Leave Request Form */}
         <LeaveForm
           onSubmit={handleSubmit}
           submitState={submitState}
@@ -488,7 +520,7 @@ export default function LeaveScreen() {
           onReset={resetSubmit}
         />
 
-        {/* ── My Leave Requests ─────────────────────────────────────────── */}
+        {/* My Leave Requests */}
         {(loadState === 'success' || loadState === 'idle') && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>คำขอลาของฉัน</Text>
@@ -501,7 +533,6 @@ export default function LeaveScreen() {
             )}
           </View>
         )}
-
       </ScrollView>
       <MobileBottomNav />
     </SafeAreaView>
@@ -511,22 +542,15 @@ export default function LeaveScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
-  scroll: {
-    padding: 16,
-    gap: 16,
-    paddingBottom: 24,
-  },
+  container: { flex: 1, backgroundColor: '#f8f9fa' },
+  scroll: { padding: 16, gap: 16, paddingBottom: 24 },
 
   // Card
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 14,
+    borderRadius: 16,
     padding: 16,
-    gap: 12,
+    gap: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
@@ -542,99 +566,68 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
   },
 
-  // Balance row
-  balanceRow: {
+  // Balance grid
+  balanceGrid: { gap: 10 },
+  balanceCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    borderTopWidth: 3,
+    overflow: 'hidden',
+  },
+  balanceCardAccent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  balanceLeft: {
-    gap: 2,
-  },
-  balanceType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  balanceYear: {
-    fontSize: 12,
-    color: '#9ca3af',
-  },
-  balanceRight: {
+  balanceCardType: { fontSize: 14, fontWeight: '700' },
+  balanceCardYear: { fontSize: 12, color: '#9ca3af' },
+  balanceCardBody: {
     flexDirection: 'row',
-    gap: 16,
-  },
-  balanceStat: {
     alignItems: 'center',
-    gap: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
   },
-  balanceStatValue: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
+  balanceStatGroup: { flex: 1, alignItems: 'center', gap: 3 },
+  balanceStatBig: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  balanceStatSub: { fontSize: 11, color: '#9ca3af' },
+  balanceDividerV: { width: 1, height: 32, backgroundColor: '#f3f4f6' },
+  balanceBarBg: {
+    height: 4,
+    backgroundColor: '#f3f4f6',
+    marginHorizontal: 14,
+    marginBottom: 10,
+    borderRadius: 2,
   },
-  balanceStatLabel: {
-    fontSize: 10,
-    color: '#6b7280',
-  },
+  balanceBarFill: { height: 4, borderRadius: 2 },
 
   // Request row
   requestRow: {
+    borderLeftWidth: 3,
+    borderRadius: 10,
+    backgroundColor: '#f9fafb',
+    padding: 12,
+    marginBottom: 8,
+  },
+  requestMain: { gap: 4 },
+  requestTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    alignItems: 'center',
   },
-  requestLeft: {
-    flex: 1,
-    gap: 3,
-    paddingRight: 12,
-  },
-  requestType: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  requestDates: {
-    fontSize: 12,
-    color: '#6b7280',
-  },
-  requestReason: {
-    fontSize: 12,
-    color: '#374151',
-  },
-  requestDays: {
-    fontSize: 11,
-    color: '#9ca3af',
-  },
-  statusBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    alignSelf: 'flex-start',
-  },
-  statusBadgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
+  requestType: { fontSize: 14, fontWeight: '700' },
+  requestDates: { fontSize: 12, color: '#6b7280' },
+  requestReason: { fontSize: 12, color: '#374151' },
+  requestDays: { fontSize: 11, color: '#9ca3af' },
+  statusBadge: { borderRadius: 6, paddingHorizontal: 10, paddingVertical: 3 },
+  statusBadgeText: { fontSize: 12, fontWeight: '600' },
 
   // Form
-  fieldLabel: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  fieldError: {
-    fontSize: 12,
-    color: '#dc2626',
-    marginTop: 4,
-  },
+  fieldLabel: { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 6 },
+  fieldError: { fontSize: 12, color: '#dc2626', marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -645,9 +638,7 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#ffffff',
   },
-  inputError: {
-    borderColor: '#f87171',
-  },
+  inputError: { borderColor: '#f87171' },
   dateBtn: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -659,72 +650,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dateBtnText: {
-    fontSize: 14,
-    color: '#111827',
-  },
-  dateBtnPlaceholder: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  calendarIcon: {
-    fontSize: 16,
-  },
+  dateBtnText: { fontSize: 14, color: '#111827' },
+  dateBtnPlaceholder: { fontSize: 14, color: '#9ca3af' },
+  dateBtnArrow: { fontSize: 18, color: '#9ca3af', fontWeight: '400' },
   leaveDaysPreview: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#dbeafe',
-    backgroundColor: '#f8fbff',
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 4,
   },
-  leaveDaysPreviewLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#1d4ed8',
-  },
-  leaveDaysPreviewValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  inputMultiline: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  typeRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
+  leaveDaysPreviewLabel: { fontSize: 12, fontWeight: '600' },
+  leaveDaysPreviewValue: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  inputMultiline: { minHeight: 80, textAlignVertical: 'top' },
+
+  // Date row
+  dateRow: { flexDirection: 'row', gap: 10 },
+  dateRowItem: { flex: 1 },
+
+  // Leave type selector
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeBtn: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#d1d5db',
-    borderRadius: 8,
+    borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 7,
     backgroundColor: '#f9fafb',
-  },
-  typeBtnActive: {
-    borderColor: '#1a56db',
-    backgroundColor: '#eff6ff',
-  },
-  typeBtnText: {
-    fontSize: 13,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  typeBtnTextActive: {
-    color: '#1a56db',
-    fontWeight: '600',
-  },
-  formBtnRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
+    alignItems: 'center',
+    gap: 6,
   },
+  typeDot: { width: 8, height: 8, borderRadius: 4 },
+  typeBtnText: { fontSize: 13, color: '#374151', fontWeight: '500' },
+
+  // Form buttons
+  formBtnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
   clearBtn: {
     flexGrow: 1,
     flexBasis: 120,
@@ -735,15 +696,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9fafb',
   },
-  clearBtnText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-  },
+  clearBtnText: { fontSize: 14, fontWeight: '500', color: '#374151' },
   submitBtn: {
     flexGrow: 2,
     flexBasis: 180,
-    backgroundColor: '#1a56db',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -751,11 +707,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  submitBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
+  submitBtnText: { fontSize: 14, fontWeight: '600', color: '#ffffff' },
   submitErrorBox: {
     backgroundColor: '#fef2f2',
     borderRadius: 8,
@@ -763,12 +715,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fecaca',
   },
-  submitErrorText: {
-    fontSize: 12,
-    color: '#dc2626',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  submitErrorText: { fontSize: 12, color: '#dc2626', textAlign: 'center', lineHeight: 18 },
   submitSuccessBox: {
     backgroundColor: '#f0fdf4',
     borderRadius: 8,
@@ -776,22 +723,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bbf7d0',
   },
-  submitSuccessText: {
-    fontSize: 12,
-    color: '#16a34a',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
+  submitSuccessText: { fontSize: 12, color: '#16a34a', textAlign: 'center', lineHeight: 18 },
 
   // Empty state
-  emptyBox: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#9ca3af',
-  },
+  emptyBox: { paddingVertical: 16, alignItems: 'center' },
+  emptyText: { fontSize: 13, color: '#9ca3af' },
 
   // Loading / error
   loadingRow: {
@@ -801,10 +737,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     justifyContent: 'center',
   },
-  loadingText: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
+  loadingText: { fontSize: 13, color: '#6b7280' },
   errorBox: {
     backgroundColor: '#fef2f2',
     borderRadius: 12,
@@ -813,38 +746,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fecaca',
   },
-  errorText: {
-    fontSize: 13,
-    color: '#dc2626',
-    textAlign: 'center',
-  },
+  errorText: { fontSize: 13, color: '#dc2626', textAlign: 'center' },
   retryBtn: {
     backgroundColor: '#eff6ff',
     borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  retryText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#1a56db',
-  },
+  retryText: { fontSize: 13, fontWeight: '500', color: '#1a56db' },
 
   headerAction: {
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#eff6ff',
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  headerActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1a56db',
-  },
+  headerActionText: { fontSize: 12, fontWeight: '700', color: '#ffffff' },
 
-  // Shared
   pressed: { opacity: 0.78 },
   disabled: { opacity: 0.55 },
 });

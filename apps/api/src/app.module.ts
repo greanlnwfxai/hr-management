@@ -10,6 +10,7 @@ import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health.controller';
 import { LeaveBalanceModule } from './leave-balance/leave-balance.module';
 import { LeaveModule } from './leave/leave.module';
+import { OffSiteModule } from './off-site/off-site.module';
 import { PositionsModule } from './positions/positions.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -31,6 +32,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AttendanceModule,
     LeaveModule,
     LeaveBalanceModule,
+    OffSiteModule,
     DashboardModule,
   ],
   controllers: [HealthController],

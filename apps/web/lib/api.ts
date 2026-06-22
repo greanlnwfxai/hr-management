@@ -261,14 +261,14 @@ export function getDepartments(params?: { page?: number; limit?: number; search?
 }
 
 export function getAllDepartments() {
-  return apiFetch<PaginatedResponse<Department>>('/departments?limit=200');
+  return apiFetch<PaginatedResponse<Department>>('/departments?limit=100');
 }
 
-export function createDepartment(body: { name: string; description?: string }) {
+export function createDepartment(body: { name: string; description?: string; managerId?: string | null }) {
   return apiFetch<Department>('/departments', { method: 'POST', body: JSON.stringify(body) });
 }
 
-export function updateDepartment(id: string, body: { name?: string; description?: string }) {
+export function updateDepartment(id: string, body: { name?: string; description?: string; managerId?: string | null }) {
   return apiFetch<Department>(`/departments/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
 }
 
@@ -300,7 +300,7 @@ export function getPositions(params?: { page?: number; limit?: number; search?: 
 }
 
 export function getAllPositions(departmentId?: string) {
-  const qs = departmentId ? `?limit=200&departmentId=${departmentId}` : '?limit=200';
+  const qs = departmentId ? `?limit=100&departmentId=${departmentId}` : '?limit=100';
   return apiFetch<PaginatedResponse<Position>>(`/positions${qs}`);
 }
 
@@ -586,4 +586,43 @@ export function getAuditLogs(params?: {
   if (params?.dateTo) qs.set('dateTo', params.dateTo);
   const query = qs.toString() ? `?${qs}` : '';
   return apiFetch<PaginatedResponse<AuditLog>>(`/audit-logs${query}`);
+}
+
+// ── Off-Site Requests ─────────────────────────────────────────────────────────
+
+export type OffSiteRequest = {
+  id: string;
+  date: string;
+  reason?: string;
+  status: string;
+  rejectReason?: string;
+  approvedAt?: string;
+  employee?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    employeeCode?: string;
+    department?: { id: string; name: string };
+  };
+  approvedBy?: { id: string; firstName: string; lastName: string };
+  createdAt: string;
+};
+
+export function getOffSiteRequests(params?: { page?: number; limit?: number; status?: string; date?: string; employeeId?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.status) qs.set('status', params.status);
+  if (params?.date) qs.set('date', params.date);
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<OffSiteRequest>>(`/off-site${query}`);
+}
+
+export function approveOffSiteRequest(id: string) {
+  return apiFetch<OffSiteRequest>(`/off-site/${id}/approve`, { method: 'PATCH', body: JSON.stringify({}) });
+}
+
+export function rejectOffSiteRequest(id: string, rejectReason?: string) {
+  return apiFetch<OffSiteRequest>(`/off-site/${id}/reject`, { method: 'PATCH', body: JSON.stringify({ rejectReason }) });
 }

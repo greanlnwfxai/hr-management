@@ -12,6 +12,7 @@ const translations = {
     nav_positions: 'Positions',
     nav_attendance: 'Attendance',
     nav_leave: 'Leave',
+    nav_offsite: 'Off-Site',
     nav_logout: 'Log out',
 
     // Common
@@ -318,6 +319,7 @@ const translations = {
     nav_positions: 'ตำแหน่ง',
     nav_attendance: 'ลงเวลา',
     nav_leave: 'การลา',
+    nav_offsite: 'นอกสถานที่',
     nav_logout: 'ออกจากระบบ',
 
     // Common

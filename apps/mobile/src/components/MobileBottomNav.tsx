@@ -3,11 +3,11 @@ import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const NAV_ITEMS = [
-  { href: '/home', label: 'Home', icon: '⌂' },
-  { href: '/calendar', label: 'Calendar', icon: '◫' },
-  { href: '/attendance', label: 'Attendance', icon: '◷' },
-  { href: '/leave', label: 'Leave', icon: '▣' },
-  { href: '/profile', label: 'Profile', icon: '○' },
+  { href: '/home', label: 'หน้าแรก', icon: '⌂' },
+  { href: '/calendar', label: 'ปฏิทิน', icon: '◫' },
+  { href: '/attendance', label: 'ลงเวลา', icon: '◷' },
+  { href: '/leave', label: 'การลา', icon: '▣' },
+  { href: '/profile', label: 'โปรไฟล์', icon: '○' },
 ] as const;
 
 export function MobileBottomNav() {
@@ -35,7 +35,7 @@ export function MobileBottomNav() {
               accessibilityState={{ selected: isActive }}
             >
               <Text style={[styles.icon, isActive && styles.iconActive]}>{item.icon}</Text>
-              <Text style={[styles.label, isActive && styles.labelActive]}>{item.label}</Text>
+              <Text style={[styles.label, isActive && styles.labelActive]} numberOfLines={1}>{item.label}</Text>
             </Pressable>
           );
         })}

@@ -12,7 +12,8 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
-import type { AttendanceRecord, AttendanceStatus } from '../src/api/types';
+import { useOffSiteRequests } from '../src/hooks/useOffSiteRequests';
+import type { AttendanceRecord, AttendanceStatus, OffSiteRequestRecord } from '../src/api/types';
 import type { ClockActionState } from '../src/hooks/useAttendance';
 import { MobileBottomNav } from '../src/components';
 
@@ -80,15 +81,15 @@ function AttendanceHeader({
     <View style={hdr.container}>
       <View style={hdr.topRow}>
         <View>
-          <Text style={hdr.screenTitle}>Attendance</Text>
-          <Text style={hdr.screenSubtitle}>08:30–17:30 workday overview</Text>
+          <Text style={hdr.screenTitle}>ลงเวลา</Text>
+          <Text style={hdr.screenSubtitle}>ภาพรวมการลงเวลา 08:30–17:30</Text>
         </View>
         <Pressable
           style={({ pressed }) => [hdr.profileShortcut, pressed && styles.pressed]}
           onPress={onProfilePress}
           accessibilityRole="button"
         >
-          <Text style={hdr.profileShortcutText}>Profile</Text>
+          <Text style={hdr.profileShortcutText}>โปรไฟล์</Text>
         </Pressable>
       </View>
 
@@ -170,6 +171,7 @@ interface ClockActionCardProps {
   actionMessage: string | null;
   onClockIn: () => void;
   onClockOut: () => void;
+  isOffSiteApproved?: boolean;
 }
 
 function ClockActionCard({
@@ -181,6 +183,7 @@ function ClockActionCard({
   actionMessage,
   onClockIn,
   onClockOut,
+  isOffSiteApproved,
 }: ClockActionCardProps) {
   const inBusy = clockInState === 'locating' || clockInState === 'submitting';
   const outBusy = clockOutState === 'locating' || clockOutState === 'submitting';
@@ -191,7 +194,14 @@ function ClockActionCard({
 
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>ลงเวลา</Text>
+      <View style={styles.cardTitleRow}>
+        <Text style={styles.cardTitle}>ลงเวลา</Text>
+        {isOffSiteApproved && (
+          <View style={styles.offsiteBadge}>
+            <Text style={styles.offsiteBadgeText}>🗺 นอกสถานที่</Text>
+          </View>
+        )}
+      </View>
       <View style={styles.clockRow}>
         <Pressable
           style={({ pressed }) => [
@@ -312,7 +322,14 @@ function HistoryTimeline({ records }: { records: AttendanceRecord[] }) {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.timelineCardSub}>ผ่านมือถือ</Text>
+              <View style={styles.timelineCardSubRow}>
+                <Text style={styles.timelineCardSub}>ผ่านมือถือ</Text>
+                {rec.workMode === 'OFFSITE' && (
+                  <View style={styles.offSiteHistoryBadge}>
+                    <Text style={styles.offSiteHistoryBadgeText}>นอกสถานที่</Text>
+                  </View>
+                )}
+              </View>
               {rec.checkOut ? (
                 <Text style={styles.timelineCardSub}>
                   ออกงาน: {formatTime(rec.checkOut)}
@@ -331,6 +348,21 @@ function HistoryTimeline({ records }: { records: AttendanceRecord[] }) {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+function offSiteStatusLabel(status: OffSiteRequestRecord['status']): string {
+  switch (status) {
+    case 'PENDING': return 'รอการอนุมัติ';
+    case 'APPROVED': return 'อนุมัติแล้ว';
+    case 'REJECTED': return 'ไม่อนุมัติ';
+  }
+}
+function offSiteStatusColor(status: OffSiteRequestRecord['status']): string {
+  switch (status) {
+    case 'PENDING': return '#d97706';
+    case 'APPROVED': return '#16a34a';
+    case 'REJECTED': return '#dc2626';
+  }
+}
+
 export default function AttendanceScreen() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -346,9 +378,12 @@ export default function AttendanceScreen() {
     clockActionMessage,
     performClockIn,
     performClockOut,
+    todayOffSite,
   } = useAttendance();
+  const { requests: offSiteRequests, loadState: offSiteLoadState, refresh: refreshOffSite } = useOffSiteRequests();
 
   const [activeTab, setActiveTab] = useState<'time' | 'request'>('time');
+  const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -362,16 +397,10 @@ export default function AttendanceScreen() {
     }
   }, [isLoading, isAuthenticated, user?.mustChangePassword]);
 
-  function formatUpdatedTime(date: Date | null): string {
-    if (!date) return '—';
-    return date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-  }
-
   const isRefreshing = loadState === 'loading';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-      {/* ── Attendance header (blue) ─────────────────────────────────── */}
       <AttendanceHeader today={today} onProfilePress={() => router.push('/profile')} />
 
       {/* ── Tab bar ─────────────────────────────────────────────────── */}
@@ -403,15 +432,28 @@ export default function AttendanceScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#3b82f6" />
         }
       >
         {activeTab === 'time' && (
           <>
-            {/* Loading / error */}
+            <ClockActionCard
+              today={today}
+              dataLoading={loadState === 'loading'}
+              clockInState={clockInState}
+              clockOutState={clockOutState}
+              actionError={clockActionError}
+              actionMessage={clockActionMessage}
+              onClockIn={performClockIn}
+              onClockOut={performClockOut}
+              isOffSiteApproved={isOffSiteApproved}
+            />
+
+            <GeofenceNotice />
+
             {loadState === 'loading' && (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#1a56db" size="small" />
+                <ActivityIndicator color="#3b82f6" size="small" />
                 <Text style={styles.loadingText}>กำลังโหลดข้อมูล</Text>
               </View>
             )}
@@ -429,22 +471,6 @@ export default function AttendanceScreen() {
               </View>
             )}
 
-            {/* Clock actions */}
-            <ClockActionCard
-              today={today}
-              dataLoading={loadState === 'loading'}
-              clockInState={clockInState}
-              clockOutState={clockOutState}
-              actionError={clockActionError}
-              actionMessage={clockActionMessage}
-              onClockIn={performClockIn}
-              onClockOut={performClockOut}
-            />
-
-            {/* Geofence notice */}
-            <GeofenceNotice />
-
-            {/* History */}
             {loadState === 'success' && (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>ประวัติการลงเวลา</Text>
@@ -455,19 +481,61 @@ export default function AttendanceScreen() {
         )}
 
         {activeTab === 'request' && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>คำขอลา</Text>
-            <Text style={styles.emptyHistoryText}>
-              ดูและส่งคำขอลาได้ในหน้าการลา
-            </Text>
-            <Pressable
-              style={({ pressed }) => [styles.goLeaveBtn, pressed && styles.pressed]}
-              onPress={() => router.push('/leave')}
-              accessibilityRole="button"
-            >
-              <Text style={styles.goLeaveBtnText}>ไปหน้าการลา →</Text>
-            </Pressable>
-          </View>
+          <>
+            <View style={styles.card}>
+              <View style={styles.cardTitleRow}>
+                <Text style={styles.cardTitle}>คำขอทำงานนอกสถานที่</Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.goLeaveBtn, pressed && styles.pressed]}
+                onPress={() => router.push('/offsite-request')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.goLeaveBtnText}>+ ขอทำงานนอกสถานที่</Text>
+              </Pressable>
+
+              {offSiteLoadState === 'loading' && (
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#3b82f6" size="small" />
+                  <Text style={styles.loadingText}>กำลังโหลด</Text>
+                </View>
+              )}
+
+              {offSiteRequests.length === 0 && offSiteLoadState === 'success' && (
+                <Text style={styles.emptyHistoryText}>ยังไม่มีคำขอทำงานนอกสถานที่</Text>
+              )}
+
+              {offSiteRequests.map((req) => {
+                const sc = offSiteStatusColor(req.status);
+                return (
+                  <View key={req.id} style={styles.offSiteRow}>
+                    <View style={styles.offSiteRowLeft}>
+                      <Text style={styles.offSiteDate}>{req.date.split('T')[0]}</Text>
+                      {!!req.reason && (
+                        <Text style={styles.offSiteReason} numberOfLines={1}>{req.reason}</Text>
+                      )}
+                    </View>
+                    <View style={[styles.offSiteStatusBadge, { backgroundColor: sc + '20' }]}>
+                      <Text style={[styles.offSiteStatusText, { color: sc }]}>
+                        {offSiteStatusLabel(req.status)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>คำขอลา</Text>
+              <Pressable
+                style={({ pressed }) => [styles.goLeaveBtn, pressed && styles.pressed]}
+                onPress={() => router.push('/leave')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.goLeaveBtnText}>ไปหน้าการลา →</Text>
+              </Pressable>
+            </View>
+          </>
         )}
       </ScrollView>
       <MobileBottomNav />
@@ -479,11 +547,16 @@ export default function AttendanceScreen() {
 
 const hdr = StyleSheet.create({
   container: {
-    backgroundColor: '#1a56db',
+    backgroundColor: '#3b82f6',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
     gap: 12,
+    shadowColor: '#1e3a8a',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
   },
   topRow: {
     flexDirection: 'row',
@@ -528,7 +601,7 @@ const hdr = StyleSheet.create({
     alignItems: 'center',
   },
   timeBubble: {
-    backgroundColor: '#1e3a8a',
+    backgroundColor: '#1d4ed8',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -635,7 +708,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   tabBtnTextActive: {
-    color: '#1a56db',
+    color: '#3b82f6',
     fontWeight: '700',
   },
   tabBtnUnderline: {
@@ -644,9 +717,51 @@ const styles = StyleSheet.create({
     left: '25%',
     right: '25%',
     height: 2,
-    backgroundColor: '#1a56db',
+    backgroundColor: '#3b82f6',
     borderRadius: 1,
   },
+
+  // Card title row (for badge alongside title)
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  // Off-site badge on clock-in card
+  offsiteBadge: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  offsiteBadgeText: { fontSize: 11, fontWeight: '600', color: '#1d4ed8' },
+
+  // Off-site badge in history timeline
+  offSiteHistoryBadge: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginLeft: 6,
+  },
+  offSiteHistoryBadgeText: { fontSize: 10, fontWeight: '600', color: '#1d4ed8' },
+  timelineCardSubRow: { flexDirection: 'row', alignItems: 'center' },
+
+  // Off-site request list rows
+  offSiteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+    gap: 10,
+  },
+  offSiteRowLeft: { flex: 1, gap: 2 },
+  offSiteDate: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  offSiteReason: { fontSize: 12, color: '#6b7280' },
+  offSiteStatusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  offSiteStatusText: { fontSize: 11, fontWeight: '600' },
 
   // Card
   card: {
@@ -665,8 +780,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     borderLeftWidth: 3,
-    borderLeftColor: '#1a56db',
+    borderLeftColor: '#3b82f6',
     paddingLeft: 10,
+    flexShrink: 1,
   },
 
   // Clock action card
@@ -679,11 +795,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexBasis: 148,
     borderRadius: 100,
-    paddingVertical: 18,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     alignItems: 'center',
     gap: 6,
-    minHeight: 88,
+    minHeight: 56,
     justifyContent: 'center',
   },
   clockBtnDisabled: {
@@ -692,8 +808,8 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   clockBtnIn: {
-    backgroundColor: '#1a56db',
-    shadowColor: '#1a56db',
+    backgroundColor: '#3b82f6',
+    shadowColor: '#3b82f6',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
@@ -793,7 +909,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe',
   },
-  goLeaveBtnText: { fontSize: 14, fontWeight: '600', color: '#1a56db' },
+  goLeaveBtnText: { fontSize: 14, fontWeight: '600', color: '#3b82f6' },
 
   // Loading / error
   loadingRow: {
@@ -819,7 +935,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
   },
-  retryText: { fontSize: 13, fontWeight: '500', color: '#1a56db' },
+  retryText: { fontSize: 13, fontWeight: '500', color: '#3b82f6' },
 
   // Shared
   pressed: { opacity: 0.78 },

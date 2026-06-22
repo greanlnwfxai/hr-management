@@ -22,6 +22,7 @@ export interface MobileUserProfile {
     firstName: string;
     lastName: string;
     employeeCode: string;
+    email: string;
     department: string | null;
     position: string | null;
   } | null;
@@ -104,12 +105,15 @@ export interface AttendanceEmployee {
   lastName: string;
 }
 
+export type WorkMode = 'ONSITE' | 'OFFSITE';
+
 export interface AttendanceRecord {
   id: string;
   date: string;
   checkIn: string | null;
   checkOut: string | null;
   status: AttendanceStatus;
+  workMode: WorkMode;
   note: string | null;
   employee: AttendanceEmployee;
   createdAt: string;
@@ -121,6 +125,15 @@ export interface AttendanceHistoryResponse {
   meta: PaginatedMeta;
 }
 
+// ─── Geofence ─────────────────────────────────────────────────────────────────
+
+export interface GeofenceLocation {
+  enabled: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  radiusMeters: number;
+}
+
 // ─── Mobile Clock Actions ─────────────────────────────────────────────────────
 
 export interface MobileLocationPayload {
@@ -128,6 +141,7 @@ export interface MobileLocationPayload {
   latitude: number;
   longitude: number;
   accuracy: number;
+  workMode?: WorkMode;
 }
 
 export interface ClockActionResult {
@@ -178,4 +192,32 @@ export interface CreateLeaveRequestPayload {
   startDate: string;
   endDate: string;
   reason: string;
+}
+
+// ─── Off-Site ─────────────────────────────────────────────────────────────────
+
+export type OffSiteStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface OffSiteApprover {
+  id: string;
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface OffSiteRequestRecord {
+  id: string;
+  date: string;
+  reason: string | null;
+  status: OffSiteStatus;
+  rejectReason: string | null;
+  approvedAt: string | null;
+  approvedBy: OffSiteApprover | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateOffSiteRequestPayload {
+  date: string;
+  reason?: string;
 }

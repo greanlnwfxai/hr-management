@@ -7,7 +7,7 @@ import { mockPrisma } from '../test-utils/prisma.mock';
 
 // Helper type so TypeScript knows the mock shape
 type PrismaMock = ReturnType<typeof mockPrisma> & {
-  employee: { findFirst: jest.Mock };
+  employee: { findFirst: jest.Mock; findUnique: jest.Mock };
   leaveRequest: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
   leaveBalance: { findUnique: jest.Mock };
   $transaction: jest.Mock;
@@ -217,7 +217,7 @@ describe('LeaveService', () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(balance as any);
       prisma.$transaction.mockImplementation((fn: any) => fn(txMock));
 
-      const result = await service.approve(leaveId, userId, {} as any);
+      const result = await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(result.status).toBe('APPROVED');
       expect(txMock.leaveBalance.update).toHaveBeenCalled();
@@ -229,13 +229,13 @@ describe('LeaveService', () => {
     it('throws NotFoundException when leave request does not exist', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.approve('missing', userId, {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.approve('missing', userId, 'HR_ADMIN', {} as any)).rejects.toThrow(NotFoundException);
     });
 
     it('throws BadRequestException for non-PENDING leave requests', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue({ ...pendingRecord, status: 'APPROVED' } as any);
 
-      await expect(service.approve(leaveId, userId, {} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.approve(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException when no leave balance record exists', async () => {
@@ -243,7 +243,7 @@ describe('LeaveService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
       prisma.leaveBalance.findUnique.mockResolvedValue(null);
 
-      await expect(service.approve(leaveId, userId, {} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.approve(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException when remaining days are insufficient', async () => {
@@ -252,7 +252,7 @@ describe('LeaveService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
       prisma.leaveBalance.findUnique.mockResolvedValue(tightBalance as any);
 
-      await expect(service.approve(leaveId, userId, {} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.approve(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -266,7 +266,7 @@ describe('LeaveService', () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
       prisma.leaveRequest.update.mockResolvedValue({ ...mockLeaveRecord, status: 'REJECTED' } as any);
 
-      const result = await service.reject(leaveId, userId, {} as any);
+      const result = await service.reject(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(result.status).toBe('REJECTED');
       expect(prisma.leaveRequest.update).toHaveBeenCalledWith(
@@ -280,13 +280,13 @@ describe('LeaveService', () => {
     it('throws NotFoundException when leave request does not exist', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(null);
 
-      await expect(service.reject('missing', userId, {} as any)).rejects.toThrow(NotFoundException);
+      await expect(service.reject('missing', userId, 'HR_ADMIN', {} as any)).rejects.toThrow(NotFoundException);
     });
 
     it('throws BadRequestException for non-PENDING leave requests', async () => {
       prisma.leaveRequest.findUnique.mockResolvedValue({ ...pendingRecord, status: 'APPROVED' } as any);
 
-      await expect(service.reject(leaveId, userId, {} as any)).rejects.toThrow(BadRequestException);
+      await expect(service.reject(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -315,7 +315,7 @@ describe('LeaveService', () => {
 
     it('records LEAVE_APPROVED after successful approval', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'LEAVE_APPROVED', result: 'SUCCESS' }),
@@ -324,7 +324,7 @@ describe('LeaveService', () => {
 
     it('sets actorUserId and actorRole from context on LEAVE_APPROVED', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any, { actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' });
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ actorUserId: 'actor-uuid', actorRole: 'HR_ADMIN' }),
@@ -333,7 +333,7 @@ describe('LeaveService', () => {
 
     it('sets targetType to LEAVE_REQUEST on LEAVE_APPROVED', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any);
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ targetType: 'LEAVE_REQUEST' }),
@@ -342,7 +342,7 @@ describe('LeaveService', () => {
 
     it('sets targetId to leave request id on LEAVE_APPROVED', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any);
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ targetId: leaveId }),
@@ -351,7 +351,7 @@ describe('LeaveService', () => {
 
     it('sets result to SUCCESS on LEAVE_APPROVED', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any);
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ result: 'SUCCESS' }),
@@ -360,7 +360,7 @@ describe('LeaveService', () => {
 
     it('metadata contains safe scalar fields only — no reason field', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any);
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       const call = mockAuditLog.record.mock.calls[0][0];
       expect(call.metadata).toMatchObject({
@@ -375,7 +375,7 @@ describe('LeaveService', () => {
 
     it('metadata does not contain the employee leave reason value even if reason is on the record', async () => {
       setupApproveSuccess();
-      await service.approve(leaveId, userId, {} as any);
+      await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       const call = mockAuditLog.record.mock.calls[0][0];
       const metadataValues = Object.values(call.metadata ?? {});
@@ -386,7 +386,7 @@ describe('LeaveService', () => {
       setupApproveSuccess();
       mockAuditLog.record.mockRejectedValueOnce(new Error('DB down'));
 
-      const result = await service.approve(leaveId, userId, {} as any);
+      const result = await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(result.status).toBe('APPROVED');
     });
@@ -399,13 +399,14 @@ describe('LeaveService', () => {
 
     const setupRejectSuccess = () => {
       prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
-      prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
+      prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } });
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-1' });
       prisma.leaveRequest.update.mockResolvedValue({ ...mockLeaveRecord, status: 'REJECTED' } as any);
     };
 
     it('records LEAVE_REJECTED after successful rejection', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
+      await service.reject(leaveId, userId, 'MANAGER', {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'LEAVE_REJECTED', result: 'SUCCESS' }),
@@ -414,7 +415,7 @@ describe('LeaveService', () => {
 
     it('sets actorUserId and actorRole from context on LEAVE_REJECTED', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
+      await service.reject(leaveId, userId, 'MANAGER', {} as any, { actorUserId: 'actor-uuid', actorRole: 'MANAGER' });
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ actorUserId: 'actor-uuid', actorRole: 'MANAGER' }),
@@ -423,7 +424,7 @@ describe('LeaveService', () => {
 
     it('sets targetType to LEAVE_REQUEST on LEAVE_REJECTED', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, {} as any);
+      await service.reject(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ targetType: 'LEAVE_REQUEST' }),
@@ -432,7 +433,7 @@ describe('LeaveService', () => {
 
     it('sets targetId to leave request id on LEAVE_REJECTED', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, {} as any);
+      await service.reject(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ targetId: leaveId }),
@@ -441,7 +442,7 @@ describe('LeaveService', () => {
 
     it('sets result to SUCCESS on LEAVE_REJECTED', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, {} as any);
+      await service.reject(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ result: 'SUCCESS' }),
@@ -450,7 +451,7 @@ describe('LeaveService', () => {
 
     it('metadata uses hasRejectionReason boolean instead of raw rejection reason', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, { rejectReason: 'sensitive text' } as any);
+      await service.reject(leaveId, userId, 'HR_ADMIN', { rejectReason: 'sensitive text' } as any);
 
       const call = mockAuditLog.record.mock.calls[0][0];
       expect(call.metadata.hasRejectionReason).toBe(true);
@@ -459,7 +460,7 @@ describe('LeaveService', () => {
 
     it('metadata does not contain raw rejection reason string value', async () => {
       setupRejectSuccess();
-      await service.reject(leaveId, userId, { rejectReason: 'sensitive text' } as any);
+      await service.reject(leaveId, userId, 'HR_ADMIN', { rejectReason: 'sensitive text' } as any);
 
       const call = mockAuditLog.record.mock.calls[0][0];
       const metadataValues = Object.values(call.metadata ?? {});
@@ -470,7 +471,7 @@ describe('LeaveService', () => {
       setupRejectSuccess();
       mockAuditLog.record.mockRejectedValueOnce(new Error('DB down'));
 
-      const result = await service.reject(leaveId, userId, {} as any);
+      const result = await service.reject(leaveId, userId, 'HR_ADMIN', {} as any);
 
       expect(result.status).toBe('REJECTED');
     });

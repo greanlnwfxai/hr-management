@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { getMyAttendance, getTodayAttendance, clockIn as apiClockIn, clockOut as apiClockOut } from '../api/client';
+import {
+  getMyAttendance,
+  getTodayAttendance,
+  clockIn as apiClockIn,
+  clockOut as apiClockOut,
+  getTodayOffSiteStatus,
+} from '../api/client';
 import { SessionExpiredError } from '../api/types';
-import type { AttendanceRecord, PaginatedMeta } from '../api/types';
+import type { AttendanceRecord, OffSiteRequestRecord, PaginatedMeta } from '../api/types';
 import { useAuth } from '../auth/useAuth';
 import { useDeviceLocation } from './useDeviceLocation';
 
@@ -23,6 +29,7 @@ export interface AttendanceState {
   clockActionMessage: string | null;
   performClockIn: () => Promise<void>;
   performClockOut: () => Promise<void>;
+  todayOffSite: OffSiteRequestRecord | null;
 }
 
 export function useAttendance(): AttendanceState {
@@ -36,6 +43,7 @@ export function useAttendance(): AttendanceState {
   const [historyMeta, setHistoryMeta] = useState<PaginatedMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [todayOffSite, setTodayOffSite] = useState<OffSiteRequestRecord | null>(null);
 
   const [clockInState, setClockInState] = useState<ClockActionState>('idle');
   const [clockOutState, setClockOutState] = useState<ClockActionState>('idle');
@@ -54,13 +62,15 @@ export function useAttendance(): AttendanceState {
     setError(null);
 
     try {
-      const [todayData, historyData] = await Promise.all([
+      const [todayData, historyData, offSiteData] = await Promise.all([
         getTodayAttendance(token),
         getMyAttendance(token, 1, 10),
+        getTodayOffSiteStatus(token).catch(() => null),
       ]);
       setToday(todayData);
       setHistory(historyData.data);
       setHistoryMeta(historyData.meta);
+      setTodayOffSite(offSiteData);
       setLastUpdated(new Date());
       setLoadState('success');
     } catch (err) {
@@ -93,9 +103,26 @@ export function useAttendance(): AttendanceState {
       return;
     }
 
+    const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
     setClockInState('submitting');
     try {
-      await apiClockIn(token, { source: 'mobile', ...location });
+      const result = await apiClockIn(token, {
+        source: 'mobile',
+        ...location,
+        ...(isOffSiteApproved && { workMode: 'OFFSITE' }),
+      });
+      setToday(prev =>
+        prev
+          ? { ...prev, checkIn: result.checkIn, status: result.status }
+          : {
+              ...result,
+              workMode: isOffSiteApproved ? 'OFFSITE' : 'ONSITE',
+              note: null,
+              employee: { id: '', employeeCode: '', firstName: '', lastName: '' },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            },
+      );
       setClockActionMessage('ลงเวลาเข้าสำเร็จ');
       setClockInState('success');
       void fetchData();
@@ -107,7 +134,7 @@ export function useAttendance(): AttendanceState {
       setClockActionError(translateClockError(err instanceof Error ? err.message : ''));
       setClockInState('error');
     }
-  }, [token, clockInState, getLocation, fetchData, handleSessionExpired]);
+  }, [token, clockInState, getLocation, fetchData, handleSessionExpired, todayOffSite]);
 
   const performClockOut = useCallback(async () => {
     if (!token || clockOutState === 'locating' || clockOutState === 'submitting') return;
@@ -127,7 +154,8 @@ export function useAttendance(): AttendanceState {
 
     setClockOutState('submitting');
     try {
-      await apiClockOut(token, { source: 'mobile', ...location });
+      const result = await apiClockOut(token, { source: 'mobile', ...location });
+      setToday(prev => prev ? { ...prev, checkOut: result.checkOut, status: result.status } : prev);
       setClockActionMessage('ลงเวลาออกสำเร็จ');
       setClockOutState('success');
       void fetchData();
@@ -155,6 +183,7 @@ export function useAttendance(): AttendanceState {
     clockActionMessage,
     performClockIn,
     performClockOut,
+    todayOffSite,
   };
 }
 
@@ -182,6 +211,9 @@ function translateClockError(msg: string): string {
   }
   if (msg.includes('No employee profile')) {
     return 'ไม่พบข้อมูลพนักงานที่เชื่อมกับบัญชีนี้';
+  }
+  if (msg.includes('ไม่พบคำขอทำงานนอกสถานที่')) {
+    return 'ไม่พบคำขอทำงานนอกสถานที่ที่อนุมัติแล้วสำหรับวันนี้';
   }
   return msg || 'ไม่สามารถลงเวลาได้ กรุณาลองใหม่อีกครั้ง';
 }

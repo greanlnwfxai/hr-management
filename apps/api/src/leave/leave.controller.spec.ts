@@ -77,7 +77,7 @@ describe('LeaveController', () => {
     const dto = {} as any;
     const result = await controller.approve('leave-uuid-1', mockUser as any, dto, undefined as any);
 
-    expect(service.approve).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto, {
+    expect(service.approve).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, mockUser.role, dto, {
       actorUserId: mockUser.id,
       actorRole: mockUser.role,
       ipAddress: null,
@@ -90,7 +90,7 @@ describe('LeaveController', () => {
     const dto = {} as any;
     const result = await controller.reject('leave-uuid-1', mockUser as any, dto, undefined as any);
 
-    expect(service.reject).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, dto, {
+    expect(service.reject).toHaveBeenCalledWith('leave-uuid-1', mockUser.id, mockUser.role, dto, {
       actorUserId: mockUser.id,
       actorRole: mockUser.role,
       ipAddress: null,

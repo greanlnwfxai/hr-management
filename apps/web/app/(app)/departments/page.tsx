@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   getDepartments, createDepartment, updateDepartment, deleteDepartment,
-  type Department, type PaginatedResponse, ApiError,
+  getEmployees,
+  type Department, type Employee, type PaginatedResponse, ApiError,
 } from '@/lib/api';
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
@@ -15,8 +16,8 @@ import { useLanguage } from '@/hooks/useLanguage';
 
 const INPUT = 'w-full rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400';
 
-type DeptForm = { name: string; description: string };
-const EMPTY_FORM: DeptForm = { name: '', description: '' };
+type DeptForm = { name: string; description: string; managerId: string };
+const EMPTY_FORM: DeptForm = { name: '', description: '', managerId: '' };
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -46,6 +47,7 @@ export default function DepartmentsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const [toast, setToast] = useState<ToastData | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +64,12 @@ export default function DepartmentsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    getEmployees({ limit: 100, status: 'ACTIVE' })
+      .then((res) => setEmployees(res.data))
+      .catch(() => {});
+  }, []);
+
   function openCreate() {
     setForm(EMPTY_FORM);
     setFormError('');
@@ -70,7 +78,7 @@ export default function DepartmentsPage() {
 
   function openEdit(dept: Department) {
     setEditTarget(dept);
-    setForm({ name: dept.name, description: dept.description ?? '' });
+    setForm({ name: dept.name, description: dept.description ?? '', managerId: dept.managerId ?? '' });
     setFormError('');
     setModal('edit');
   }
@@ -87,7 +95,11 @@ export default function DepartmentsPage() {
     if (!form.name.trim()) { setFormError('Name is required.'); return; }
     setSubmitting(true);
     try {
-      const body = { name: form.name.trim(), ...(form.description.trim() && { description: form.description.trim() }) };
+      const body = {
+        name: form.name.trim(),
+        ...(form.description.trim() && { description: form.description.trim() }),
+        managerId: form.managerId || null,
+      };
       if (modal === 'create') {
         await createDepartment(body);
         setToast({ message: 'Department created successfully.', type: 'success' });
@@ -168,7 +180,7 @@ export default function DepartmentsPage() {
                 <thead className="bg-zinc-50 dark:bg-zinc-900/60">
                   <tr>
                     {[
-                      t('dept_col_name'), t('dept_col_desc'), t('dept_col_employees'),
+                      t('dept_col_name'), t('dept_col_desc'), 'ผู้จัดการ', t('dept_col_employees'),
                       t('dept_col_positions'), t('dept_col_created'),
                       ...(admin ? [t('actions')] : []),
                     ].map((h) => (
@@ -181,6 +193,9 @@ export default function DepartmentsPage() {
                     <tr key={dept.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/50">
                       <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">{dept.name}</td>
                       <td className="max-w-xs truncate px-4 py-3 text-zinc-500 dark:text-zinc-400">{dept.description ?? '—'}</td>
+                      <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">
+                        {dept.manager ? `${dept.manager.firstName} ${dept.manager.lastName}` : '—'}
+                      </td>
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{dept._count.employees}</td>
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{dept._count.positions}</td>
                       <td className="px-4 py-3 text-xs text-zinc-400 dark:text-zinc-500">{new Date(dept.createdAt).toLocaleDateString()}</td>
@@ -227,6 +242,16 @@ export default function DepartmentsPage() {
             </Field>
             <Field label={t('dept_field_desc')}>
               <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={INPUT + ' resize-none'} placeholder={t('dept_desc_placeholder')} />
+            </Field>
+            <Field label="ผู้จัดการแผนก">
+              <select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className={INPUT}>
+                <option value="">— ไม่มีผู้จัดการ —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.employeeCode})
+                  </option>
+                ))}
+              </select>
             </Field>
             <div className="flex justify-end gap-3 pt-1">
               <button type="button" onClick={closeModal} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('cancel')}</button>

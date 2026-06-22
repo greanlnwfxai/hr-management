@@ -16,7 +16,12 @@ import {
   type LeaveRequestRecord,
   type LeaveBalanceRecord,
   type CreateLeaveRequestPayload,
+  type AttendanceStatus,
+  type LeaveType,
   type LeaveRequestStatus,
+  type GeofenceLocation,
+  type OffSiteRequestRecord,
+  type CreateOffSiteRequestPayload,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -139,6 +144,24 @@ async function authPost<T>(path: string, token: string, body: unknown): Promise<
   return response.json() as Promise<T>;
 }
 
+function buildQueryString(params: Record<string, string | number | undefined | null>): string {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === '') continue;
+    query.set(key, String(value));
+  }
+
+  const search = query.toString();
+  return search ? `?${search}` : '';
+}
+
+// ─── Geofence ─────────────────────────────────────────────────────────────────
+
+export async function getGeofenceLocation(token: string): Promise<GeofenceLocation> {
+  return authGet<GeofenceLocation>('/attendance/geofence-location', token);
+}
+
 // ─── Password Change ──────────────────────────────────────────────────────────
 
 export async function changePassword(
@@ -192,9 +215,20 @@ export async function getMyAttendance(
   token: string,
   page = 1,
   limit = 10,
+  params?: {
+    startDate?: string;
+    endDate?: string;
+    status?: AttendanceStatus;
+  },
 ): Promise<AttendanceHistoryResponse> {
   return authGet<AttendanceHistoryResponse>(
-    `/attendance/me?page=${page}&limit=${limit}`,
+    `/attendance/me${buildQueryString({
+      page,
+      limit,
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+      status: params?.status,
+    })}`,
     token,
   );
 }
@@ -230,9 +264,22 @@ export async function getMyLeaveRequests(
   token: string,
   page = 1,
   limit = 20,
+  params?: {
+    status?: LeaveRequestStatus;
+    leaveType?: LeaveType;
+    startDate?: string;
+    endDate?: string;
+  },
 ): Promise<PaginatedResponse<LeaveRequestRecord>> {
   return authGet<PaginatedResponse<LeaveRequestRecord>>(
-    `/leave/me?page=${page}&limit=${limit}`,
+    `/leave/me${buildQueryString({
+      page,
+      limit,
+      status: params?.status,
+      leaveType: params?.leaveType,
+      startDate: params?.startDate,
+      endDate: params?.endDate,
+    })}`,
     token,
   );
 }
@@ -310,4 +357,35 @@ export async function rejectLeaveRequest(
   rejectReason?: string,
 ): Promise<LeaveRequestRecord> {
   return authPatch<LeaveRequestRecord>(`/leave/${id}/reject`, token, { rejectReason });
+}
+
+// ─── Off-Site Requests ────────────────────────────────────────────────────────
+
+export async function createOffSiteRequest(
+  token: string,
+  payload: CreateOffSiteRequestPayload,
+): Promise<OffSiteRequestRecord> {
+  return authPost<OffSiteRequestRecord>('/off-site/request', token, payload);
+}
+
+export async function getMyOffSiteRequests(
+  token: string,
+  page = 1,
+  limit = 20,
+): Promise<PaginatedResponse<OffSiteRequestRecord>> {
+  return authGet<PaginatedResponse<OffSiteRequestRecord>>(
+    `/off-site/me?page=${page}&limit=${limit}`,
+    token,
+  );
+}
+
+export async function getTodayOffSiteStatus(
+  token: string,
+): Promise<OffSiteRequestRecord | null> {
+  const today = new Date().toISOString().split('T')[0];
+  const res = await authGet<PaginatedResponse<OffSiteRequestRecord>>(
+    `/off-site/me?date=${today}&limit=1`,
+    token,
+  );
+  return res.data[0] ?? null;
 }
