@@ -49,9 +49,10 @@ Historical backend v1 QA snapshot:
 - [x] All protected routes require JWT
 - [x] `POST/PATCH/DELETE /employees` — SUPER_ADMIN/HR_ADMIN only
 - [x] `GET /attendance` admin list — SUPER_ADMIN/HR_ADMIN only
-- [x] `PATCH /leave/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN/MANAGER in current product state
+- [x] `PATCH /leave/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN/MANAGER; MANAGER scoped to managed department (v1.2.0)
+- [x] `PATCH /off-site/:id/approve|reject` — SUPER_ADMIN/HR_ADMIN/MANAGER; MANAGER scoped to managed department (v1.2.0)
 - [x] `GET /dashboard` — EMPLOYEE returns 403
-- [x] Current: MANAGER can access `GET /leave` and approve/reject leave, but there is no manager-subordinate scoping
+- [x] Current: MANAGER list access (GET /leave, GET /off-site) is org-wide; approve/reject is department-scoped via Department.managerId
 
 ## 6. Ownership Checks
 
@@ -127,7 +128,7 @@ Historical backend v1 QA snapshot:
 |---|---|---|
 | 1 | LeaveType | ANNUAL and UNPAID not in schema |
 | 2 | LeaveType | UNPAID balance bypass not implemented |
-| 3 | RBAC | MANAGER has broad leave visibility, but still no team-only scoping |
+| 3 | RBAC | MANAGER approve/reject is now department-scoped; list access (GET /leave, GET /off-site) remains org-wide |
 | 4 | Absent | No automatic absent-marking |
 | 5 | rejectReason | Accepted in DTO, not persisted |
 | 6 | Security | JWT_SECRET = "change_me" |

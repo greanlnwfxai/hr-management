@@ -29,9 +29,15 @@ The existing `POST /attendance/clock-in` and `POST /attendance/clock-out` endpoi
 
 ---
 
-## Geofence Validation Sequence
+## Off-site Work Mode (OFFSITE)
 
-Runs when `source === "mobile"` AND geofence is enabled:
+When `workMode === "OFFSITE"` is sent in the clock-in request, the geofence radius check is **bypassed**, but GPS coordinates are still required. This path is only available during **clock-in**; clock-out always validates geofence regardless of work mode.
+
+Off-site bypass requires a prior approved `OffSiteRequest` for the employee and today's date. See [[Off-site Work Mode]] for the full workflow.
+
+## Geofence Validation Sequence (ONSITE / default)
+
+Runs when `source === "mobile"` AND `workMode` is `ONSITE` (or absent) AND geofence is enabled:
 
 1. **Missing location fields** → `422 "Location is required for mobile attendance."`
 2. **GPS accuracy too poor** (accuracy > `maxAccuracyMeters`) → `422 "GPS accuracy is too low. Please try again near the office."`
@@ -223,7 +229,10 @@ See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`, `docs/CTO_SUMMARY_T065.md
 ## Related Notes
 
 - [[Attendance Module]]
+- [[Off-site Work Mode]]
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
+- [[ADR-021 Failed Geofence Attempt Audit]]
+- [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-006 RBAC]]
 - [[ADR-010 Attendance Timezone]]
 - [[RBAC Rules]]

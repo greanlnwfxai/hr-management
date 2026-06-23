@@ -118,14 +118,29 @@ No `POST`, `PATCH`, or `DELETE` endpoints exist for audit logs.
 
 ---
 
+## Off-Site Requests → [[Off-site Work Mode]]
+
+| Method | Path | Auth | Roles | Description |
+|---|---|---|---|---|
+| POST | /off-site/request | ✅ | Any | Submit off-site request for a target date |
+| GET | /off-site/me | ✅ | Any | Own off-site requests (paginated) |
+| GET | /off-site | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | All off-site requests (org-wide, paginated) |
+| GET | /off-site/:id | ✅ | Any (owner or admin) | Single off-site request |
+| PATCH | /off-site/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Approve PENDING (MANAGER: own-dept only) |
+| PATCH | /off-site/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Reject PENDING (MANAGER: own-dept only) |
+
+---
+
 ## Enum Reference
 
 ```
 UserRole:         SUPER_ADMIN | HR_ADMIN | MANAGER | EMPLOYEE
 EmployeeStatus:   ACTIVE | INACTIVE | RESIGNED
 AttendanceStatus: PRESENT | LATE | ABSENT
+WorkMode:         ONSITE | OFFSITE
 LeaveType:        SICK | VACATION | PERSONAL | OTHER
 LeaveStatus:      PENDING | APPROVED | REJECTED
+OffSiteStatus:    PENDING | APPROVED | REJECTED
 ```
 
 ## Paginated Response Shape
@@ -146,10 +161,11 @@ LeaveStatus:      PENDING | APPROVED | REJECTED
 ## Related Notes
 
 - [[Backend v1 Architecture]]
-- [[Platform State v1.1.31]]
+- [[Platform State v1.2.0]]
 - [[RBAC Rules]]
 - [[ADR-007 API Standards]]
 - [[Audit Log Module]]
 - [[Attendance Geofence]]
+- [[Off-site Work Mode]]
 
-#api #backend-v1 #rag-ready
+#api #backend-v1 #v1-2-0 #rag-ready

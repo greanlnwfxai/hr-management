@@ -5,9 +5,9 @@
 ```
 [Submitted] → status: PENDING
       │
-      ├── HR/Admin approves ──► status: APPROVED  (balance deducted)
+      ├── HR/Admin/Manager approves ──► status: APPROVED  (balance deducted)
       │
-      └── HR/Admin rejects ──► status: REJECTED   (no balance change)
+      └── HR/Admin/Manager rejects ──► status: REJECTED   (no balance change)
 ```
 
 Only `PENDING` requests can be transitioned. Already-approved or already-rejected requests cannot be modified.
@@ -62,9 +62,22 @@ Step 4 is atomic — partial state (balance deducted but status not updated, or 
 - `usedDays` — used so far
 - `remainingDays` — `totalDays − usedDays` (computed server-side, never accepted from request)
 
+## Manager Leave Approval Scope (v1.2.0)
+
+MANAGER can now approve and reject leave requests, but only for employees in the department they manage.
+
+- Scoping key: `Department.managerId` → `managedDepartment` back-relation on Employee
+- A MANAGER without a managed department cannot approve or reject any leave
+- List visibility (`GET /leave`) is org-wide for MANAGER; scoping is approve/reject only
+- SUPER_ADMIN and HR_ADMIN retain org-wide approval authority
+- Forbidden message (approve): `คุณสามารถอนุมัติลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น`
+- Forbidden message (reject): `คุณสามารถปฏิเสธลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น`
+
+See [[ADR-023 Department Manager Leave Approval Scope]].
+
 ## Known Limitations
 
-- MANAGER cannot view `GET /leave` (all leave requests) — only SUPER_ADMIN and HR_ADMIN
+- MANAGER list access (`GET /leave`) is org-wide — only approve/reject is department-scoped
 - `rejectReason` not persisted in DB
 - TOCTOU window: balance check happens before `$transaction`; concurrent approvals for the same employee could theoretically both succeed (acceptable for serial HR workflows)
 - `ANNUAL` and `UNPAID` leave types not in schema
@@ -73,6 +86,7 @@ Step 4 is atomic — partial state (balance deducted but status not updated, or 
 
 - [[ADR-011 Leave Workflow]]
 - [[ADR-006 RBAC]]
+- [[ADR-023 Department Manager Leave Approval Scope]]
 
 ## Related Notes
 

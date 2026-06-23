@@ -1,26 +1,31 @@
 # Current Status
 
-Last updated: 2026-06-21
+Last updated: 2026-06-23
 
-## Current Product State — v1.1.49 ✅
+## Current Product State — v1.2.0 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.1.49-failed-geofence-audit-implementation`, it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.0-employee-self-service-offsite` (commit `b611f95`), it includes:
 
 - Stable NestJS API with username/email login
-- Web admin: profile/password change, employee account management, audit log review
-- Mobile: attendance, leave, calendar, profile/password change, manager approval, and final UI polish
+- Web admin: profile/password change, employee account management, audit log review, off-site request management, department manager assignment
+- Mobile: attendance, leave, calendar, profile/password change, manager approval, off-site request, and fully refreshed v1.2.0 UI with summary cards
 - Forced `mustChangePassword` flow on web and mobile
 - Security harness scripts, security CI, Dependabot, and accepted-risk policy
 - **Full Audit Log Pack — complete**: append-only audit trail, 10 event types, RBAC-restricted read API, admin web UI, failed geofence rejection audit
 - **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI, rejected-attempt audit logging
+- **Off-site Work Request Workflow — complete**: employee self-service off-site request, admin/manager approval, OFFSITE clock-in bypass for approved dates
+- **Department Manager Scoping — complete**: MANAGER approve/reject scoped to managed department via `Department.managerId`
 
 ## ADR Pack — COMPLETE ✅
 
-21 Architecture Decision Records in `docs/adr/`. See [[ADR Index]].
+24 Architecture Decision Records. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
 ADR-020 added: Attendance Geofence and Admin Configuration.
 ADR-021 added: Failed Geofence Attempt Audit.
+ADR-022 added: Off-site Work Request Workflow.
+ADR-023 added: Department Manager Leave Approval Scope.
+ADR-024 added: Mobile Employee Self-Service v1.2.0 UI Refresh.
 
 ## Major Delivered Areas
 
@@ -28,13 +33,22 @@ ADR-021 added: Failed Geofence Attempt Audit.
 |---|---|---|---|
 | Core backend | Auth, employee, department, position, attendance, leave, leave balance, dashboard | T-005–T-023 | ✅ Done |
 | Username/account management | Username/email login, HR account provisioning, password reset, `GET /employees/:id/account` | T-050, T-055 | ✅ Done |
-| Mobile | Dashboard, attendance, leave request, manager approval, profile/password change, calendar, UI polish | T-044–T-056A | ✅ Done |
+| Mobile | Dashboard, attendance, leave request, manager approval, profile/password change, calendar, off-site request, v1.2.0 UI refresh | T-044–T-056A, T-071 | ✅ Done |
 | Web admin | Profile/password change, forced password change flow, employee detail account management, audit log review | T-053–T-055, T-057B-7 | ✅ Done |
 | Security process | Security harness, accepted-risk policy, CI security job, Dependabot, agent workflow docs | T-052A.1, T-052A.3, T-052A.4 | ✅ Done |
 | Audit Log Pack | Prisma model, audit service, 10 event types, read API, admin web UI, Playwright e2e, rejected geofence audit | T-057B-1 through T-057B-7, T-065 | ✅ Done |
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 
-Current documented API surface: **43 endpoints including `GET /health`** (T-060 added `GET/PATCH /attendance/geofence-config`).
+Current documented API surface: **49 endpoints including `GET /health`** (v1.2.0 added 6 off-site endpoints).
+
+## v1.2.0 Release Summary
+
+| Task | Tag | Scope |
+|---|---|---|
+| T-071 | `v1.2.0-employee-self-service-offsite` | Off-site request module, manager dept-scoping, mobile v1.2.0 UI refresh, department manager UI |
+
+Commit: `b611f95`
+Verification: verify.sh PASS, 351/351 tests PASS, mobile-verify.sh PASS, security-review.sh PASS, CI green.
 
 ## Audit Log Pack Summary
 
@@ -75,7 +89,9 @@ See [[Attendance Geofence]] for full architecture details.
 - Backend RBAC remains the source of truth; UI role gating is UX-only
 - `mustChangePassword` is enforced in current web/mobile UX flows
 - Audit writes are best-effort (try/catch); a failed audit write does not affect the business operation
-- Mobile geofence enforcement is backend-authoritative; the mobile app never decides attendance eligibility
+- Mobile geofence enforcement is backend-authoritative for ONSITE mode; the mobile app never decides attendance eligibility
+- OFFSITE clock-in bypasses the geofence radius check if an approved `OffSiteRequest` exists for the employee and today
+- MANAGER approve/reject (leave and off-site) is scoped to the department they manage via `Department.managerId`
 
 ## Current Known Limitations
 
@@ -84,7 +100,7 @@ See [[Attendance Geofence]] for full architecture details.
 | 1 | LeaveType enum | ANNUAL and UNPAID not in schema | Enum migration in v1.1 |
 | 2 | Leave approval | UNPAID balance bypass not implemented | After UNPAID enum added |
 | 3 | LeaveRequest | `rejectReason` accepted in DTO but not persisted | Schema migration v1.1 |
-| 4 | RBAC | MANAGER can access `GET /leave` and approve/reject leave, but there is still no manager-to-subordinate scoping | Future hierarchy/scoping design |
+| 4 | RBAC | MANAGER approve/reject is now department-scoped (v1.2.0); list access (GET /leave, GET /off-site) remains org-wide | Future: scope list access by department |
 | 5 | Attendance | No auto-absent marking job | Future scheduled task |
 | 6 | Dashboard | `todayAbsentCount` counts only explicit ABSENT records | Acceptable current limitation |
 | 7 | Attendance/dashboard | Some older docs still referenced the old `09:00` rule; current source uses `08:30` | Continue doc hygiene |
@@ -98,9 +114,7 @@ See [[Attendance Geofence]] for full architecture details.
 
 ## Next Recommended Task
 
-**T-067 — Failed Geofence Audit Runtime Verification**
-
-Run targeted runtime verification for rejected mobile geofence attempts across the four rejection reasons, confirm best-effort audit behavior in practice, verify privacy-safe metadata in audit review surfaces, and confirm web/legacy flows remain unaffected.
+**T-072 (TBD)** — Further feature development or runtime verification for v1.2.0 features.
 
 ## Security / Process Notes
 
@@ -114,12 +128,14 @@ Run targeted runtime verification for rejected mobile geofence attempts across t
 ## Related Notes
 
 - [[Project Overview]]
+- [[Platform State v1.2.0]]
 - [[Platform State v1.1.31]]
 - [[Audit Log Module]]
 - [[Attendance Geofence]]
+- [[Off-site Work Mode]]
 - [[ADR Index]]
 - [[API Route Index]]
 - [[RBAC Rules]]
 - [[Production Geofence Readiness]]
 
-#hr-management #status #v1-1-49
+#hr-management #status #v1-2-0

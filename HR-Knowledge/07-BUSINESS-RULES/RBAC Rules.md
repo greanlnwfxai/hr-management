@@ -6,7 +6,7 @@
 |---|---|
 | `SUPER_ADMIN` | Full system access — all operations across all modules |
 | `HR_ADMIN` | Manage employees, leave, attendance, balances; approve and reject leave |
-| `MANAGER` | Operational visibility plus leave approval/rejection access; still cannot manage employee master data |
+| `MANAGER` | Operational visibility plus department-scoped leave and off-site request approval/rejection; still cannot manage employee master data |
 | `EMPLOYEE` | Self-service: clock in/out, view own attendance, submit and view own leave requests |
 
 ## Full RBAC Matrix
@@ -32,7 +32,12 @@
 | GET /leave/me | ✅ | ✅ | ✅ | ✅ |
 | GET /leave (admin list) | ✅ | ✅ | ✅ | ❌ |
 | GET /leave/:id | ✅ | ✅ | owner only | owner only |
-| PATCH /leave/:id/approve\|reject | ✅ | ✅ | ✅ | ❌ |
+| PATCH /leave/:id/approve\|reject | ✅ | ✅ | own-dept only | ❌ |
+| POST /off-site/request | ✅ | ✅ | ✅ | ✅ |
+| GET /off-site/me | ✅ | ✅ | ✅ | ✅ |
+| GET /off-site (all) | ✅ | ✅ | ✅ (org-wide) | ❌ |
+| GET /off-site/:id | ✅ | ✅ | ✅ | owner only |
+| PATCH /off-site/:id/approve\|reject | ✅ | ✅ | own-dept only | ❌ |
 | POST /leave-balances | ✅ | ✅ | ❌ | ❌ |
 | GET /leave-balances/my | ✅ | ✅ | ✅ | ✅ |
 | GET /leave-balances (all) | ✅ | ✅ | ✅ | ❌ |
@@ -70,9 +75,20 @@ export class ResourceController {
 }
 ```
 
-## Current Access Caveat
+## Manager Department Scoping (v1.2.0)
 
-MANAGER can now view `GET /leave` and approve/reject leave requests, but there is still **no manager-to-subordinate scoping**. A MANAGER can see organization-wide leave requests and leave balances, not only their direct reports.
+MANAGER approve/reject for leave and off-site requests is now scoped to the department they manage via `Department.managerId` (the `managedDepartment` back-relation on `Employee`). This is distinct from `Employee.managerId` (the person-to-person reporting hierarchy).
+
+**Scoped (write path):**
+- `PATCH /leave/:id/approve|reject` — MANAGER may only act on leave for employees in their managed department
+- `PATCH /off-site/:id/approve|reject` — MANAGER may only act on off-site requests for employees in their managed department
+
+**Not scoped (read path):**
+- `GET /leave` — MANAGER sees org-wide leave requests
+- `GET /off-site` — MANAGER sees org-wide off-site requests
+- `GET /leave-balances` — MANAGER sees org-wide balances
+
+A MANAGER with no managed department (not set as `Department.managerId` on any department) will receive 403 on all approve/reject actions.
 
 ## Geofence Config Access
 
@@ -83,8 +99,7 @@ MANAGER can now view `GET /leave` and approve/reject leave requests, but there i
 
 ## Known Limitations
 
-- No per-department scoping for MANAGER — MANAGER sees all balances, not just their team's
-- No manager-team scoping for leave approvals or leave list access
+- MANAGER list access for leave, off-site, and balances is org-wide — scoping is approve/reject only
 - Role changes require re-login (JWT carries the role at login time — changes take effect on next token)
 
 ## Related ADRs
@@ -92,6 +107,8 @@ MANAGER can now view `GET /leave` and approve/reject leave requests, but there i
 - [[ADR-006 RBAC]]
 - [[ADR-005 JWT Authentication]]
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
+- [[ADR-022 Off-site Work Request Workflow]]
+- [[ADR-023 Department Manager Leave Approval Scope]]
 
 ## Related Notes
 

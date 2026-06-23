@@ -73,12 +73,20 @@ No external timezone library. Thailand has no Daylight Saving Time — this cons
 - `GET /attendance/:id` — service checks that the requesting user owns the record; admin bypass
 - `POST /attendance/clock-in|clock-out` — bound to own employee via `requireEmployeeId(userId)`
 
+## Work Mode
+
+Attendance records now carry a `workMode` field (`ONSITE | OFFSITE`). Default is `ONSITE`. Pass `workMode: "OFFSITE"` in the clock-in body to record off-site attendance.
+
+Off-site clock-in requires a pre-approved `OffSiteRequest` for the employee and today's date. See [[Off-site Work Mode]] for full details.
+
 ## Mobile Geofence
 
 The attendance module enforces location-based clock-in/out for mobile users. See [[Attendance Geofence]] for full details.
 
 Summary:
-- `source: "mobile"` in clock-in/out body triggers geofence validation
+- `source: "mobile"` in clock-in/out body triggers geofence validation (ONSITE mode)
+- `workMode: "OFFSITE"` bypasses the radius check at clock-in (approved request required)
+- Clock-out is always geofence-validated regardless of work mode
 - Backend validates employee GPS against the configured company location
 - Employee GPS is never stored; backend validates and discards it
 - Company geofence is configurable via `GET/PATCH /attendance/geofence-config` (admin only)
@@ -97,12 +105,14 @@ Summary:
 - [[ADR-010 Attendance Timezone]]
 - [[ADR-006 RBAC]]
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
+- [[ADR-022 Off-site Work Request Workflow]]
 
 ## Related Notes
 
 - [[Attendance Rules]]
 - [[Attendance Geofence]]
+- [[Off-site Work Mode]]
 - [[Dashboard Module]]
 - [[API Route Index]]
 
-#domain #attendance #backend-v1 #timezone #geofence
+#domain #attendance #backend-v1 #timezone #geofence #off-site

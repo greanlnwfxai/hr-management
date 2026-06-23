@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the HR Management System.
 
-This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.1.49-failed-geofence-audit-implementation`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
+This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.2.0-employee-self-service-offsite`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
 
 ## Index
 
@@ -29,6 +29,9 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-019 Audit Trail and Admin Review]] | Audit Trail and Admin Audit Log Review | Security | Append-only audit trail, best-effort writes, metadata denylist, RBAC-restricted read API, read-only admin UI |
 | [[ADR-020 Attendance Geofence and Admin Configuration]] | Attendance Geofence and Admin Configuration | Security / Business Rules | Backend-enforced mobile geofence, DB-singleton config with env fallback, SUPER_ADMIN/HR_ADMIN-only admin endpoints, no raw GPS storage |
 | [[ADR-021 Failed Geofence Attempt Audit]] | Failed Geofence Attempt Audit | Security / Audit | Single rejected-geofence audit event for mobile clock-in/out, privacy-safe metadata, best-effort write, existing 422 behavior preserved |
+| [[ADR-022 Off-site Work Request Workflow]] | Off-site Work Request Workflow | Business Rules / Security | Pre-approval workflow allowing OFFSITE clock-in to bypass geofence radius; GPS still required; clock-out geofence unchanged |
+| [[ADR-023 Department Manager Leave Approval Scope]] | Department Manager Leave Approval Scope | Security / RBAC | MANAGER approve/reject scoped to managed department via `Department.managerId`; list visibility remains org-wide |
+| [[ADR-024 Mobile Employee Self-Service v1.2.0 UI Refresh]] | Mobile Employee Self-Service v1.2.0 UI Refresh | Mobile | Home redesign with summary cards, screen refreshes, off-site request screen, Expo SDK upgrade, `react-native-maps` and `react-native-svg` added |
 
 ## ADR Policy
 
@@ -60,7 +63,10 @@ docs/adr/
 ├── ADR-018-audit-log-foundation-specification-status.md
 ├── ADR-019-audit-trail-and-admin-review.md
 ├── ADR-020-attendance-geofence-and-admin-configuration.md
-└── ADR-021-failed-geofence-attempt-audit.md
+├── ADR-021-failed-geofence-attempt-audit.md
+├── ADR-022-off-site-work-request-workflow.md
+├── ADR-023-department-manager-leave-approval-scope.md
+└── ADR-024-mobile-employee-self-service-v1-2-0-ui-refresh.md
 ```
 
 ## Related Notes

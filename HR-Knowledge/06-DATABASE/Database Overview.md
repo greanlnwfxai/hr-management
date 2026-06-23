@@ -25,11 +25,14 @@ Safety note:
 |---|---|
 | `User` | Authentication accounts (email, password hash, role) |
 | `Employee` | HR employee records; linked 1-to-1 with User via `userId` |
-| `Department` | Organisational units |
+| `Department` | Organisational units; `managerId` designates the department manager |
 | `Position` | Job roles within departments |
-| `Attendance` | Daily clock-in/out records with Bangkok timezone status |
+| `Attendance` | Daily clock-in/out records with Bangkok timezone status and `workMode` |
 | `LeaveRequest` | Employee leave submissions with lifecycle status |
 | `LeaveBalance` | Per-employee leave quota (entitlement) per type per year |
+| `OffSiteRequest` | Pre-approval requests for off-site work on a specific date (v1.2.0) |
+| `GeofenceConfig` | Singleton geofence configuration (DB-first, env fallback) |
+| `AuditLog` | Append-only audit event log |
 
 ## Enums
 
@@ -38,8 +41,10 @@ Safety note:
 | `UserRole` | SUPER_ADMIN, HR_ADMIN, MANAGER, EMPLOYEE |
 | `EmployeeStatus` | ACTIVE, INACTIVE, RESIGNED |
 | `AttendanceStatus` | PRESENT, LATE, ABSENT |
+| `WorkMode` | ONSITE, OFFSITE (v1.2.0) |
 | `LeaveType` | SICK, VACATION, PERSONAL, OTHER |
 | `LeaveStatus` | PENDING, APPROVED, REJECTED |
+| `OffSiteStatus` | PENDING, APPROVED, REJECTED (v1.2.0) |
 
 All enums are also mirrored in `apps/api/src/common/enums.ts` as plain TypeScript enums for runtime safety. **Never import enums from `@prisma/client` in DTOs** — use `src/common/enums.ts`.
 
@@ -64,6 +69,10 @@ The `LeaveType` enum has `SICK | VACATION | PERSONAL | OTHER`. Commonly needed v
 - `ANNUAL` — not in schema; `VACATION` covers annual leave in practice
 - `UNPAID` — not in schema; deferred; will require an enum migration and approval bypass logic
 
+### 4. OffSiteRequest has no attendance FK
+
+`Attendance.workMode` records off-site clock-ins, but there is no foreign key from `Attendance` to `OffSiteRequest`. The off-site request ID is included in the `ATTENDANCE_CLOCK_IN` audit log metadata only, not persisted on the attendance row.
+
 ### 3. rejectReason Column Missing
 
 `LeaveRequest` has no `rejectReason` column. The API DTO accepts it but the value is silently discarded. Schema migration planned for v1.1.
@@ -76,6 +85,7 @@ The `LeaveType` enum has `SICK | VACATION | PERSONAL | OTHER`. Commonly needed v
 | `Employee` | `email`, `employeeCode` |
 | `LeaveBalance` | `(employeeId, leaveType, year)` |
 | `Attendance` | `(employeeId, date)` (one record per employee per day) |
+| `Department` | `managerId` (unique — one manager per department) |
 
 ## Related Notes
 

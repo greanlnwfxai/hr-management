@@ -63,6 +63,17 @@ The Dashboard module uses `todayBangkok()` which applies the +7h correction befo
 
 `todayAbsentCount` in the dashboard counts only explicitly created ABSENT records.
 
+## Work Mode
+
+Attendance records carry a `workMode` field: `ONSITE` (default) or `OFFSITE`.
+
+- `ONSITE`: normal attendance; geofence validation applies if geofence is enabled
+- `OFFSITE`: requires a pre-approved `OffSiteRequest` for the employee and today's date; geofence radius check is skipped at clock-in; GPS is still required
+
+Off-site bypass applies to clock-in only. Clock-out always enforces the geofence regardless of work mode.
+
+See [[Off-site Work Mode]] for the full workflow.
+
 ## Clock-in / Clock-out Rules
 
 - An employee can only clock in **once per day** (unique constraint on `(employeeId, date)`)
@@ -72,10 +83,13 @@ The Dashboard module uses `todayBangkok()` which applies the +7h correction befo
 ## Related ADRs
 
 - [[ADR-010 Attendance Timezone]]
+- [[ADR-022 Off-site Work Request Workflow]]
 
 ## Related Notes
 
 - [[Attendance Module]]
+- [[Off-site Work Mode]]
+- [[Attendance Geofence]]
 - [[Dashboard Module]]
 
-#business-rules #attendance #timezone #rag-ready
+#business-rules #attendance #timezone #off-site #rag-ready

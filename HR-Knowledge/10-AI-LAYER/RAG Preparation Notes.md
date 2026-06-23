@@ -45,12 +45,12 @@ Tag each chunk with:
 
 | Field | Values | Purpose |
 |---|---|---|
-| `module` | auth, employee, department, position, attendance, leave, leave-balance, dashboard | Filter by module |
+| `module` | auth, employee, department, position, attendance, leave, leave-balance, dashboard, off-site | Filter by module |
 | `domain` | business-rules, api, architecture, adr, database, sop, qa | Filter by topic type |
 | `endpoint` | `/leave/:id/approve`, etc. | Exact endpoint lookup |
 | `role` | SUPER_ADMIN, HR_ADMIN, MANAGER, EMPLOYEE | Role-scoped retrieval |
 | `business_rule` | late-rule, balance-deduction, overlap-check, etc. | Rule-specific queries |
-| `adr_number` | ADR-001 through ADR-012 | ADR lookup |
+| `adr_number` | ADR-001 through ADR-024 | ADR lookup |
 | `type` | business-rule, api-route, architecture, sop, qa | Coarse type filter |
 
 ## Retrieval Strategy

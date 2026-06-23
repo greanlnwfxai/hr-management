@@ -16,8 +16,8 @@ Manages the employee leave request lifecycle: submission, review, approval (with
 | GET | /leave/me | ✅ | Any | Own leave requests (paginated) |
 | GET | /leave | ✅ | SUPER_ADMIN, HR_ADMIN | All leave requests (paginated) |
 | GET | /leave/:id | ✅ | Any (owner or admin) | Single leave request |
-| PATCH | /leave/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve PENDING request |
-| PATCH | /leave/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject PENDING request |
+| PATCH | /leave/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Approve PENDING request (MANAGER: own-department only) |
+| PATCH | /leave/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Reject PENDING request (MANAGER: own-department only) |
 
 Note: `GET /leave/me` must be declared **before** `GET /leave/:id` in the controller to prevent NestJS routing conflict.
 
@@ -63,9 +63,22 @@ Only `PENDING` requests can be approved or rejected.
 - `ANNUAL` ≈ `VACATION` in practice (ANNUAL not in schema)
 - `UNPAID` deferred (requires schema migration + approval bypass)
 
+## Manager Leave Approval Scope (v1.2.0)
+
+MANAGER approve/reject is now scoped to the department they manage:
+
+- `PATCH /leave/:id/approve` — MANAGER may only approve leave for employees in their managed department
+- `PATCH /leave/:id/reject` — MANAGER may only reject leave for employees in their managed department
+- Forbidden message (approve): `คุณสามารถอนุมัติลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น`
+- Forbidden message (reject): `คุณสามารถปฏิเสธลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น`
+
+Scoping uses `Department.managerId` (the `managedDepartment` back-relation on Employee), not the `Employee.managerId` reporting hierarchy. See [[ADR-023 Department Manager Leave Approval Scope]].
+
+**List access remains org-wide:** MANAGER can view all leave requests via `GET /leave`; only approve/reject is scoped.
+
 ## Known Limitations
 
-- MANAGER cannot access `GET /leave` (admin list) — asymmetry with `/leave-balances`
+- MANAGER list access (`GET /leave`) is org-wide — only approve/reject is department-scoped
 - `rejectReason` not persisted in DB
 - TOCTOU on balance check (pre-transaction) — acceptable for HR load
 
@@ -73,6 +86,7 @@ Only `PENDING` requests can be approved or rejected.
 
 - [[ADR-011 Leave Workflow]]
 - [[ADR-006 RBAC]]
+- [[ADR-023 Department Manager Leave Approval Scope]]
 
 ## Related Notes
 
