@@ -95,3 +95,19 @@ Rules, RBAC Rules, Attendance Geofence, Attendance Module, Attendance
 Rules, API Route Index, Database Overview, and Backend QA Checklist
 to reflect v1.2.0 changes. Tag: v1.2.0-employee-self-service-offsite.
 ```
+
+## Related Knowledge
+
+- [[Platform State v1.2.0]]
+- [[Current Status]]
+- [[ADR Index]]
+- [[ADR-022 Off-site Work Request Workflow]]
+- [[ADR-023 Department Manager Leave Approval Scope]]
+- [[ADR-024 Mobile Employee Self-Service v1.2.0 UI Refresh]]
+- [[Off-site Work Mode]]
+- [[Attendance Geofence]]
+- [[Leave Request Module]]
+- [[Department Module]]
+- [[RBAC Rules]]
+- [[Backend QA Checklist]]
+- [[CTO Summary T072]]
