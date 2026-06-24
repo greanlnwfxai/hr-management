@@ -156,6 +156,8 @@ Run this checklist **before any major deployment** (schema migrations, bulk data
 - [ ] Back up the production `.env` file securely outside the repository (never commit it)
 - [ ] Back up NPM / Nginx Proxy Manager configuration if you have made recent proxy changes
 
+> **Full backup and restore procedure:** See [PRODUCTION_BACKUP_RESTORE_T079.md](PRODUCTION_BACKUP_RESTORE_T079.md) for the complete pg_dump procedure, verification checklist, sandbox restore dry-run, and rollback decision tree.
+
 ---
 
 ## 6. Rollback Checklist
