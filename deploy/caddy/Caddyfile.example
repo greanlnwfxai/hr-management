@@ -32,8 +32,9 @@
 #   to get container IPs. Option A is simpler for production.
 #
 # ── Single-domain layout ──────────────────────────────────────────────────────
-#   app.example.com/api/*  → api:4002   (NestJS — strips /api prefix)
-#   app.example.com/*      → web:3002   (Next.js)
+#   app.example.com/api/*     → api:4002    (NestJS — strips /api prefix)
+#   app.example.com/*         → web:3002    (Next.js)
+#   mobile.app.example.com/*  → mobile:80   (Expo Web SPA — Nginx)
 #
 # Note: api receives requests WITHOUT the /api prefix (uri strip_prefix /api).
 # This matches NEXT_PUBLIC_API_URL=https://app.example.com/api in .env.
@@ -41,6 +42,10 @@
 #
 # Note: TRUST_PROXY=true must be set in .env (or defaulted in production compose)
 # so NestJS reads X-Forwarded-For for correct per-client rate limiting.
+#
+# DNS required:
+#   A  app.example.com        → <server-ip>
+#   A  mobile.app.example.com → <server-ip>   (or CNAME → app.example.com)
 
 app.example.com {
     # Route /api/* to NestJS (strip the /api prefix before forwarding)
@@ -54,14 +59,25 @@ app.example.com {
         reverse_proxy web:3002
     }
 
-    # Optional: structured logging
     log {
         output file /var/log/caddy/hr-management.log
         format json
     }
 }
 
-# ── Alternative: separate subdomains ─────────────────────────────────────────
+# ── Mobile Web App (Expo Web — separate subdomain) ────────────────────────────
+# EXPO_PUBLIC_API_BASE_URL must be set to https://app.example.com/api in .env
+# before building the mobile image — it is baked into the JS bundle at build time.
+mobile.app.example.com {
+    reverse_proxy mobile:80
+
+    log {
+        output file /var/log/caddy/hr-mobile.log
+        format json
+    }
+}
+
+# ── Alternative: separate subdomains for all services ────────────────────────
 # Uncomment if you prefer api.example.com instead of the /api path prefix.
 # Update NEXT_PUBLIC_API_URL=https://api.example.com and
 # CORS_ORIGIN=https://app.example.com in .env accordingly.
@@ -72,4 +88,8 @@ app.example.com {
 #
 # api.example.com {
 #     reverse_proxy api:4002
+# }
+#
+# mobile.example.com {
+#     reverse_proxy mobile:80
 # }

@@ -15,9 +15,10 @@
 #   deployment. This file starts from scratch and never binds host ports.
 #
 # ── Port Exposure Policy ──────────────────────────────────────────────────────
-#   db:  internal only via expose: ["5432"] — NO host port binding
-#   api: internal only via expose: ["4002"] — NO host port binding
-#   web: internal only via expose: ["3002"] — NO host port binding
+#   db:     internal only via expose: ["5432"] — NO host port binding
+#   api:    internal only via expose: ["4002"] — NO host port binding
+#   web:    internal only via expose: ["3002"] — NO host port binding
+#   mobile: internal only via expose: ["80"]   — NO host port binding
 #   All public traffic must enter through a reverse proxy on ports 80/443.
 #
 # ── Reverse Proxy Connectivity ────────────────────────────────────────────────
@@ -33,7 +34,8 @@
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 #   1. Copy .env.example to .env, fill in ALL production values.
 #      Required (no defaults — compose will error if unset):
-#        POSTGRES_PASSWORD, DATABASE_URL, JWT_SECRET, CORS_ORIGIN, NEXT_PUBLIC_API_URL
+#        POSTGRES_PASSWORD, DATABASE_URL, JWT_SECRET, CORS_ORIGIN,
+#        NEXT_PUBLIC_API_URL, EXPO_PUBLIC_API_BASE_URL
 #   2. Configure reverse proxy and connect it to the hr_production network.
 #   3. Firewall: allow only ports 80 and 443 externally.
 
@@ -104,6 +106,25 @@ services:
       - "3002"
     environment:
       PORT: 3002
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - hr_production
+    restart: unless-stopped
+
+  # ── Expo Mobile Web ────────────────────────────────────────────────────────
+  # Static SPA (Expo web export) served by Nginx.
+  # EXPO_PUBLIC_API_BASE_URL is baked into the JS bundle at build time —
+  # must be the publicly reachable API URL (e.g. https://hr.example.com/api).
+  mobile:
+    build:
+      context: ./apps/mobile
+      args:
+        EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:?EXPO_PUBLIC_API_BASE_URL must be set in .env}
+    container_name: hr-mobile-prod
+    expose:
+      - "80"
     depends_on:
       api:
         condition: service_healthy
