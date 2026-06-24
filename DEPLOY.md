@@ -173,31 +173,100 @@ openssl rand -hex 32
 
 ---
 
-## 4. Deploy Stack ผ่าน Portainer
+## 4. Deploy Stack จาก GitHub ผ่าน Portainer
 
-### วิธี A — Deploy จาก Git Repository
+Portainer clone repo จาก GitHub โดยตรงและ build images บน server — ไม่ต้อง SSH เข้า server เลย
+
+### 4.1 เตรียม GitHub Personal Access Token (repo private)
+
+> ข้ามถ้า repo เป็น **public**
+
+1. ไปที่ GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+2. คลิก **Generate new token (classic)**
+3. ตั้งชื่อ: `portainer-deploy`
+4. เลือก scope: ✅ `repo` (read access ก็พอ)
+5. คลิก **Generate token** → **copy token ทันที** (จะดูได้ครั้งเดียว)
+
+### 4.2 สร้าง Stack ใน Portainer
 
 1. เข้า Portainer → **Stacks** → **+ Add stack**
 2. ตั้งชื่อ Stack: `hr-management`
-3. เลือก **Repository**
-4. กรอก:
-   - **Repository URL:** `https://github.com/your-org/hr-management.git`
-   - **Repository reference:** `refs/heads/main`
-   - **Compose path:** `docker-compose.production.yml`
-5. (Optional) เปิด **Authentication** ถ้า repo เป็น private และใส่ credentials
-6. เลื่อนลงไปที่ **Environment variables** → คลิก **Advanced mode**
-7. วาง `.env` ทั้งหมดลงในกล่อง (copy จากไฟล์ `.env` ที่เตรียมไว้)
-8. คลิก **Deploy the stack**
+3. เลือก tab **Repository**
 
-> Portainer จะ clone repo → build images → start containers โดยอัตโนมัติ
+กรอกข้อมูล Repository:
 
-### วิธี B — Deploy จาก Compose File บน Server
+| Field | ค่า |
+|-------|-----|
+| **Repository URL** | `https://github.com/<your-org>/hr-management` |
+| **Repository reference** | `refs/heads/main` |
+| **Compose path** | `docker-compose.production.yml` |
+| **Authentication** | เปิด (ถ้า repo private) |
+| **Username** | GitHub username ของคุณ |
+| **Personal Access Token** | Token ที่สร้างจากข้อ 4.1 |
+
+### 4.3 กรอก Environment Variables
+
+เลื่อนลงไปที่ **Environment variables** → คลิก **Advanced mode**
+
+วางเนื้อหา `.env` ทั้งหมดลงในกล่อง (copy จากไฟล์ที่เตรียมในข้อ 3):
+
+```
+POSTGRES_USER=hr_user
+POSTGRES_PASSWORD=...
+POSTGRES_DB=hr_management
+DATABASE_URL=postgresql://hr_user:...@db:5432/hr_management
+JWT_SECRET=...
+JWT_EXPIRES_IN=8h
+CORS_ORIGIN=https://hr.example.com,https://mobile.hr.example.com
+NEXT_PUBLIC_API_URL=https://hr.example.com/api
+EXPO_PUBLIC_API_BASE_URL=https://hr.example.com/api
+TRUST_PROXY=true
+THROTTLE_TTL=60
+THROTTLE_LIMIT=100
+LOGIN_THROTTLE_TTL=60
+LOGIN_THROTTLE_LIMIT=5
+SWAGGER_ENABLED=false
+```
+
+### 4.4 Deploy
+
+คลิก **Deploy the stack**
+
+Portainer จะทำตามลำดับ:
+1. Clone repo จาก GitHub
+2. Build Docker images (`api`, `web`, `mobile`) บน server
+3. Start containers ทั้งหมด
+
+> **ใช้เวลาประมาณ 5–10 นาที** เพราะต้อง build 3 images จาก source
+
+### 4.5 ตั้ง Auto-update ด้วย Webhook (ไม่บังคับ)
+
+ถ้าต้องการให้ Portainer pull + redeploy อัตโนมัติเมื่อ push code ขึ้น GitHub:
+
+**ใน Portainer:**
+1. Stacks → `hr-management` → **Edit**
+2. เปิด **Auto update** → เลือก **Webhook**
+3. Copy Webhook URL ที่ Portainer สร้างให้
+
+**ใน GitHub:**
+1. ไปที่ repo → **Settings** → **Webhooks** → **Add webhook**
+2. กรอก:
+   - **Payload URL:** Webhook URL จาก Portainer
+   - **Content type:** `application/json`
+   - **Which events:** ✅ **Just the push event**
+3. คลิก **Add webhook**
+
+หลังจากนี้ทุกครั้งที่ `git push` ขึ้น `main` → Portainer จะ pull code ใหม่และ redeploy อัตโนมัติ
+
+> **⚠ หมายเหตุ:** Auto-update ด้วย Webhook จะ rebuild images ทุกครั้ง รวมถึง `web` และ `mobile` ที่มี build-time variables ด้วย ค่าที่ bake ไว้ (`NEXT_PUBLIC_API_URL`, `EXPO_PUBLIC_API_BASE_URL`) จะถูก bake ใหม่จาก env vars ที่กรอกไว้ใน Portainer
+
+### วิธี B — Deploy จาก Compose File (ไม่ใช้ GitHub)
 
 1. เข้า Portainer → **Stacks** → **+ Add stack**
 2. ตั้งชื่อ Stack: `hr-management`
 3. เลือก **Upload**
 4. Upload ไฟล์ `docker-compose.production.yml`
-5. กรอก Environment variables เหมือนวิธี A ข้อ 6-7
+5. กรอก Environment variables เหมือนข้อ 4.3
 6. คลิก **Deploy the stack**
 
 ---
@@ -333,28 +402,52 @@ curl -X POST https://hr.example.com/api/auth/login \
 
 ---
 
-## 8. Update / Redeploy
+## 8. Update / Redeploy หลัง Push Code ขึ้น GitHub
 
-### วิธี A (Git-based Stack)
+### วิธีที่ 1 — Manual redeploy ใน Portainer UI
 
-1. Portainer → **Stacks** → `hr-management`
-2. คลิก **Pull and redeploy**
-3. ✅ เปิด **Re-pull image and redeploy**
-4. คลิก **Update the stack**
+ใช้เมื่อต้องการควบคุมว่าจะ deploy เมื่อไหร่:
 
-> Portainer จะ pull code ใหม่, rebuild images, restart containers
+1. `git push origin main` บนเครื่อง local
+2. เข้า Portainer → **Stacks** → `hr-management`
+3. คลิก **Pull and redeploy**
+4. ✅ เปิด **Re-pull image and redeploy**
+5. คลิก **Update the stack**
 
-### วิธี B (Manual)
+> Portainer จะ pull code ล่าสุดจาก GitHub → rebuild images → restart containers
 
-```bash
-# SSH เข้า server
-cd /opt/hr-management
-git pull origin main
+### วิธีที่ 2 — Auto-deploy ด้วย GitHub Webhook
 
-# Rebuild และ restart stack ผ่าน Portainer UI
-# หรือรันตรงๆ:
-docker compose -f docker-compose.production.yml up -d --build
+ตั้งค่าครั้งเดียว (ดูข้อ 4.5) จากนั้นทุก `git push origin main` → Portainer redeploy อัตโนมัติ
+
+### วิธีที่ 3 — GitHub Actions (CI/CD เต็มรูปแบบ)
+
+สร้างไฟล์ `.github/workflows/deploy.yml` ใน repo:
+
+```yaml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portainer webhook
+        run: |
+          curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
 ```
+
+เพิ่ม secret ใน GitHub:
+- ไปที่ repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+- ชื่อ: `PORTAINER_WEBHOOK_URL`
+- ค่า: Webhook URL จาก Portainer (ข้อ 4.5)
+
+จากนี้ทุก push ขึ้น `main` → GitHub Actions trigger → Portainer pull + redeploy
+
+---
 
 **⚠ Build-time variables — ถ้า URL เปลี่ยน ต้อง rebuild image:**
 
@@ -362,6 +455,8 @@ docker compose -f docker-compose.production.yml up -d --build
 |--------|----------------------|
 | `NEXT_PUBLIC_API_URL` | `web` |
 | `EXPO_PUBLIC_API_BASE_URL` | `mobile` |
+
+การ redeploy ทุกวิธีข้างต้น rebuild images ใหม่ทั้งหมด ดังนั้น build-time variables จะถูก bake ใหม่จาก env vars ที่กรอกใน Portainer เสมอ
 
 ---
 
