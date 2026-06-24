@@ -66,6 +66,7 @@ services:
   # ── NestJS API ──────────────────────────────────────────────────────────────
   api:
     build: ./apps/api
+    pull_policy: build
     container_name: hr-api-prod
     expose:
       - "4002"
@@ -101,6 +102,7 @@ services:
       # This must be the public-facing API URL (e.g. https://hr.example.com/api).
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set in .env}
+    pull_policy: build
     container_name: hr-web-prod
     expose:
       - "3002"
@@ -122,6 +124,7 @@ services:
       context: ./apps/mobile
       args:
         EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:?EXPO_PUBLIC_API_BASE_URL must be set in .env}
+    pull_policy: build
     container_name: hr-mobile-prod
     expose:
       - "80"
