@@ -132,8 +132,9 @@ jobs:
         run: npx expo export --platform web
 
   # ── Compose — Config Validation ─────────────────────────────────────────────
-  # Validates both compose files render correctly and that the production
-  # standalone compose has no host-bound port mappings.
+  # Validates both compose files render correctly and that every host-bound port
+  # in the production compose is restricted to the private IP 172.16.2.31.
+  # Ports bound to 0.0.0.0, a public IP, or with no host_ip are rejected.
   # Does NOT start Docker containers or build images.
   compose-ci:
     name: Compose — Config Validation
@@ -167,18 +168,43 @@ jobs:
       - name: Validate production standalone compose config (docker-compose.production.yml)
         run: docker compose -f docker-compose.production.yml config
 
-      # Confirm the production compose has no host-bound port mappings.
-      # The `published:` field only appears in the rendered config when a host
-      # port binding exists (ports: "HOST:CONTAINER"). expose: never produces it.
-      - name: Confirm no host-bound ports in production compose
+      # Production ports must be bound only to the private host IP 172.16.2.31.
+      # NPM (Nginx Proxy Manager) reaches services via that private IP; direct
+      # public exposure is blocked.  Rules:
+      #   PASS  — all published ports have host_ip: 172.16.2.31
+      #   PASS  — no published ports at all (expose: only)
+      #   FAIL  — host_ip missing from rendered config (unbound / Docker default)
+      #   FAIL  — host_ip is 0.0.0.0
+      #   FAIL  — host_ip is any IP other than 172.16.2.31
+      - name: Confirm production ports are private-IP-bound (172.16.2.31 only)
         run: |
           CONFIG="$(docker compose -f docker-compose.production.yml config)"
-          if echo "$CONFIG" | grep -q "published:"; then
-            echo "FAIL: production compose has host-bound port mappings:"
-            echo "$CONFIG" | grep -B 4 "published:" || true
+          PUBLISHED_COUNT=$(echo "$CONFIG" | grep -c "published:" || true)
+
+          if [ "$PUBLISHED_COUNT" -eq 0 ]; then
+            echo "PASS: no host-bound port mappings in docker-compose.production.yml"
+            exit 0
+          fi
+
+          # Reject any host_ip that is not 172.16.2.31 (catches 0.0.0.0, public IPs, empty string)
+          BAD_HOST_IP=$(echo "$CONFIG" | grep "host_ip:" | grep -v "host_ip: 172\.16\.2\.31" || true)
+          if [ -n "$BAD_HOST_IP" ]; then
+            echo "FAIL: production compose has port mappings with non-private host_ip:"
+            echo "$BAD_HOST_IP"
             exit 1
           fi
-          echo "PASS: no host-bound port mappings in docker-compose.production.yml"
+
+          # Ensure every published port has a matching 172.16.2.31 host_ip entry.
+          # A count mismatch means host_ip is absent from the rendered config entirely.
+          GOOD_COUNT=$(echo "$CONFIG" | grep -c "host_ip: 172\.16\.2\.31" || true)
+          if [ "$PUBLISHED_COUNT" -ne "$GOOD_COUNT" ]; then
+            echo "FAIL: some published ports are missing host_ip: 172.16.2.31"
+            echo "  published entries : $PUBLISHED_COUNT"
+            echo "  host_ip=172.16.2.31 entries: $GOOD_COUNT"
+            exit 1
+          fi
+
+          echo "PASS: all $PUBLISHED_COUNT host-bound port(s) correctly restricted to 172.16.2.31"
 
   # ── Integration — Runtime API Test ─────────────────────────────────────────
   # Starts a real PostgreSQL service, runs Prisma migrations, seeds the admin
