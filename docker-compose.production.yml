@@ -15,11 +15,11 @@
 #   deployment. This file starts from scratch and never binds host ports.
 #
 # ── Port Exposure Policy ──────────────────────────────────────────────────────
-#   db:     internal only via expose: ["5432"] — NO host port binding
-#   api:    internal only via expose: ["4002"] — NO host port binding
-#   web:    internal only via expose: ["3002"] — NO host port binding
-#   mobile: internal only via expose: ["80"]   — NO host port binding
-#   All public traffic must enter through a reverse proxy on ports 80/443.
+#   db:     internal only via expose: ["5432"]           — NO host port binding
+#   api:    172.16.2.31:4002 → container:4002             — private network only
+#   web:    172.16.2.31:3002 → container:3002             — private network only
+#   mobile: 172.16.2.31:3004 → container:80               — private network only
+#   NPM (Nginx Proxy Manager) on separate VM proxies via 172.16.2.31.
 #
 # ── Reverse Proxy Connectivity ────────────────────────────────────────────────
 #   All services join the named network "hr_production".
@@ -68,8 +68,8 @@ services:
     build: ./apps/api
     pull_policy: build
     container_name: hr-api-prod
-    expose:
-      - "4002"
+    ports:
+      - "172.16.2.31:4002:4002"
     environment:
       PORT: 4002
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set in .env}
@@ -104,8 +104,8 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL must be set in .env}
     pull_policy: build
     container_name: hr-web-prod
-    expose:
-      - "3002"
+    ports:
+      - "172.16.2.31:3002:3002"
     environment:
       PORT: 3002
     depends_on:
@@ -126,8 +126,8 @@ services:
         EXPO_PUBLIC_API_BASE_URL: ${EXPO_PUBLIC_API_BASE_URL:?EXPO_PUBLIC_API_BASE_URL must be set in .env}
     pull_policy: build
     container_name: hr-mobile-prod
-    expose:
-      - "80"
+    ports:
+      - "172.16.2.31:3004:80"
     depends_on:
       api:
         condition: service_healthy
