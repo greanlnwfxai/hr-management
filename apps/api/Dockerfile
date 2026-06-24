@@ -30,6 +30,7 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder --chown=nestjs:nodejs /app/dist ./dist
 # node_modules must come from builder (contains the generated Prisma client).
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 COPY --chown=nestjs:nodejs package.json ./
 
 USER nestjs
