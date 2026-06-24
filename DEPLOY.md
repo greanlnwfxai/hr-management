@@ -1,5 +1,7 @@
 # Production Deployment Guide — Portainer
 
+> **Production baseline record:** See [docs/PRODUCTION_BASELINE_T078.md](docs/PRODUCTION_BASELINE_T078.md) for the current baseline tag, backup checklist, rollback procedure, and post-deploy verification checklist.
+
 ## Overview
 
 ระบบประกอบด้วย 4 services ที่รันบน Docker Compose:
