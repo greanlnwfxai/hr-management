@@ -40,9 +40,13 @@ export function mockPrisma() {
     },
     department: {
       count: jest.fn(),
+      findMany: jest.fn(),
     },
     position: {
       count: jest.fn(),
+    },
+    offSiteRequest: {
+      findMany: jest.fn(),
     },
     geofenceConfig: {
       findUnique: jest.fn(),

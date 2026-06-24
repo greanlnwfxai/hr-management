@@ -13,11 +13,17 @@ const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
 // Leave balances with <= this many remaining days are flagged as "low".
 const LOW_BALANCE_THRESHOLD = 3;
 
+// OT cutoff: 17:30 Bangkok = 1050 minutes from midnight Bangkok.
+// Stored checkOut is UTC; add BANGKOK_OFFSET_MS to convert to Bangkok wall time.
+const OT_CUTOFF_MINUTES = 17 * 60 + 30;
+
+export type RangePreset = '7d' | 'thisMonth' | 'lastMonth';
+
 @Injectable()
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getSummary() {
+  async getSummary(range: RangePreset = '7d') {
     const today = this.todayBangkok();
     const currentYear = this.bangkokYear();
 
@@ -153,6 +159,9 @@ export class DashboardService {
       (b) => b.totalDays - b.usedDays <= LOW_BALANCE_THRESHOLD,
     ).length;
 
+    const { from, to } = this.dateRange(range);
+    const analytics = await this.computeAnalytics(from, to, range);
+
     return {
       generatedAt: new Date().toISOString(),
       timezone: 'Asia/Bangkok',
@@ -184,6 +193,163 @@ export class DashboardService {
         attendance: recentAttendance,
         leaveRequests: recentLeaveRequests,
       },
+      analytics,
+    };
+  }
+
+  private async computeAnalytics(from: Date, to: Date, preset: RangePreset) {
+    const [attendanceRows, leaveRows, offSiteRows, allDepts] = await Promise.all([
+      this.prisma.attendance.findMany({
+        where: { date: { gte: from, lte: to } },
+        select: { date: true, status: true, checkOut: true },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: { startDate: { gte: from, lte: to } },
+        select: {
+          status: true,
+          employeeId: true,
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              department: { select: { id: true, name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.offSiteRequest.findMany({
+        where: { date: { gte: from, lte: to } },
+        select: {
+          id: true,
+          date: true,
+          status: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.department.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    const dateSeries = this.buildDateSeries(from, to);
+
+    // Attendance trend: bucket by date, count by status
+    const attMap = new Map<string, { present: number; late: number; absent: number }>();
+    for (const dateStr of dateSeries) {
+      attMap.set(dateStr, { present: 0, late: 0, absent: 0 });
+    }
+    for (const row of attendanceRows) {
+      const key = row.date.toISOString().split('T')[0];
+      const bucket = attMap.get(key);
+      if (bucket) {
+        if (row.status === AttendanceStatus.PRESENT) bucket.present++;
+        else if (row.status === AttendanceStatus.LATE) bucket.late++;
+        else if (row.status === AttendanceStatus.ABSENT) bucket.absent++;
+      }
+    }
+    const attendanceTrend = dateSeries.map((date) => {
+      const b = attMap.get(date)!;
+      return { date, present: b.present, late: b.late, absent: b.absent };
+    });
+
+    // Leave status: count by status
+    const leaveStatus = { pending: 0, approved: 0, rejected: 0 };
+    for (const row of leaveRows) {
+      if (row.status === LeaveStatus.PENDING) leaveStatus.pending++;
+      else if (row.status === LeaveStatus.APPROVED) leaveStatus.approved++;
+      else if (row.status === LeaveStatus.REJECTED) leaveStatus.rejected++;
+    }
+
+    // Leave by department: seed from all departments, then fold leave rows
+    const deptMap = new Map<string, { departmentId: string; departmentName: string; pending: number; approved: number; rejected: number }>();
+    for (const dept of allDepts) {
+      deptMap.set(dept.id, { departmentId: dept.id, departmentName: dept.name, pending: 0, approved: 0, rejected: 0 });
+    }
+    for (const row of leaveRows) {
+      const deptId = row.employee?.department?.id ?? '__none__';
+      if (!deptMap.has(deptId)) {
+        deptMap.set(deptId, { departmentId: deptId, departmentName: row.employee?.department?.name ?? '—', pending: 0, approved: 0, rejected: 0 });
+      }
+      const bucket = deptMap.get(deptId)!;
+      if (row.status === LeaveStatus.PENDING) bucket.pending++;
+      else if (row.status === LeaveStatus.APPROVED) bucket.approved++;
+      else if (row.status === LeaveStatus.REJECTED) bucket.rejected++;
+    }
+    // Only include departments that have at least one leave request
+    const leaveByDepartment = Array.from(deptMap.values()).filter(
+      (d) => d.pending + d.approved + d.rejected > 0,
+    );
+
+    // Off-site status
+    const offSiteStatus = { pending: 0, approved: 0, rejected: 0 };
+    for (const row of offSiteRows) {
+      if (row.status === 'PENDING') offSiteStatus.pending++;
+      else if (row.status === 'APPROVED') offSiteStatus.approved++;
+      else if (row.status === 'REJECTED') offSiteStatus.rejected++;
+    }
+
+    // OT trend: bucket by date, sum OT hours (checkout after 17:30 Bangkok)
+    const otMap = new Map<string, number>();
+    for (const dateStr of dateSeries) otMap.set(dateStr, 0);
+    for (const row of attendanceRows) {
+      if (!row.checkOut) continue;
+      const bangkokMs = row.checkOut.getTime() + BANGKOK_OFFSET_MS;
+      const bangkokDate = new Date(bangkokMs);
+      const bangkokTotalMins = bangkokDate.getUTCHours() * 60 + bangkokDate.getUTCMinutes();
+      const otMins = Math.max(0, bangkokTotalMins - OT_CUTOFF_MINUTES);
+      if (otMins > 0) {
+        const key = row.date.toISOString().split('T')[0];
+        otMap.set(key, (otMap.get(key) ?? 0) + otMins);
+      }
+    }
+    const overtimeTrend = dateSeries.map((date) => ({
+      date,
+      hours: parseFloat(((otMap.get(date) ?? 0) / 60).toFixed(1)),
+    }));
+
+    // Top leave requesters: group by employee, count, top 5
+    const requesterMap = new Map<string, { employeeId: string; employeeName: string; count: number }>();
+    for (const row of leaveRows) {
+      if (!row.employee) continue;
+      const id = row.employee.id;
+      if (!requesterMap.has(id)) {
+        requesterMap.set(id, {
+          employeeId: id,
+          employeeName: `${row.employee.firstName} ${row.employee.lastName}`,
+          count: 0,
+        });
+      }
+      requesterMap.get(id)!.count++;
+    }
+    const topLeaveRequesters = Array.from(requesterMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Recent off-site requests (top 5 most recent)
+    const recentOffSite = offSiteRows.slice(0, 5).map((r) => ({
+      id: r.id,
+      date: r.date.toISOString().split('T')[0],
+      status: r.status,
+      employee: r.employee ?? undefined,
+    }));
+
+    return {
+      range: {
+        from: from.toISOString().split('T')[0],
+        to: to.toISOString().split('T')[0],
+        preset,
+      },
+      attendanceTrend,
+      leaveStatus,
+      leaveByDepartment,
+      offSiteStatus,
+      overtimeTrend,
+      topLeaveRequesters,
+      recentOffSite,
     };
   }
 
@@ -203,5 +369,41 @@ export class DashboardService {
 
   private bangkokYear(): number {
     return new Date(Date.now() + BANGKOK_OFFSET_MS).getUTCFullYear();
+  }
+
+  private dateRange(range: RangePreset): { from: Date; to: Date } {
+    const bangkokNow = new Date(Date.now() + BANGKOK_OFFSET_MS);
+    const todayUTC = new Date(
+      Date.UTC(bangkokNow.getUTCFullYear(), bangkokNow.getUTCMonth(), bangkokNow.getUTCDate()),
+    );
+
+    if (range === 'thisMonth') {
+      const from = new Date(Date.UTC(bangkokNow.getUTCFullYear(), bangkokNow.getUTCMonth(), 1));
+      return { from, to: todayUTC };
+    }
+
+    if (range === 'lastMonth') {
+      const prevYear = bangkokNow.getUTCMonth() === 0 ? bangkokNow.getUTCFullYear() - 1 : bangkokNow.getUTCFullYear();
+      const prevMonth = bangkokNow.getUTCMonth() === 0 ? 11 : bangkokNow.getUTCMonth() - 1;
+      const from = new Date(Date.UTC(prevYear, prevMonth, 1));
+      // Day 0 of current month = last day of previous month
+      const to = new Date(Date.UTC(bangkokNow.getUTCFullYear(), bangkokNow.getUTCMonth(), 0));
+      return { from, to };
+    }
+
+    // Default: 7d — today minus 6 days through today
+    const from = new Date(todayUTC);
+    from.setUTCDate(from.getUTCDate() - 6);
+    return { from, to: todayUTC };
+  }
+
+  private buildDateSeries(from: Date, to: Date): string[] {
+    const series: string[] = [];
+    const cur = new Date(from);
+    while (cur <= to) {
+      series.push(cur.toISOString().split('T')[0]);
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return series;
   }
 }

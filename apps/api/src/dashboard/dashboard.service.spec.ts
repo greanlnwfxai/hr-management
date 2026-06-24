@@ -8,15 +8,15 @@ type PrismaMock = ReturnType<typeof mockPrisma> & {
   attendance: { count: jest.Mock; findMany: jest.Mock };
   leaveRequest: { count: jest.Mock; findMany: jest.Mock };
   leaveBalance: { findMany: jest.Mock };
-  department: { count: jest.Mock };
+  department: { count: jest.Mock; findMany: jest.Mock };
   position: { count: jest.Mock };
+  offSiteRequest: { findMany: jest.Mock };
 };
 
 /**
- * DashboardService.getSummary calls Promise.all with 19 Prisma operations.
- * The mock functions are called in the same order as the array.
+ * DashboardService.getSummary calls two Promise.all groups:
  *
- * Order:
+ * Group 1 (existing KPI queries):
  *  employee.count  ×4   (total, active, inactive, resigned)
  *  department.count ×1
  *  position.count   ×1
@@ -26,6 +26,12 @@ type PrismaMock = ReturnType<typeof mockPrisma> & {
  *  attendance.findMany ×1 (recentAttendance)
  *  leaveRequest.findMany ×1 (recentLeaveRequests)
  *  leaveBalance.findMany ×1 (currentYearBalances)
+ *
+ * Group 2 (analytics queries, via computeAnalytics):
+ *  attendance.findMany ×1  (range-scoped attendance for trends)
+ *  leaveRequest.findMany ×1 (range-scoped leave for analytics)
+ *  offSiteRequest.findMany ×1
+ *  department.findMany ×1
  */
 function setupMocks(prisma: PrismaMock, overrides: { balances?: Array<{ totalDays: number; usedDays: number }> } = {}) {
   (prisma.employee.count as jest.Mock)
@@ -50,10 +56,13 @@ function setupMocks(prisma: PrismaMock, overrides: { balances?: Array<{ totalDay
     .mockResolvedValueOnce(12)  // APPROVED
     .mockResolvedValueOnce(3);  // REJECTED
 
+  // findMany mocks — return empty arrays; analytics group calls are also covered
   (prisma.employee.findMany as jest.Mock).mockResolvedValue([]);
   (prisma.attendance.findMany as jest.Mock).mockResolvedValue([]);
   (prisma.leaveRequest.findMany as jest.Mock).mockResolvedValue([]);
   (prisma.leaveBalance.findMany as jest.Mock).mockResolvedValue(overrides.balances ?? []);
+  (prisma.offSiteRequest.findMany as jest.Mock).mockResolvedValue([]);
+  (prisma.department.findMany as jest.Mock).mockResolvedValue([]);
 }
 
 describe('DashboardService', () => {
@@ -89,6 +98,7 @@ describe('DashboardService', () => {
       expect(result).toHaveProperty('attendance');
       expect(result).toHaveProperty('leave');
       expect(result).toHaveProperty('recent');
+      expect(result).toHaveProperty('analytics');
     });
 
     it('employees section contains all required fields', async () => {
@@ -143,6 +153,45 @@ describe('DashboardService', () => {
       expect(recent).toHaveProperty('employees');
       expect(recent).toHaveProperty('attendance');
       expect(recent).toHaveProperty('leaveRequests');
+    });
+
+    it('analytics section has required shape', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics).toHaveProperty('range');
+      expect(analytics.range).toHaveProperty('from');
+      expect(analytics.range).toHaveProperty('to');
+      expect(analytics.range).toHaveProperty('preset', '7d');
+      expect(analytics).toHaveProperty('attendanceTrend');
+      expect(analytics).toHaveProperty('leaveStatus');
+      expect(analytics).toHaveProperty('leaveByDepartment');
+      expect(analytics).toHaveProperty('offSiteStatus');
+      expect(analytics).toHaveProperty('overtimeTrend');
+      expect(analytics).toHaveProperty('topLeaveRequesters');
+      expect(analytics).toHaveProperty('recentOffSite');
+    });
+
+    it('attendanceTrend has 7 entries for 7d range', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary('7d');
+
+      expect(analytics.attendanceTrend).toHaveLength(7);
+      expect(analytics.attendanceTrend[0]).toMatchObject({
+        present: 0,
+        late: 0,
+        absent: 0,
+      });
+    });
+
+    it('analytics range.preset reflects the requested preset', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary('thisMonth');
+
+      expect(analytics.range.preset).toBe('thisMonth');
     });
   });
 
@@ -208,6 +257,92 @@ describe('DashboardService', () => {
       expect(attendance.todayDate).toBe('2026-06-13');
 
       jest.useRealTimers();
+    });
+  });
+
+  // ── analytics: leaveStatus ─────────────────────────────────────────────────
+
+  describe('analytics.leaveStatus', () => {
+    it('counts leave rows by status', async () => {
+      setupMocks(prisma);
+      (prisma.leaveRequest.findMany as jest.Mock).mockResolvedValue([
+        { status: 'PENDING', employeeId: 'e1', employee: null },
+        { status: 'PENDING', employeeId: 'e2', employee: null },
+        { status: 'APPROVED', employeeId: 'e3', employee: null },
+        { status: 'REJECTED', employeeId: 'e4', employee: null },
+      ]);
+
+      const { analytics } = await service.getSummary();
+
+      // The first findMany call is recentLeaveRequests; analytics uses a second call
+      // Both calls receive the same mock value (mockResolvedValue, not Once)
+      expect(analytics.leaveStatus).toMatchObject({
+        pending: expect.any(Number),
+        approved: expect.any(Number),
+        rejected: expect.any(Number),
+      });
+    });
+
+    it('returns zero counts when no leave requests in range', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics.leaveStatus).toEqual({ pending: 0, approved: 0, rejected: 0 });
+    });
+  });
+
+  // ── analytics: offSiteStatus ───────────────────────────────────────────────
+
+  describe('analytics.offSiteStatus', () => {
+    it('returns zero counts when no off-site requests', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics.offSiteStatus).toEqual({ pending: 0, approved: 0, rejected: 0 });
+    });
+
+    it('counts off-site rows by status', async () => {
+      setupMocks(prisma);
+      (prisma.offSiteRequest.findMany as jest.Mock).mockResolvedValue([
+        { id: '1', date: new Date(), status: 'PENDING', employee: null },
+        { id: '2', date: new Date(), status: 'APPROVED', employee: null },
+        { id: '3', date: new Date(), status: 'APPROVED', employee: null },
+      ]);
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics.offSiteStatus.pending).toBe(1);
+      expect(analytics.offSiteStatus.approved).toBe(2);
+      expect(analytics.offSiteStatus.rejected).toBe(0);
+    });
+  });
+
+  // ── analytics: topLeaveRequesters ─────────────────────────────────────────
+
+  describe('analytics.topLeaveRequesters', () => {
+    it('returns at most 5 requesters sorted by count descending', async () => {
+      setupMocks(prisma);
+      (prisma.leaveRequest.findMany as jest.Mock).mockResolvedValue(
+        Array.from({ length: 12 }, (_, i) => ({
+          status: 'APPROVED',
+          employeeId: `e${i % 6}`,
+          employee: { id: `e${i % 6}`, firstName: `First${i % 6}`, lastName: 'Last', department: null },
+        })),
+      );
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics.topLeaveRequesters.length).toBeLessThanOrEqual(5);
+    });
+
+    it('returns empty array when no leave requests', async () => {
+      setupMocks(prisma);
+
+      const { analytics } = await service.getSummary();
+
+      expect(analytics.topLeaveRequesters).toEqual([]);
     });
   });
 });

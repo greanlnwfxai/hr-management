@@ -17,26 +17,11 @@ test.describe('Dashboard', () => {
     await expect(page.locator('[data-testid="page-title-dashboard"]')).toBeVisible();
   });
 
-  test('employee stat cards are visible', async ({ page }) => {
+  test('KPI cards are visible', async ({ page }) => {
     await page.goto('/dashboard');
-    // The employee section label
-    await expect(page.locator('[data-testid="stat-section-employees"]')).toBeVisible();
-    // Key stat cards
-    for (const id of ['stat-total', 'stat-active', 'stat-departments', 'stat-positions']) {
+    for (const id of ['stat-total', 'stat-active', 'stat-att-rate', 'stat-pending', 'stat-pending-offsite', 'stat-low-balance']) {
       await expect(page.locator(`[data-testid="${id}"]`)).toBeVisible();
     }
-  });
-
-  test('attendance stat section renders', async ({ page }) => {
-    await page.goto('/dashboard');
-    await expect(page.locator('[data-testid="stat-present"]')).toBeVisible();
-    await expect(page.locator('[data-testid="stat-late"]')).toBeVisible();
-  });
-
-  test('leave stat section renders', async ({ page }) => {
-    await page.goto('/dashboard');
-    await expect(page.locator('[data-testid="stat-pending"]')).toBeVisible();
-    await expect(page.locator('[data-testid="stat-approved"]')).toBeVisible();
   });
 
   test('recent sections render without error state', async ({ page }) => {
@@ -48,11 +33,8 @@ test.describe('Dashboard', () => {
 
   test('dashboard data loads — no loading/error state remaining', async ({ page }) => {
     await page.goto('/dashboard');
-    // Wait for loading state to disappear
     await expect(page.locator('[data-testid="loading-state"]')).not.toBeVisible({ timeout: 15000 });
-    // No error state
     await expect(page.locator('[data-testid="error-state"]')).not.toBeVisible();
-    // Page title and recent sections are present
     await expect(page.locator('[data-testid="page-title-dashboard"]')).toBeVisible();
     await expect(page.locator('[data-testid="section-recent-employees"]')).toBeVisible();
   });

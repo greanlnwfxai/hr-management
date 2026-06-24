@@ -92,6 +92,30 @@ export function changePassword(payload: { currentPassword: string; newPassword: 
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
+export type RangePreset = '7d' | 'thisMonth' | 'lastMonth';
+
+export type DashboardAnalytics = {
+  range: { from: string; to: string; preset: RangePreset };
+  attendanceTrend: Array<{ date: string; present: number; late: number; absent: number }>;
+  leaveStatus: { pending: number; approved: number; rejected: number };
+  leaveByDepartment: Array<{
+    departmentId: string;
+    departmentName: string;
+    pending: number;
+    approved: number;
+    rejected: number;
+  }>;
+  offSiteStatus: { pending: number; approved: number; rejected: number };
+  overtimeTrend: Array<{ date: string; hours: number }>;
+  topLeaveRequesters: Array<{ employeeId: string; employeeName: string; count: number }>;
+  recentOffSite: Array<{
+    id: string;
+    date: string;
+    status: string;
+    employee?: { firstName: string; lastName: string };
+  }>;
+};
+
 export type DashboardData = {
   generatedAt: string;
   timezone: string;
@@ -123,6 +147,7 @@ export type DashboardData = {
     attendance: RecentAttendance[];
     leaveRequests: RecentLeave[];
   };
+  analytics: DashboardAnalytics;
 };
 
 export type RecentEmployee = {
@@ -151,8 +176,8 @@ export type RecentLeave = {
   employee?: { firstName: string; lastName: string };
 };
 
-export function getDashboard() {
-  return apiFetch<DashboardData>('/dashboard');
+export function getDashboard(range: RangePreset = '7d') {
+  return apiFetch<DashboardData>(`/dashboard?range=${range}`);
 }
 
 // ── Employees ─────────────────────────────────────────────────────────────────
