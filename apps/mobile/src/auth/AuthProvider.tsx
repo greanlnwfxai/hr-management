@@ -8,6 +8,7 @@ import {
   saveToken,
   saveUser,
 } from './storage';
+import { isTokenExpired } from './session';
 import type { AuthContextValue, AuthUser } from './types';
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -43,6 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const [token, user] = await Promise.all([getToken(), getUser()]);
       if (token && user) {
+        if (isTokenExpired(token)) {
+          await Promise.all([clearToken(), clearUser()]);
+          setState({
+            token: null,
+            user: null,
+            isLoading: false,
+            isAuthenticated: false,
+            error: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+          });
+          return;
+        }
         setState({
           token,
           user,

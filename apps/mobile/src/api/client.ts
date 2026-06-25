@@ -1,5 +1,6 @@
 import { ENV } from '../config/env';
 import type { AuthUser } from '../auth/types';
+import { isTokenExpired } from '../auth/session';
 import {
   SessionExpiredError,
   type DashboardSummary,
@@ -96,6 +97,7 @@ function normalizeApiMessage(body: unknown): string {
 }
 
 async function authGet<T>(path: string, token: string): Promise<T> {
+  if (isTokenExpired(token)) throw new SessionExpiredError();
   let response: Response;
   try {
     response = await fetch(`${ENV.API_BASE_URL}${path}`, {
@@ -117,6 +119,7 @@ async function authGet<T>(path: string, token: string): Promise<T> {
 }
 
 async function authPost<T>(path: string, token: string, body: unknown): Promise<T> {
+  if (isTokenExpired(token)) throw new SessionExpiredError();
   let response: Response;
   try {
     response = await fetch(`${ENV.API_BASE_URL}${path}`, {
@@ -305,6 +308,7 @@ export async function createLeaveRequest(
 // ─── Manager Approval ─────────────────────────────────────────────────────────
 
 async function authPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+  if (isTokenExpired(token)) throw new SessionExpiredError();
   let response: Response;
   try {
     response = await fetch(`${ENV.API_BASE_URL}${path}`, {
