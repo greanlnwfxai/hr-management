@@ -317,7 +317,7 @@ export default function HomeScreen() {
       {/* ── Hero Header ─────────────────────────────────────────────── */}
       <View style={styles.hero}>
         <View style={styles.heroTopRow}>
-          <Text style={styles.heroAppName}>HR Mobile</Text>
+          <Text style={styles.heroAppName}>STEP Connect</Text>
           <Pressable
             style={({ pressed }) => [styles.heroLogoutBtn, pressed && { opacity: 0.7 }]}
             onPress={handleLogout}
