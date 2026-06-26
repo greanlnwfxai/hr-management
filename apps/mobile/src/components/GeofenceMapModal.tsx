@@ -4,6 +4,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -109,7 +110,8 @@ export function GeofenceMapModal({
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          {/* Header */}
+
+          {/* Fixed header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
               {action === 'in' ? 'เช็คอิน' : 'เช็คเอาท์'} — ตรวจสอบตำแหน่ง
@@ -119,94 +121,99 @@ export function GeofenceMapModal({
             </Pressable>
           </View>
 
-          {/* Map area */}
-          <View style={styles.mapContainer}>
-            {loadState === 'loading' && (
-              <View style={styles.mapCenter}>
-                <ActivityIndicator color="#1a56db" size="large" />
-                <Text style={styles.mapCenterText}>กำลังโหลดแผนที่...</Text>
-              </View>
-            )}
+          {/* Scrollable body — shrinks when viewport is constrained so the footer stays visible */}
+          <ScrollView style={styles.body} bounces={false} showsVerticalScrollIndicator={false}>
 
-            {loadState === 'error' && (
-              <View style={styles.mapCenter}>
-                <Text style={styles.mapCenterError}>{errorMsg}</Text>
-              </View>
-            )}
+            {/* Map area */}
+            <View style={styles.mapContainer}>
+              {loadState === 'loading' && (
+                <View style={styles.mapCenter}>
+                  <ActivityIndicator color="#1a56db" size="large" />
+                  <Text style={styles.mapCenterText}>กำลังโหลดแผนที่...</Text>
+                </View>
+              )}
 
-            {loadState === 'no-config' && (
-              <View style={styles.mapCenter}>
-                <Text style={styles.mapCenterIcon}>📍</Text>
-                <Text style={styles.mapCenterText}>ยังไม่ได้ตั้งค่าตำแหน่งบริษัท</Text>
-                <Text style={styles.mapCenterSub}>ติดต่อ HR เพื่อตั้งค่า geofence</Text>
-              </View>
-            )}
+              {loadState === 'error' && (
+                <View style={styles.mapCenter}>
+                  <Text style={styles.mapCenterError}>{errorMsg}</Text>
+                </View>
+              )}
 
-            {loadState === 'ready' && (
-              Platform.OS !== 'web' && geofence?.latitude && geofence?.longitude ? (
-                <MapView
-                  ref={mapRef}
-                  style={styles.map}
-                  initialRegion={initialRegion}
-                  showsUserLocation
-                  showsMyLocationButton={false}
-                >
-                  <Marker
-                    coordinate={{ latitude: geofence.latitude, longitude: geofence.longitude }}
-                    title="บริษัท"
-                    pinColor="#dc2626"
-                  />
-                  <Circle
-                    center={{ latitude: geofence.latitude, longitude: geofence.longitude }}
-                    radius={geofence.radiusMeters}
-                    strokeColor={circleStroke}
-                    strokeWidth={2}
-                    fillColor={circleFill}
-                  />
-                </MapView>
-              ) : (
+              {loadState === 'no-config' && (
                 <View style={styles.mapCenter}>
                   <Text style={styles.mapCenterIcon}>📍</Text>
-                  <Text style={styles.mapCenterText}>ตรวจสอบตำแหน่งสำเร็จ</Text>
-                  <Text style={styles.mapCenterSub}>กดยืนยันเพื่อลงเวลา</Text>
+                  <Text style={styles.mapCenterText}>ยังไม่ได้ตั้งค่าตำแหน่งบริษัท</Text>
+                  <Text style={styles.mapCenterSub}>ติดต่อ HR เพื่อตั้งค่า geofence</Text>
                 </View>
-              )
+              )}
+
+              {loadState === 'ready' && (
+                Platform.OS !== 'web' && geofence?.latitude && geofence?.longitude ? (
+                  <MapView
+                    ref={mapRef}
+                    style={styles.map}
+                    initialRegion={initialRegion}
+                    showsUserLocation
+                    showsMyLocationButton={false}
+                  >
+                    <Marker
+                      coordinate={{ latitude: geofence.latitude, longitude: geofence.longitude }}
+                      title="บริษัท"
+                      pinColor="#dc2626"
+                    />
+                    <Circle
+                      center={{ latitude: geofence.latitude, longitude: geofence.longitude }}
+                      radius={geofence.radiusMeters}
+                      strokeColor={circleStroke}
+                      strokeWidth={2}
+                      fillColor={circleFill}
+                    />
+                  </MapView>
+                ) : (
+                  <View style={styles.mapCenter}>
+                    <Text style={styles.mapCenterIcon}>📍</Text>
+                    <Text style={styles.mapCenterText}>ตรวจสอบตำแหน่งสำเร็จ</Text>
+                    <Text style={styles.mapCenterSub}>กดยืนยันเพื่อลงเวลา</Text>
+                  </View>
+                )
+              )}
+            </View>
+
+            {/* Legend — native only */}
+            {loadState === 'ready' && Platform.OS !== 'web' && (
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
+                  <Text style={styles.legendText}>ที่ตั้งบริษัท</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+                  <Text style={styles.legendText}>ตำแหน่งปัจจุบัน</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[
+                    styles.legendCircle,
+                    { borderColor: circleStroke, backgroundColor: circleFill },
+                  ]} />
+                  <Text style={styles.legendText}>รัศมีที่อนุญาต {geofence?.radiusMeters ?? 100} เมตร</Text>
+                </View>
+              </View>
             )}
-          </View>
 
-          {/* Legend — native only; map does not render on web */}
-          {loadState === 'ready' && Platform.OS !== 'web' && (
-            <View style={styles.legend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
-                <Text style={styles.legendText}>ที่ตั้งบริษัท</Text>
+            {/* Status banner */}
+            {loadState === 'ready' && isInsideRadius !== null && (
+              <View style={[styles.statusBanner, isInsideRadius ? styles.statusBannerIn : styles.statusBannerOut]}>
+                <Text style={[styles.statusText, isInsideRadius ? styles.statusTextIn : styles.statusTextOut]}>
+                  {isInsideRadius ? '✅ คุณอยู่ในพื้นที่ลงเวลา' : '⚠️ คุณอยู่นอกพื้นที่ลงเวลา'}
+                </Text>
+                <Text style={styles.statusSub}>ระยะห่างจากบริษัท {distanceMeters} เมตร</Text>
               </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-                <Text style={styles.legendText}>ตำแหน่งปัจจุบัน</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[
-                  styles.legendCircle,
-                  { borderColor: circleStroke, backgroundColor: circleFill },
-                ]} />
-                <Text style={styles.legendText}>รัศมีที่อนุญาต {geofence?.radiusMeters ?? 100} เมตร</Text>
-              </View>
-            </View>
-          )}
+            )}
 
-          {/* Status banner */}
-          {loadState === 'ready' && isInsideRadius !== null && (
-            <View style={[styles.statusBanner, isInsideRadius ? styles.statusBannerIn : styles.statusBannerOut]}>
-              <Text style={[styles.statusText, isInsideRadius ? styles.statusTextIn : styles.statusTextOut]}>
-                {isInsideRadius ? '✅ คุณอยู่ในพื้นที่ลงเวลา' : '⚠️ คุณอยู่นอกพื้นที่ลงเวลา'}
-              </Text>
-              <Text style={styles.statusSub}>ระยะห่างจากบริษัท {distanceMeters} เมตร</Text>
-            </View>
-          )}
+          </ScrollView>
 
-          {/* Buttons */}
-          <View style={styles.btnRow}>
+          {/* Fixed footer — always visible, never scrolled off screen */}
+          <View style={styles.footer}>
             <Pressable
               style={({ pressed }) => [styles.btnCancel, pressed && { opacity: 0.7 }]}
               onPress={onCancel}
@@ -228,6 +235,7 @@ export function GeofenceMapModal({
               <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
             </Pressable>
           </View>
+
         </View>
       </View>
     </Modal>
@@ -248,7 +256,6 @@ const styles = StyleSheet.create({
     width: '92%',
     maxWidth: 700,
     maxHeight: '88%',
-    paddingBottom: 24,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -257,6 +264,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   header: {
+    flexShrink: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -267,8 +275,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   headerClose: { fontSize: 18, color: '#6b7280', fontWeight: '500' },
+  // Scrollable body shrinks when the sheet hits maxHeight so the footer stays pinned.
+  body: {
+    flexShrink: 1,
+  },
   mapContainer: {
-    height: 320,
+    height: 260,
     backgroundColor: '#f3f4f6',
   },
   map: { flex: 1 },
@@ -306,6 +318,7 @@ const styles = StyleSheet.create({
   statusBanner: {
     marginHorizontal: 20,
     marginTop: 12,
+    marginBottom: 4,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -318,11 +331,16 @@ const styles = StyleSheet.create({
   statusTextIn: { color: '#16a34a' },
   statusTextOut: { color: '#dc2626' },
   statusSub: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
-  btnRow: {
+  // Fixed footer — outside the ScrollView, always rendered at the bottom of the card.
+  footer: {
+    flexShrink: 0,
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
   },
   btnCancel: {
     flex: 1,

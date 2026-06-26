@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -146,6 +147,8 @@ export function GeofenceMapModal({
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
+
+          {/* Fixed header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>
               {action === 'in' ? 'เช็คอิน' : 'เช็คเอาท์'} — ตรวจสอบตำแหน่ง
@@ -155,112 +158,118 @@ export function GeofenceMapModal({
             </Pressable>
           </View>
 
-          <View style={styles.mapArea}>
-            {loadState === 'loading' && (
-              <View style={styles.center}>
-                <ActivityIndicator color="#1a56db" size="large" />
-                <Text style={styles.centerText}>กำลังโหลดแผนที่...</Text>
-              </View>
-            )}
+          {/* Scrollable body — shrinks when viewport is constrained */}
+          <ScrollView style={styles.body} bounces={false} showsVerticalScrollIndicator={false}>
 
-            {loadState === 'error' && (
-              <View style={styles.center}>
-                <Text style={styles.centerIcon}>⚠️</Text>
-                <Text style={styles.centerError}>{errorMsg}</Text>
-              </View>
-            )}
-
-            {loadState === 'no-config' && (
-              <View style={styles.center}>
-                <Text style={styles.centerIcon}>📍</Text>
-                <Text style={styles.centerText}>ยังไม่ได้ตั้งค่าตำแหน่งบริษัท</Text>
-                <Text style={styles.centerSub}>ติดต่อ HR เพื่อตั้งค่า geofence</Text>
-              </View>
-            )}
-
-            {loadState === 'ready' && mounted && geofence?.latitude && geofence?.longitude && (
-              <MapErrorBoundary key={mapKey} fallback={mapFallback}>
-                <MapContainer
-                  center={[geofence.latitude, geofence.longitude]}
-                  zoom={17}
-                  style={{ width: '100%', height: '100%' }}
-                  zoomControl
-                  scrollWheelZoom={false}
-                >
-                  <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                  />
-                  <MapSetup
-                    lat={geofence.latitude}
-                    lng={geofence.longitude}
-                    userLocation={userLocation}
-                  />
-                  <Circle
-                    center={[geofence.latitude, geofence.longitude]}
-                    radius={geofence.radiusMeters}
-                    pathOptions={{
-                      color: circleColor,
-                      fillColor: circleColor,
-                      fillOpacity: 0.12,
-                      weight: 2,
-                    }}
-                  />
-                  <CircleMarker
-                    center={[geofence.latitude, geofence.longitude]}
-                    radius={9}
-                    pathOptions={{ color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1, weight: 2 }}
-                  />
-                  {userLocation && (
-                    <CircleMarker
-                      center={[userLocation.latitude, userLocation.longitude]}
-                      radius={9}
-                      pathOptions={{ color: '#1a56db', fillColor: '#1a56db', fillOpacity: 1, weight: 2 }}
-                    />
-                  )}
-                </MapContainer>
-              </MapErrorBoundary>
-            )}
-          </View>
-
-          {loadState === 'ready' && (
-            <View style={styles.legend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
-                <Text style={styles.legendText}>ที่ตั้งบริษัท</Text>
-              </View>
-              {userLocation && (
-                <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: '#1a56db' }]} />
-                  <Text style={styles.legendText}>ตำแหน่งปัจจุบัน</Text>
+            <View style={styles.mapArea}>
+              {loadState === 'loading' && (
+                <View style={styles.center}>
+                  <ActivityIndicator color="#1a56db" size="large" />
+                  <Text style={styles.centerText}>กำลังโหลดแผนที่...</Text>
                 </View>
               )}
-              <View style={styles.legendItem}>
-                <View style={[
-                  styles.legendCircle,
-                  {
-                    borderColor: isInsideRadius === true ? 'rgba(22,163,74,0.8)' : 'rgba(220,38,38,0.8)',
-                    backgroundColor: isInsideRadius === true ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)',
-                  },
-                ]} />
-                <Text style={styles.legendText}>รัศมีที่อนุญาต {geofence?.radiusMeters ?? 100} เมตร</Text>
-              </View>
-              {locationError && !userLocation && (
-                <Text style={styles.locationNotice}>{locationError}</Text>
+
+              {loadState === 'error' && (
+                <View style={styles.center}>
+                  <Text style={styles.centerIcon}>⚠️</Text>
+                  <Text style={styles.centerError}>{errorMsg}</Text>
+                </View>
+              )}
+
+              {loadState === 'no-config' && (
+                <View style={styles.center}>
+                  <Text style={styles.centerIcon}>📍</Text>
+                  <Text style={styles.centerText}>ยังไม่ได้ตั้งค่าตำแหน่งบริษัท</Text>
+                  <Text style={styles.centerSub}>ติดต่อ HR เพื่อตั้งค่า geofence</Text>
+                </View>
+              )}
+
+              {loadState === 'ready' && mounted && geofence?.latitude && geofence?.longitude && (
+                <MapErrorBoundary key={mapKey} fallback={mapFallback}>
+                  <MapContainer
+                    center={[geofence.latitude, geofence.longitude]}
+                    zoom={17}
+                    style={{ width: '100%', height: '100%' }}
+                    zoomControl
+                    scrollWheelZoom={false}
+                  >
+                    <TileLayer
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    />
+                    <MapSetup
+                      lat={geofence.latitude}
+                      lng={geofence.longitude}
+                      userLocation={userLocation}
+                    />
+                    <Circle
+                      center={[geofence.latitude, geofence.longitude]}
+                      radius={geofence.radiusMeters}
+                      pathOptions={{
+                        color: circleColor,
+                        fillColor: circleColor,
+                        fillOpacity: 0.12,
+                        weight: 2,
+                      }}
+                    />
+                    <CircleMarker
+                      center={[geofence.latitude, geofence.longitude]}
+                      radius={9}
+                      pathOptions={{ color: '#dc2626', fillColor: '#dc2626', fillOpacity: 1, weight: 2 }}
+                    />
+                    {userLocation && (
+                      <CircleMarker
+                        center={[userLocation.latitude, userLocation.longitude]}
+                        radius={9}
+                        pathOptions={{ color: '#1a56db', fillColor: '#1a56db', fillOpacity: 1, weight: 2 }}
+                      />
+                    )}
+                  </MapContainer>
+                </MapErrorBoundary>
               )}
             </View>
-          )}
 
-          {loadState === 'ready' && isInsideRadius !== null && (
-            <View style={[styles.statusBanner, isInsideRadius ? styles.statusBannerIn : styles.statusBannerOut]}>
-              <Text style={[styles.statusText, isInsideRadius ? styles.statusTextIn : styles.statusTextOut]}>
-                {isInsideRadius ? '✅ คุณอยู่ในพื้นที่ลงเวลา' : '⚠️ คุณอยู่นอกพื้นที่ลงเวลา'}
-              </Text>
-              <Text style={styles.statusSub}>ระยะห่างจากบริษัท {distanceMeters} เมตร</Text>
-            </View>
-          )}
+            {loadState === 'ready' && (
+              <View style={styles.legend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />
+                  <Text style={styles.legendText}>ที่ตั้งบริษัท</Text>
+                </View>
+                {userLocation && (
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#1a56db' }]} />
+                    <Text style={styles.legendText}>ตำแหน่งปัจจุบัน</Text>
+                  </View>
+                )}
+                <View style={styles.legendItem}>
+                  <View style={[
+                    styles.legendCircle,
+                    {
+                      borderColor: isInsideRadius === true ? 'rgba(22,163,74,0.8)' : 'rgba(220,38,38,0.8)',
+                      backgroundColor: isInsideRadius === true ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)',
+                    },
+                  ]} />
+                  <Text style={styles.legendText}>รัศมีที่อนุญาต {geofence?.radiusMeters ?? 100} เมตร</Text>
+                </View>
+                {locationError && !userLocation && (
+                  <Text style={styles.locationNotice}>{locationError}</Text>
+                )}
+              </View>
+            )}
 
-          <View style={styles.btnRow}>
+            {loadState === 'ready' && isInsideRadius !== null && (
+              <View style={[styles.statusBanner, isInsideRadius ? styles.statusBannerIn : styles.statusBannerOut]}>
+                <Text style={[styles.statusText, isInsideRadius ? styles.statusTextIn : styles.statusTextOut]}>
+                  {isInsideRadius ? '✅ คุณอยู่ในพื้นที่ลงเวลา' : '⚠️ คุณอยู่นอกพื้นที่ลงเวลา'}
+                </Text>
+                <Text style={styles.statusSub}>ระยะห่างจากบริษัท {distanceMeters} เมตร</Text>
+              </View>
+            )}
+
+          </ScrollView>
+
+          {/* Fixed footer — always visible, never scrolled away */}
+          <View style={styles.footer}>
             <Pressable
               style={({ pressed }) => [styles.btnCancel, pressed && { opacity: 0.7 }]}
               onPress={onCancel}
@@ -282,6 +291,7 @@ export function GeofenceMapModal({
               <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
             </Pressable>
           </View>
+
         </View>
       </View>
     </Modal>
@@ -302,7 +312,6 @@ const styles = StyleSheet.create({
     width: '92%',
     maxWidth: 700,
     maxHeight: '88%',
-    paddingBottom: 24,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -311,6 +320,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   header: {
+    flexShrink: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -321,8 +331,13 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   headerClose: { fontSize: 18, color: '#6b7280', fontWeight: '500' },
+  // Scrollable body shrinks when the sheet is height-constrained so the
+  // fixed footer always remains visible.
+  body: {
+    flexShrink: 1,
+  },
   mapArea: {
-    height: 300,
+    height: 260,
     backgroundColor: '#e5e7eb',
     overflow: 'hidden',
   },
@@ -361,6 +376,7 @@ const styles = StyleSheet.create({
   statusBanner: {
     marginHorizontal: 20,
     marginTop: 12,
+    marginBottom: 4,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -373,11 +389,16 @@ const styles = StyleSheet.create({
   statusTextIn: { color: '#16a34a' },
   statusTextOut: { color: '#dc2626' },
   statusSub: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
-  btnRow: {
+  // Fixed footer — sits outside the ScrollView so it is never scrolled off screen.
+  footer: {
+    flexShrink: 0,
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
   },
   btnCancel: {
     flex: 1,
