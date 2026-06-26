@@ -36,6 +36,9 @@
 #      Required (no defaults — compose will error if unset):
 #        POSTGRES_PASSWORD, DATABASE_URL, JWT_SECRET, CORS_ORIGIN,
 #        NEXT_PUBLIC_API_URL, EXPO_PUBLIC_API_BASE_URL
+#      Optional — geofence/attendance (have safe defaults; set for mobile clock-in):
+#        ATTENDANCE_GEOFENCE_ENABLED, COMPANY_LATITUDE, COMPANY_LONGITUDE,
+#        COMPANY_GEOFENCE_RADIUS_METERS, ATTENDANCE_GPS_MAX_ACCURACY_METERS
 #   2. Configure reverse proxy and connect it to the hr_production network.
 #   3. Firewall: allow only ports 80 and 443 externally.
 
@@ -81,6 +84,13 @@ services:
       LOGIN_THROTTLE_TTL: ${LOGIN_THROTTLE_TTL:-60}
       LOGIN_THROTTLE_LIMIT: ${LOGIN_THROTTLE_LIMIT:-5}
       TRUST_PROXY: ${TRUST_PROXY:-true}
+      # Geofence / mobile attendance — required for mobile clock-in location validation.
+      # Set in Portainer Stack env (or .env) to match company coordinates.
+      ATTENDANCE_GEOFENCE_ENABLED: ${ATTENDANCE_GEOFENCE_ENABLED:-false}
+      COMPANY_LATITUDE: ${COMPANY_LATITUDE:-}
+      COMPANY_LONGITUDE: ${COMPANY_LONGITUDE:-}
+      COMPANY_GEOFENCE_RADIUS_METERS: ${COMPANY_GEOFENCE_RADIUS_METERS:-100}
+      ATTENDANCE_GPS_MAX_ACCURACY_METERS: ${ATTENDANCE_GPS_MAX_ACCURACY_METERS:-100}
     depends_on:
       db:
         condition: service_healthy

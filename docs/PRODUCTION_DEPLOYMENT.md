@@ -93,6 +93,15 @@ The standalone compose will refuse to start if these are unset:
 | `TRUST_PROXY` | `true` (already defaulted in standalone compose) |
 | `LOGIN_THROTTLE_LIMIT` | `3` (stricter than dev default of `5`) |
 | `LOGIN_THROTTLE_TTL` | `300` (5-minute window instead of 60s) |
+| `ATTENDANCE_GEOFENCE_ENABLED` | `true` to enforce location checks on mobile clock-in/out |
+| `COMPANY_LATITUDE` | Decimal latitude of company premises (e.g. `13.7563`) |
+| `COMPANY_LONGITUDE` | Decimal longitude of company premises (e.g. `100.5018`) |
+| `COMPANY_GEOFENCE_RADIUS_METERS` | Allowed radius in metres (default `100`) |
+| `ATTENDANCE_GPS_MAX_ACCURACY_METERS` | Max GPS error radius accepted (default `100`) |
+
+> **Note:** Geofence vars are forwarded to the `api` container via `docker-compose.production.yml`.
+> Set them in Portainer Stack environment or `.env` — the API reads them as env-based fallback
+> when no `GeofenceConfig` row exists in the database. If a DB row exists it takes precedence.
 
 ---
 
