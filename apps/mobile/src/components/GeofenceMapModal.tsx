@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -73,8 +74,8 @@ export function GeofenceMapModal({
             500,
           );
         }, 300);
-      } catch {
-        setErrorMsg('ไม่สามารถโหลดข้อมูลแผนที่ได้');
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลได้ กรุณาลองใหม่อีกครั้ง');
         setLoadState('error');
       }
     })();
@@ -128,35 +129,40 @@ export function GeofenceMapModal({
               </View>
             )}
 
-            {loadState === 'ready' && geofence?.latitude && geofence?.longitude && (
-              <MapView
-                ref={mapRef}
-                style={styles.map}
-                initialRegion={initialRegion}
-                showsUserLocation
-                showsMyLocationButton={false}
-              >
-                {/* Company marker */}
-                <Marker
-                  coordinate={{ latitude: geofence.latitude, longitude: geofence.longitude }}
-                  title="บริษัท"
-                  pinColor="#dc2626"
-                />
-
-                {/* 100m radius circle */}
-                <Circle
-                  center={{ latitude: geofence.latitude, longitude: geofence.longitude }}
-                  radius={geofence.radiusMeters}
-                  strokeColor="rgba(220,38,38,0.8)"
-                  strokeWidth={2}
-                  fillColor="rgba(220,38,38,0.12)"
-                />
-              </MapView>
+            {loadState === 'ready' && (
+              Platform.OS !== 'web' && geofence?.latitude && geofence?.longitude ? (
+                <MapView
+                  ref={mapRef}
+                  style={styles.map}
+                  initialRegion={initialRegion}
+                  showsUserLocation
+                  showsMyLocationButton={false}
+                >
+                  <Marker
+                    coordinate={{ latitude: geofence.latitude, longitude: geofence.longitude }}
+                    title="บริษัท"
+                    pinColor="#dc2626"
+                  />
+                  <Circle
+                    center={{ latitude: geofence.latitude, longitude: geofence.longitude }}
+                    radius={geofence.radiusMeters}
+                    strokeColor="rgba(220,38,38,0.8)"
+                    strokeWidth={2}
+                    fillColor="rgba(220,38,38,0.12)"
+                  />
+                </MapView>
+              ) : (
+                <View style={styles.mapCenter}>
+                  <Text style={styles.mapCenterIcon}>📍</Text>
+                  <Text style={styles.mapCenterText}>ตรวจสอบตำแหน่งสำเร็จ</Text>
+                  <Text style={styles.mapCenterSub}>กดยืนยันเพื่อลงเวลา</Text>
+                </View>
+              )
             )}
           </View>
 
-          {/* Legend */}
-          {loadState === 'ready' && (
+          {/* Legend — native only; map does not render on web */}
+          {loadState === 'ready' && Platform.OS !== 'web' && (
             <View style={styles.legend}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#dc2626' }]} />

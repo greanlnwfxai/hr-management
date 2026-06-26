@@ -14,7 +14,6 @@ import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useOffSiteRequests } from '../src/hooks/useOffSiteRequests';
 import type { AttendanceRecord, AttendanceStatus, OffSiteRequestRecord } from '../src/api/types';
-import type { ClockActionState } from '../src/hooks/useAttendance';
 import { MobileBottomNav } from '../src/components';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,139 +149,6 @@ function AttendanceHeader({
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function clockInLabel(state: ClockActionState): string {
-  if (state === 'locating') return 'กำลังตรวจสอบตำแหน่ง...';
-  if (state === 'submitting') return 'กำลังเช็คอิน...';
-  return 'เช็คอิน';
-}
-
-function clockOutLabel(state: ClockActionState): string {
-  if (state === 'locating') return 'กำลังตรวจสอบตำแหน่ง...';
-  if (state === 'submitting') return 'กำลังเช็คเอาท์...';
-  return 'เช็คเอาท์';
-}
-
-interface ClockActionCardProps {
-  today: AttendanceRecord | null;
-  dataLoading: boolean;
-  clockInState: ClockActionState;
-  clockOutState: ClockActionState;
-  actionError: string | null;
-  actionMessage: string | null;
-  onClockIn: () => void;
-  onClockOut: () => void;
-  isOffSiteApproved?: boolean;
-}
-
-function ClockActionCard({
-  today,
-  dataLoading,
-  clockInState,
-  clockOutState,
-  actionError,
-  actionMessage,
-  onClockIn,
-  onClockOut,
-  isOffSiteApproved,
-}: ClockActionCardProps) {
-  const inBusy = clockInState === 'locating' || clockInState === 'submitting';
-  const outBusy = clockOutState === 'locating' || clockOutState === 'submitting';
-  const alreadyClockedIn = Boolean(today?.checkIn);
-  const alreadyClockedOut = Boolean(today?.checkOut);
-  const inDisabled = dataLoading || inBusy || outBusy || alreadyClockedIn;
-  const outDisabled = dataLoading || inBusy || outBusy || !alreadyClockedIn || alreadyClockedOut;
-
-  return (
-    <View style={styles.card}>
-      <View style={styles.cardTitleRow}>
-        <Text style={styles.cardTitle}>ลงเวลา</Text>
-        {isOffSiteApproved && (
-          <View style={styles.offsiteBadge}>
-            <Text style={styles.offsiteBadgeText}>🗺 นอกสถานที่</Text>
-          </View>
-        )}
-      </View>
-      <View style={styles.clockRow}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.clockBtn,
-            inDisabled ? styles.clockBtnDisabled : styles.clockBtnIn,
-            pressed && !inDisabled && styles.pressed,
-          ]}
-          onPress={onClockIn}
-          disabled={inDisabled}
-          accessibilityRole="button"
-          accessibilityLabel="เช็คอิน"
-        >
-          {inBusy ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <Text style={styles.clockBtnIcon}>▶</Text>
-          )}
-          <Text style={[styles.clockBtnLabel, !inDisabled && styles.clockBtnLabelActive]}>
-            {clockInLabel(clockInState)}
-          </Text>
-          {alreadyClockedIn && !inBusy && (
-            <Text style={styles.clockBtnSub}>เช็คอินแล้ว</Text>
-          )}
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.clockBtn,
-            outDisabled ? styles.clockBtnDisabled : styles.clockBtnOut,
-            pressed && !outDisabled && styles.pressed,
-          ]}
-          onPress={onClockOut}
-          disabled={outDisabled}
-          accessibilityRole="button"
-          accessibilityLabel="เช็คเอาท์"
-        >
-          {outBusy ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <Text style={styles.clockBtnIcon}>◀</Text>
-          )}
-          <Text style={[styles.clockBtnLabel, !outDisabled && styles.clockBtnLabelActive]}>
-            {clockOutLabel(clockOutState)}
-          </Text>
-          {alreadyClockedOut && !outBusy && (
-            <Text style={styles.clockBtnSub}>เช็คเอาท์แล้ว</Text>
-          )}
-        </Pressable>
-      </View>
-
-      {actionError ? (
-        <View style={styles.actionErrorBox}>
-          <Text style={styles.actionErrorText}>{actionError}</Text>
-        </View>
-      ) : null}
-
-      {actionMessage ? (
-        <View style={styles.actionSuccessBox}>
-          <Text style={styles.actionSuccessText}>{actionMessage}</Text>
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function GeofenceNotice() {
-  return (
-    <View style={[styles.card, styles.noticeCard]}>
-      <View style={styles.noticeRow}>
-        <Text style={styles.noticeIcon}>📍</Text>
-        <View style={styles.noticeTextBlock}>
-          <Text style={styles.noticeTitle}>การตรวจสอบตำแหน่ง</Text>
-          <Text style={styles.noticeBody}>
-            การลงเวลาผ่านมือถือจะตรวจสอบว่าคุณอยู่ในรัศมีบริษัท 100 เมตร
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
 function HistoryTimeline({ records }: { records: AttendanceRecord[] }) {
   if (records.length === 0) {
     return (
@@ -372,18 +238,10 @@ export default function AttendanceScreen() {
     history,
     error,
     refresh,
-    clockInState,
-    clockOutState,
-    clockActionError,
-    clockActionMessage,
-    performClockIn,
-    performClockOut,
-    todayOffSite,
   } = useAttendance();
   const { requests: offSiteRequests, loadState: offSiteLoadState, refresh: refreshOffSite } = useOffSiteRequests();
 
   const [activeTab, setActiveTab] = useState<'time' | 'request'>('time');
-  const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -437,20 +295,6 @@ export default function AttendanceScreen() {
       >
         {activeTab === 'time' && (
           <>
-            <ClockActionCard
-              today={today}
-              dataLoading={loadState === 'loading'}
-              clockInState={clockInState}
-              clockOutState={clockOutState}
-              actionError={clockActionError}
-              actionMessage={clockActionMessage}
-              onClockIn={performClockIn}
-              onClockOut={performClockOut}
-              isOffSiteApproved={isOffSiteApproved}
-            />
-
-            <GeofenceNotice />
-
             {loadState === 'loading' && (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#3b82f6" size="small" />
@@ -728,15 +572,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  // Off-site badge on clock-in card
-  offsiteBadge: {
-    backgroundColor: '#dbeafe',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  offsiteBadgeText: { fontSize: 11, fontWeight: '600', color: '#1d4ed8' },
-
   // Off-site badge in history timeline
   offSiteHistoryBadge: {
     backgroundColor: '#dbeafe',
@@ -784,73 +619,6 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     flexShrink: 1,
   },
-
-  // Clock action card
-  clockRow: {
-    flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  clockBtn: {
-    flexGrow: 1,
-    flexBasis: 148,
-    borderRadius: 100,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    gap: 6,
-    minHeight: 56,
-    justifyContent: 'center',
-  },
-  clockBtnDisabled: {
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  clockBtnIn: {
-    backgroundColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  clockBtnOut: {
-    backgroundColor: '#e05c3e',
-    shadowColor: '#e05c3e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  clockBtnIcon: { fontSize: 16, color: '#ffffff', fontWeight: '700' },
-  clockBtnLabel: { fontSize: 14, fontWeight: '700', color: '#9ca3af' },
-  clockBtnLabelActive: { color: '#ffffff' },
-  clockBtnSub: { fontSize: 11, color: '#d1d5db' },
-  actionErrorBox: {
-    backgroundColor: '#fef2f2',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-  },
-  actionErrorText: { fontSize: 12, color: '#dc2626', textAlign: 'center', lineHeight: 18 },
-  actionSuccessBox: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 8,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  actionSuccessText: { fontSize: 12, color: '#16a34a', textAlign: 'center', lineHeight: 18 },
-
-  // Geofence notice
-  noticeCard: { backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe' },
-  noticeRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  noticeIcon: { fontSize: 18, marginTop: 2 },
-  noticeTextBlock: { flex: 1, gap: 4 },
-  noticeTitle: { fontSize: 13, fontWeight: '600', color: '#1e40af' },
-  noticeBody: { fontSize: 12, color: '#1d4ed8', lineHeight: 18 },
 
   // Timeline history
   timelineList: { gap: 0 },

@@ -242,8 +242,8 @@ export default function HomeScreen() {
   const outBusy = clockOutState === 'locating' || clockOutState === 'submitting';
   const alreadyClockedIn  = Boolean(today?.checkIn);
   const alreadyClockedOut = Boolean(today?.checkOut);
-  const inDisabled  = forced || !displayUser || inBusy  || outBusy || alreadyClockedIn;
-  const outDisabled = forced || !displayUser || inBusy  || outBusy || !alreadyClockedIn || alreadyClockedOut;
+  const inDisabled  = forced || !displayUser || !token || inBusy  || outBusy || alreadyClockedIn;
+  const outDisabled = forced || !displayUser || !token || inBusy  || outBusy || !alreadyClockedIn || alreadyClockedOut;
   const employeeName = profile?.employee
     ? `${profile.employee.firstName} ${profile.employee.lastName}`
     : null;
