@@ -13,6 +13,7 @@ import { getGeofenceLocation } from '../api/client';
 import { useDeviceLocation } from '../hooks/useDeviceLocation';
 import type { GeofenceLocation } from '../api/types';
 import type { DeviceLocation } from '../hooks/useDeviceLocation';
+import { haversineMeters } from '../utils/haversine';
 
 export type ClockAction = 'in' | 'out';
 
@@ -118,6 +119,16 @@ export function GeofenceMapModal({
     })();
   }, [visible]);
 
+  const distanceMeters =
+    geofence?.latitude && geofence?.longitude && userLocation
+      ? Math.round(haversineMeters(geofence.latitude, geofence.longitude, userLocation.latitude, userLocation.longitude))
+      : null;
+
+  const isInsideRadius: boolean | null =
+    distanceMeters !== null ? distanceMeters <= (geofence?.radiusMeters ?? 100) : null;
+
+  const circleColor = isInsideRadius === true ? '#16a34a' : '#dc2626';
+  const confirmDisabled = loadState === 'loading' || isInsideRadius === false;
   const confirmLabel = action === 'in' ? 'ยืนยันเช็คอิน' : 'ยืนยันเช็คเอาท์';
 
   const mapFallback = (
@@ -189,8 +200,8 @@ export function GeofenceMapModal({
                     center={[geofence.latitude, geofence.longitude]}
                     radius={geofence.radiusMeters}
                     pathOptions={{
-                      color: '#dc2626',
-                      fillColor: '#dc2626',
+                      color: circleColor,
+                      fillColor: circleColor,
                       fillOpacity: 0.12,
                       weight: 2,
                     }}
@@ -221,16 +232,31 @@ export function GeofenceMapModal({
               {userLocation && (
                 <View style={styles.legendItem}>
                   <View style={[styles.legendDot, { backgroundColor: '#1a56db' }]} />
-                  <Text style={styles.legendText}>ตำแหน่งของคุณ</Text>
+                  <Text style={styles.legendText}>ตำแหน่งปัจจุบัน</Text>
                 </View>
               )}
               <View style={styles.legendItem}>
-                <View style={styles.legendCircle} />
-                <Text style={styles.legendText}>รัศมี {geofence?.radiusMeters ?? 100} ม.</Text>
+                <View style={[
+                  styles.legendCircle,
+                  {
+                    borderColor: isInsideRadius === true ? 'rgba(22,163,74,0.8)' : 'rgba(220,38,38,0.8)',
+                    backgroundColor: isInsideRadius === true ? 'rgba(22,163,74,0.12)' : 'rgba(220,38,38,0.12)',
+                  },
+                ]} />
+                <Text style={styles.legendText}>รัศมีที่อนุญาต {geofence?.radiusMeters ?? 100} เมตร</Text>
               </View>
               {locationError && !userLocation && (
                 <Text style={styles.locationNotice}>{locationError}</Text>
               )}
+            </View>
+          )}
+
+          {loadState === 'ready' && isInsideRadius !== null && (
+            <View style={[styles.statusBanner, isInsideRadius ? styles.statusBannerIn : styles.statusBannerOut]}>
+              <Text style={[styles.statusText, isInsideRadius ? styles.statusTextIn : styles.statusTextOut]}>
+                {isInsideRadius ? '✅ คุณอยู่ในพื้นที่ลงเวลา' : '⚠️ คุณอยู่นอกพื้นที่ลงเวลา'}
+              </Text>
+              <Text style={styles.statusSub}>ระยะห่างจากบริษัท {distanceMeters} เมตร</Text>
             </View>
           )}
 
@@ -246,11 +272,11 @@ export function GeofenceMapModal({
               style={({ pressed }) => [
                 styles.btnConfirm,
                 action === 'out' && styles.btnConfirmOut,
-                loadState === 'loading' && styles.btnDisabled,
-                pressed && loadState !== 'loading' && { opacity: 0.85 },
+                confirmDisabled && styles.btnDisabled,
+                pressed && !confirmDisabled && { opacity: 0.85 },
               ]}
               onPress={onConfirm}
-              disabled={loadState === 'loading'}
+              disabled={confirmDisabled}
               accessibilityRole="button"
             >
               <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
@@ -332,6 +358,21 @@ const styles = StyleSheet.create({
   },
   legendText: { fontSize: 12, color: '#6b7280' },
   locationNotice: { fontSize: 11, color: '#d97706', width: '100%' },
+  statusBanner: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusBannerIn: { backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#bbf7d0' },
+  statusBannerOut: { backgroundColor: '#fff7ed', borderWidth: 1, borderColor: '#fed7aa' },
+  statusText: { fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  statusTextIn: { color: '#16a34a' },
+  statusTextOut: { color: '#dc2626' },
+  statusSub: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
   btnRow: {
     flexDirection: 'row',
     gap: 12,
