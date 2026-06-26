@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "HR Management",
+    "name": "STEP Connect",
     "slug": "hr-mobile",
     "version": "1.0.0",
     "icon": "./assets/icon.png",
@@ -17,13 +17,13 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.hrmanagement.mobile",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "HR Management ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
+        "NSLocationWhenInUseUsageDescription": "STEP Connect ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundColor": "#1E3A8A"
       },
       "package": "com.hrmanagement.mobile",
       "permissions": [
@@ -42,7 +42,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "HR Management ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
+          "locationWhenInUsePermission": "STEP Connect ใช้ตำแหน่งของคุณเพื่อยืนยันว่าคุณอยู่ในพื้นที่บริษัทก่อนลงเวลา"
         }
       ],
       "@react-native-community/datetimepicker"

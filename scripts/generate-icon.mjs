@@ -10,74 +10,53 @@ mkdirSync(ASSETS_DIR, { recursive: true });
 
 const SIZE = 1024;
 
-// Full icon: navy-to-blue gradient + stylised "H" + dynamic swoosh + "HR Mobile" text
+// Layout (baseline-anchored, no dominant-baseline — librsvg honours it inconsistently):
+//   STEP  font-size 230, weight 800 — cap-height ≈ 165 px above baseline
+//     cap top  ≈ 338   baseline y = 503
+//   Divider at y = 528  (25 px gap below STEP baseline)
+//   Connect font-size 158, weight 400 — cap-height ≈ 113 px above baseline
+//     cap top  ≈ 574   baseline y = 687  (46 px gap below divider)
+//   Total content span 338–687 = 349 px → centre = 512 ✓
+//   All elements within iOS safe-zone margin (≥ 87 px from edge).
+
 const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-  <defs>
-    <!-- Background: dark navy → brand blue (top → bottom) -->
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="100%" stop-color="#1a56db"/>
-    </linearGradient>
-    <!-- H bars: light-blue edges → white centre (cylindrical 3-D effect) -->
-    <linearGradient id="hGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#7aaef6"/>
-      <stop offset="28%"  stop-color="#ffffff"/>
-      <stop offset="72%"  stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#7aaef6"/>
-    </linearGradient>
-    <!-- Swoosh: deep navy-blue → bright sky-blue (left → right) -->
-    <linearGradient id="swooshGrad" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#1e3a8a"/>
-      <stop offset="55%"  stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#60a5fa"/>
-    </linearGradient>
-  </defs>
+  <!-- Background: dark royal blue #1E3A8A -->
+  <rect width="${SIZE}" height="${SIZE}" fill="#1E3A8A"/>
 
-  <!-- Background -->
-  <rect width="${SIZE}" height="${SIZE}" fill="url(#bg)"/>
-
-  <!-- H letter: crossbar rendered first so vertical bars paint over it cleanly -->
-  <rect x="218" y="455" width="588" height="114" fill="url(#hGrad)"/>
-  <rect x="218" y="155" width="140" height="625" rx="12" fill="url(#hGrad)"/>
-  <rect x="666" y="155" width="140" height="625" rx="12" fill="url(#hGrad)"/>
-
-  <!-- Swoosh: diagonal curved band sweeping lower-left → upper-right through the H -->
-  <path d="M 0,688 Q 512,535 1024,370 L 1024,268 Q 512,435 0,588 Z"
-        fill="url(#swooshGrad)" opacity="0.86"/>
-
-  <!-- "HR Mobile" label -->
-  <text x="512" y="892"
+  <!-- STEP: extra-bold white text, baseline at y=503 -->
+  <text x="512" y="503"
         font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
-        font-size="74" font-weight="600" fill="#ffffff"
-        text-anchor="middle" dominant-baseline="middle"
-        letter-spacing="4">HR Mobile</text>
+        font-size="230" font-weight="800" fill="#FFFFFF"
+        text-anchor="middle" letter-spacing="6">STEP</text>
+
+  <!-- Divider: thin white rule, 500 px wide, centred -->
+  <line x1="262" y1="528" x2="762" y2="528"
+        stroke="#FFFFFF" stroke-width="5" opacity="0.80"/>
+
+  <!-- Connect: regular weight white text, baseline at y=687 -->
+  <text x="512" y="687"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="158" font-weight="400" fill="#FFFFFF"
+        text-anchor="middle">Connect</text>
 </svg>`;
 
-// Adaptive icon foreground: transparent bg, H + swoosh centred in safe zone, NO text
-// Android masks to circle/squircle — keep all visuals inside central ~66% (≈676 px)
+// Adaptive icon foreground: no background fill (app.json provides backgroundColor #1E3A8A).
+// Same text layout so the combined result is identical on Android.
 const adaptiveSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 ${SIZE} ${SIZE}">
-  <defs>
-    <linearGradient id="hGradA" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#7aaef6"/>
-      <stop offset="28%"  stop-color="#ffffff"/>
-      <stop offset="72%"  stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#7aaef6"/>
-    </linearGradient>
-    <linearGradient id="swooshGradA" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%"   stop-color="#1e3a8a"/>
-      <stop offset="55%"  stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#60a5fa"/>
-    </linearGradient>
-  </defs>
+  <!-- No background — uses android.adaptiveIcon.backgroundColor = #1E3A8A from app.json -->
 
-  <!-- H centred: x 262–762 (500 px wide), y 207–777 (570 px tall) — all inside safe zone -->
-  <rect x="262" y="455" width="500" height="100" fill="url(#hGradA)"/>
-  <rect x="262" y="207" width="120" height="570" rx="10" fill="url(#hGradA)"/>
-  <rect x="642" y="207" width="120" height="570" rx="10" fill="url(#hGradA)"/>
+  <text x="512" y="503"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="230" font-weight="800" fill="#FFFFFF"
+        text-anchor="middle" letter-spacing="6">STEP</text>
 
-  <!-- Swoosh (extends to canvas edges — visible but not load-bearing outside safe zone) -->
-  <path d="M 0,652 Q 512,512 1024,358 L 1024,260 Q 512,415 0,555 Z"
-        fill="url(#swooshGradA)" opacity="0.86"/>
+  <line x1="262" y1="528" x2="762" y2="528"
+        stroke="#FFFFFF" stroke-width="5" opacity="0.80"/>
+
+  <text x="512" y="687"
+        font-family="'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-size="158" font-weight="400" fill="#FFFFFF"
+        text-anchor="middle">Connect</text>
 </svg>`;
 
 await sharp(Buffer.from(iconSvg))
