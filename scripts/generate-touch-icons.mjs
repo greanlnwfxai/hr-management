@@ -6,6 +6,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = join(__dirname, '..', 'apps', 'mobile', 'assets', 'icon.png');
 const OUT = join(__dirname, '..', 'apps', 'mobile', 'public');
 
+// 1024×1024 fallback (used by apps/mobile/public/apple-touch-icon.png)
+await sharp(SRC).resize(1024, 1024).png().toFile(join(OUT, 'apple-touch-icon.png'));
+console.log('✓ apple-touch-icon.png (1024×1024)');
+
+// Sized variants for iOS home-screen bookmarks
 const SIZES = [180, 167, 152, 120];
 
 for (const size of SIZES) {
