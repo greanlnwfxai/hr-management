@@ -1,10 +1,10 @@
 # Current Status
 
-Last updated: 2026-06-23
+Last updated: 2026-06-26
 
-## Current Product State — v1.2.0 ✅
+## Current Product State — v1.2.26 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.0-employee-self-service-offsite` (commit `b611f95`), it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.26-step-connect-icon-cache-bust` (latest commit `c51ec4e`), it includes:
 
 - Stable NestJS API with username/email login
 - Web admin: profile/password change, employee account management, audit log review, off-site request management, department manager assignment
@@ -15,10 +15,11 @@ The platform is now beyond the original backend v1.0-only foundation. Through `v
 - **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI, rejected-attempt audit logging
 - **Off-site Work Request Workflow — complete**: employee self-service off-site request, admin/manager approval, OFFSITE clock-in bypass for approved dates
 - **Department Manager Scoping — complete**: MANAGER approve/reject scoped to managed department via `Department.managerId`
+- **STEP Connect PWA — complete**: Standalone PWA navigation, STEP Connect branding, icon cache-busting. Production-verified on iPhone.
 
-## ADR Pack — COMPLETE ✅
+## ADR Pack
 
-24 Architecture Decision Records. See [[ADR Index]].
+25 Architecture Decision Records. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
 ADR-020 added: Attendance Geofence and Admin Configuration.
@@ -26,6 +27,7 @@ ADR-021 added: Failed Geofence Attempt Audit.
 ADR-022 added: Off-site Work Request Workflow.
 ADR-023 added: Department Manager Leave Approval Scope.
 ADR-024 added: Mobile Employee Self-Service v1.2.0 UI Refresh.
+ADR-025 added: STEP Connect PWA Branding and Standalone Delivery.
 
 ## Major Delivered Areas
 
@@ -40,6 +42,18 @@ ADR-024 added: Mobile Employee Self-Service v1.2.0 UI Refresh.
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 
 Current documented API surface: **49 endpoints including `GET /health`** (v1.2.0 added 6 off-site endpoints).
+
+## STEP Connect PWA Release Summary
+
+| Task | Tag | Commit | Scope |
+|---|---|---|---|
+| T-084A | `v1.2.23-...` | `9a3d52a` | Keep geofence modal action buttons visible |
+| T-084A | `v1.2.23-step-connect-rename` | `0ef65ad` | Rename mobile Home header to STEP Connect |
+| HOTFIX-010 | `v1.2.24-standalone-pwa-navigation-hotfix` | `7c51fe2` | Add manifest.json; fix standalone PWA tab navigation |
+| T-084 | `v1.2.25-step-connect-icon-rebrand` | `3731f01` | Rebrand icon and metadata to STEP Connect |
+| HOTFIX-011 | `v1.2.26-step-connect-icon-cache-bust` | `c51ec4e` | Cache-bust icon links with `?v=1.2.25` |
+
+Production verified (iPhone): STEP Connect name, STEP Connect icon, standalone navigation across all tabs.
 
 ## v1.2.0 Release Summary
 
@@ -114,7 +128,7 @@ See [[Attendance Geofence]] for full architecture details.
 
 ## Next Recommended Task
 
-**T-072 (TBD)** — Further feature development or runtime verification for v1.2.0 features.
+**T-086 (TBD)** — Further feature development or STEP Connect PWA enhancements (e.g., service worker / offline support, notifications).
 
 ## Security / Process Notes
 

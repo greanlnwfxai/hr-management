@@ -32,10 +32,11 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-022 Off-site Work Request Workflow]] | Off-site Work Request Workflow | Business Rules / Security | Pre-approval workflow allowing OFFSITE clock-in to bypass geofence radius; GPS still required; clock-out geofence unchanged |
 | [[ADR-023 Department Manager Leave Approval Scope]] | Department Manager Leave Approval Scope | Security / RBAC | MANAGER approve/reject scoped to managed department via `Department.managerId`; list visibility remains org-wide |
 | [[ADR-024 Mobile Employee Self-Service v1.2.0 UI Refresh]] | Mobile Employee Self-Service v1.2.0 UI Refresh | Mobile | Home redesign with summary cards, screen refreshes, off-site request screen, Expo SDK upgrade, `react-native-maps` and `react-native-svg` added |
+| [[ADR-025 STEP Connect PWA Branding and Standalone Delivery]] | STEP Connect PWA Branding and Standalone Delivery | Mobile / PWA | STEP Connect as employee-facing mobile name; Web App Manifest with `display: standalone`, `scope: /`; versioned icon URLs for Cloudflare/iOS cache-busting |
 
 ## ADR Policy
 
-ADRs in this project are written **after implementation**, not before. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
+ADRs in this project are written **after implementation**, not before. The current count is **25 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
 
 ## Source Files
 
@@ -66,7 +67,8 @@ docs/adr/
 ├── ADR-021-failed-geofence-attempt-audit.md
 ├── ADR-022-off-site-work-request-workflow.md
 ├── ADR-023-department-manager-leave-approval-scope.md
-└── ADR-024-mobile-employee-self-service-v1-2-0-ui-refresh.md
+├── ADR-024-mobile-employee-self-service-v1-2-0-ui-refresh.md
+└── ADR-025-step-connect-pwa-branding-and-standalone-delivery.md
 ```
 
 ## Related Notes
