@@ -143,11 +143,11 @@ const s = StyleSheet.create({
   },
   errorText: { fontSize: 13, color: '#dc2626' },
   submitBtn: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#1a56db',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
-    shadowColor: '#3b82f6',
+    shadowColor: '#1a56db',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

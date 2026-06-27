@@ -151,7 +151,7 @@ function LeaveSummaryCard({
   const pct = totalDays > 0 ? Math.min(100, (usedDays / totalDays) * 100) : 0;
   return (
     <View style={styles.statCard}>
-      <DonutRing pct={pct} color="#3399FF" size={40} />
+      <DonutRing pct={pct} color="#1a56db" size={40} />
       <View style={styles.statCardText}>
         <Text style={styles.statCardLabel} numberOfLines={2}>{title}</Text>
         <Text style={styles.statCardValue}>
@@ -174,7 +174,7 @@ function OvertimeSummaryCard({
   const pct = totalWorkMinutes > 0 ? Math.min(100, (overtimeMinutes / totalWorkMinutes) * 100) : 0;
   return (
     <View style={styles.otCard}>
-      <DonutRing pct={pct} color="#3399FF" size={40} />
+      <DonutRing pct={pct} color="#1a56db" size={40} />
       <View style={styles.statCardText}>
         <Text style={styles.statCardLabel}>เดือนนี้</Text>
         <Text style={styles.statCardValue}>
@@ -480,31 +480,31 @@ export default function HomeScreen() {
                 label="ปฏิบัติงาน"
                 valueMinutes={stats.workMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#3399FF"
+                color="#1a56db"
               />
               <AttendanceStatCard
                 label="เข้าสาย"
                 valueMinutes={stats.lateMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#3399FF"
+                color="#1a56db"
               />
               <AttendanceStatCard
                 label="ออกก่อน"
                 valueMinutes={stats.earlyOutMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#3399FF"
+                color="#1a56db"
               />
               <AttendanceStatCard
                 label="ขาดงาน"
                 valueMinutes={stats.absentMinutes}
                 totalMinutes={stats.totalMinutes}
-                color="#3399FF"
+                color="#1a56db"
               />
               <AttendanceStatCard
                 label="ลางาน"
                 valueMinutes={0}
                 totalMinutes={stats.totalMinutes}
-                color="#3399FF"
+                color="#1a56db"
               />
             </ScrollView>
 

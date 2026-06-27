@@ -122,7 +122,7 @@ export default function CalendarScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#3b82f6" />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
         }
       >
         {/* Month header */}
@@ -232,7 +232,7 @@ export default function CalendarScreen() {
             ) : selectedRecord ? (
               <View style={styles.cardBody}>
                 <View style={styles.timeRow}>
-                  <View style={[styles.timeAccent, { backgroundColor: '#3b82f6' }]} />
+                  <View style={[styles.timeAccent, { backgroundColor: '#1e3a8a' }]} />
                   <View style={styles.timeInfo}>
                     <Text style={styles.timeLabel}>เวลาเข้างาน</Text>
                     <Text style={styles.timeValue}>{formatTime(selectedRecord.checkIn)}</Text>
@@ -269,7 +269,7 @@ export default function CalendarScreen() {
   );
 }
 
-const CAL_BG = '#3b82f6';
+const CAL_BG = '#1e3a8a';
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#f8f9fa' },

@@ -48,8 +48,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f9fa',
   },
   headerDark: {
-    backgroundColor: '#3b82f6',
-    shadowColor: '#1e3a8a',
+    backgroundColor: '#1e3a8a',
+    shadowColor: '#0d1e4a',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,

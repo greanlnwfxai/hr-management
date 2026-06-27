@@ -290,14 +290,14 @@ export default function AttendanceScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#3b82f6" />
+          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
         }
       >
         {activeTab === 'time' && (
           <>
             {loadState === 'loading' && (
               <View style={styles.loadingRow}>
-                <ActivityIndicator color="#3b82f6" size="small" />
+                <ActivityIndicator color="#1a56db" size="small" />
                 <Text style={styles.loadingText}>กำลังโหลดข้อมูล</Text>
               </View>
             )}
@@ -340,7 +340,7 @@ export default function AttendanceScreen() {
 
               {offSiteLoadState === 'loading' && (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#3b82f6" size="small" />
+                  <ActivityIndicator color="#1a56db" size="small" />
                   <Text style={styles.loadingText}>กำลังโหลด</Text>
                 </View>
               )}
@@ -391,12 +391,12 @@ export default function AttendanceScreen() {
 
 const hdr = StyleSheet.create({
   container: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#1e3a8a',
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 20,
     gap: 12,
-    shadowColor: '#1e3a8a',
+    shadowColor: '#0d1e4a',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 8,
@@ -445,7 +445,7 @@ const hdr = StyleSheet.create({
     alignItems: 'center',
   },
   timeBubble: {
-    backgroundColor: '#1d4ed8',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
   },
   tabBtnTextActive: {
-    color: '#3b82f6',
+    color: '#1a56db',
     fontWeight: '700',
   },
   tabBtnUnderline: {
@@ -561,7 +561,7 @@ const styles = StyleSheet.create({
     left: '25%',
     right: '25%',
     height: 2,
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#1a56db',
     borderRadius: 1,
   },
 
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     marginLeft: 6,
   },
-  offSiteHistoryBadgeText: { fontSize: 10, fontWeight: '600', color: '#1d4ed8' },
+  offSiteHistoryBadgeText: { fontSize: 10, fontWeight: '600', color: '#1a56db' },
   timelineCardSubRow: { flexDirection: 'row', alignItems: 'center' },
 
   // Off-site request list rows
@@ -615,7 +615,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     borderLeftWidth: 3,
-    borderLeftColor: '#3b82f6',
+    borderLeftColor: '#1a56db',
     paddingLeft: 10,
     flexShrink: 1,
   },
@@ -677,7 +677,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#bfdbfe',
   },
-  goLeaveBtnText: { fontSize: 14, fontWeight: '600', color: '#3b82f6' },
+  goLeaveBtnText: { fontSize: 14, fontWeight: '600', color: '#1a56db' },
 
   // Loading / error
   loadingRow: {
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     alignItems: 'center',
   },
-  retryText: { fontSize: 13, fontWeight: '500', color: '#3b82f6' },
+  retryText: { fontSize: 13, fontWeight: '500', color: '#1a56db' },
 
   // Shared
   pressed: { opacity: 0.78 },

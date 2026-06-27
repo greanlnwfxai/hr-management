@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   icon: {
-    fontSize: 14,
+    fontSize: 18,
     color: '#6b7280',
     fontWeight: '700',
   },

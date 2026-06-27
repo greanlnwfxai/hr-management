@@ -28,7 +28,7 @@ function formatTime(iso: string | null | undefined): string {
   return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 }
 
-const CAL_BG = '#3b82f6';
+const CAL_BG = '#1e3a8a';
 const WORK_START_MIN = 8 * 60;   // 08:00
 const WORK_END_MIN   = 17 * 60;  // 17:00
 const WORK_SPAN_MIN  = WORK_END_MIN - WORK_START_MIN;
