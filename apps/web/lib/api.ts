@@ -445,6 +445,8 @@ export type LeaveBalance = {
   leaveType: string;
   year: number;
   totalDays: number;
+  adjustmentDays?: number;
+  effectiveTotalDays?: number;
   usedDays: number;
   remainingDays: number;
   employee?: {
@@ -457,6 +459,18 @@ export type LeaveBalance = {
   };
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type LeaveAdjustment = {
+  id: string;
+  leaveBalanceId: string;
+  deltaDays: number;
+  reason: string;
+  actorUserId: string;
+  adjustedBy?: { id: string; firstName: string; lastName: string; employeeCode?: string } | null;
+  createdAt: string;
+  effectiveTotalDays?: number;
+  effectiveRemainingDays?: number;
 };
 
 export function getLeave(params?: { page?: number; limit?: number; status?: string; employeeId?: string }) {
@@ -523,6 +537,21 @@ export function createLeaveBalance(body: {
 
 export function updateLeaveBalance(id: string, body: { entitledDays?: number; usedDays?: number }) {
   return apiFetch<LeaveBalance>(`/leave-balances/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+}
+
+export function createLeaveAdjustment(balanceId: string, body: { deltaDays: number; reason: string }) {
+  return apiFetch<LeaveAdjustment>(`/leave-balances/${balanceId}/adjustments`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function getLeaveAdjustments(balanceId: string, params?: { page?: number; limit?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<LeaveAdjustment>>(`/leave-balances/${balanceId}/adjustments${query}`);
 }
 
 // ── Account Provisioning ──────────────────────────────────────────────────────

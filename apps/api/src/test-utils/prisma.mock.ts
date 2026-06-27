@@ -31,6 +31,13 @@ export function mockPrisma() {
       count: jest.fn(),
       update: jest.fn(),
     },
+    leaveAdjustment: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      aggregate: jest.fn().mockResolvedValue({ _sum: { deltaDays: 0 } }),
+      groupBy: jest.fn().mockResolvedValue([]),
+    },
     attendance: {
       findUnique: jest.fn(),
       create: jest.fn(),

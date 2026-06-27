@@ -199,7 +199,14 @@ export class LeaveService {
       );
     }
 
-    const remaining = balance.totalDays - balance.usedDays;
+    // Include any vacation adjustment ledger entries in the effective entitlement.
+    const adjAgg = await this.prisma.leaveAdjustment.aggregate({
+      where: { leaveBalanceId: balance.id },
+      _sum: { deltaDays: true },
+    });
+    const adjSum = adjAgg._sum.deltaDays ?? 0;
+    const effectiveTotal = balance.totalDays + adjSum;
+    const remaining = effectiveTotal - balance.usedDays;
     if (record.totalDays > remaining) {
       throw new BadRequestException(
         `Insufficient leave balance: ${remaining} day(s) remaining, ${record.totalDays} requested`,

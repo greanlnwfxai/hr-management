@@ -8,6 +8,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { EmployeesModule } from './employees/employees.module';
 import { HealthController } from './health.controller';
+import { LeaveAdjustmentModule } from './leave-adjustment/leave-adjustment.module';
 import { LeaveBalanceModule } from './leave-balance/leave-balance.module';
 import { LeaveModule } from './leave/leave.module';
 import { OffSiteModule } from './off-site/off-site.module';
@@ -32,6 +33,7 @@ import { PrismaModule } from './prisma/prisma.module';
     AttendanceModule,
     LeaveModule,
     LeaveBalanceModule,
+    LeaveAdjustmentModule,
     OffSiteModule,
     DashboardModule,
   ],

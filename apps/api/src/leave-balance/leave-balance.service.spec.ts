@@ -13,6 +13,7 @@ import { mockPrisma } from '../test-utils/prisma.mock';
 type PrismaMock = ReturnType<typeof mockPrisma> & {
   employee: { findUnique: jest.Mock; findFirst: jest.Mock };
   leaveBalance: { findUnique: jest.Mock; create: jest.Mock; findMany: jest.Mock; count: jest.Mock; update: jest.Mock };
+  leaveAdjustment: { aggregate: jest.Mock; groupBy: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -34,6 +35,12 @@ describe('LeaveBalanceService', () => {
     employee: { id: employeeId, employeeCode: 'EMP001', firstName: 'John', lastName: 'Doe', department: null, position: null },
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+
+  const mockVacationBalanceRaw = {
+    ...mockBalanceRaw,
+    id: 'vac-bal-uuid-1',
+    leaveType: 'VACATION',
   };
 
   const createDto = {
@@ -70,6 +77,8 @@ describe('LeaveBalanceService', () => {
 
       expect(result).toMatchObject({ id: balanceId, totalDays: 10, usedDays: 3 });
       expect(result.remainingDays).toBe(7); // 10 - 3
+      expect(result.adjustmentDays).toBe(0);
+      expect(result.effectiveTotalDays).toBe(10);
     });
 
     it('initialises usedDays to 0 on the created record', async () => {
@@ -105,12 +114,28 @@ describe('LeaveBalanceService', () => {
   describe('findAll', () => {
     it('returns paginated balances each with remainingDays computed', async () => {
       prisma.$transaction.mockResolvedValue([[mockBalanceRaw], 1] as any);
+      prisma.leaveAdjustment.groupBy.mockResolvedValue([]);
 
       const result = await service.findAll({ page: 1, limit: 20 });
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0].remainingDays).toBe(7);
+      expect(result.data[0].adjustmentDays).toBe(0);
+      expect(result.data[0].effectiveTotalDays).toBe(10);
       expect(result.meta).toEqual({ total: 1, page: 1, limit: 20, totalPages: 1 });
+    });
+
+    it('includes adjustment sums in effective totals', async () => {
+      prisma.$transaction.mockResolvedValue([[mockBalanceRaw], 1] as any);
+      prisma.leaveAdjustment.groupBy.mockResolvedValue([
+        { leaveBalanceId: balanceId, _sum: { deltaDays: 3 } },
+      ]);
+
+      const result = await service.findAll({ page: 1, limit: 20 });
+
+      expect(result.data[0].adjustmentDays).toBe(3);
+      expect(result.data[0].effectiveTotalDays).toBe(13); // 10 + 3
+      expect(result.data[0].remainingDays).toBe(10); // 13 - 3 usedDays
     });
   });
 
@@ -120,6 +145,7 @@ describe('LeaveBalanceService', () => {
     it('returns balances for the current employee', async () => {
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
       prisma.$transaction.mockResolvedValue([[mockBalanceRaw], 1] as any);
+      prisma.leaveAdjustment.groupBy.mockResolvedValue([]);
 
       const result = await service.findMy(userId, { page: 1, limit: 20 });
 
@@ -138,15 +164,18 @@ describe('LeaveBalanceService', () => {
   describe('findOne', () => {
     it('returns balance with remainingDays for SUPER_ADMIN without ownership check', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(mockBalanceRaw as any);
+      prisma.leaveAdjustment.aggregate.mockResolvedValue({ _sum: { deltaDays: 0 } });
 
       const result = await service.findOne(balanceId, userId, 'SUPER_ADMIN');
 
       expect(result.remainingDays).toBe(7);
+      expect(result.adjustmentDays).toBe(0);
       expect(prisma.employee.findFirst).not.toHaveBeenCalled();
     });
 
     it('returns balance for MANAGER without ownership check', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(mockBalanceRaw as any);
+      prisma.leaveAdjustment.aggregate.mockResolvedValue({ _sum: { deltaDays: 0 } });
 
       const result = await service.findOne(balanceId, userId, 'MANAGER');
 
@@ -156,10 +185,22 @@ describe('LeaveBalanceService', () => {
     it('allows an employee to view their own balance', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(mockBalanceRaw as any);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.leaveAdjustment.aggregate.mockResolvedValue({ _sum: { deltaDays: 0 } });
 
       const result = await service.findOne(balanceId, userId, 'EMPLOYEE');
 
       expect(result).toMatchObject({ id: balanceId });
+    });
+
+    it('reflects adjustment delta in remainingDays', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue(mockBalanceRaw as any);
+      prisma.leaveAdjustment.aggregate.mockResolvedValue({ _sum: { deltaDays: 2 } });
+
+      const result = await service.findOne(balanceId, userId, 'SUPER_ADMIN');
+
+      expect(result.adjustmentDays).toBe(2);
+      expect(result.effectiveTotalDays).toBe(12); // 10 + 2
+      expect(result.remainingDays).toBe(9); // 12 - 3 usedDays
     });
 
     it('throws ForbiddenException when employee views another employee\'s balance', async () => {
@@ -179,9 +220,10 @@ describe('LeaveBalanceService', () => {
   // ── update ─────────────────────────────────────────────────────────────────
 
   describe('update', () => {
-    const existingRaw = { id: balanceId, totalDays: 10, usedDays: 3 };
+    const existingRaw = { id: balanceId, leaveType: 'SICK', totalDays: 10, usedDays: 3 };
+    const existingVacationRaw = { id: 'vac-bal-uuid-1', leaveType: 'VACATION', totalDays: 10, usedDays: 3 };
 
-    it('updates entitledDays and returns balance with updated remainingDays', async () => {
+    it('updates entitledDays for non-vacation balance and returns balance with updated remainingDays', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(existingRaw as any);
       const updated = { ...mockBalanceRaw, totalDays: 15, usedDays: 3 };
       prisma.leaveBalance.update.mockResolvedValue(updated as any);
@@ -191,7 +233,7 @@ describe('LeaveBalanceService', () => {
       expect(result.remainingDays).toBe(12); // 15 - 3
     });
 
-    it('updates usedDays and reflects new remainingDays', async () => {
+    it('updates usedDays for non-vacation balance and reflects new remainingDays', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(existingRaw as any);
       const updated = { ...mockBalanceRaw, totalDays: 10, usedDays: 5 };
       prisma.leaveBalance.update.mockResolvedValue(updated as any);
@@ -204,8 +246,6 @@ describe('LeaveBalanceService', () => {
     it('throws UnprocessableEntityException when update would result in negative remaining days', async () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(existingRaw as any);
 
-      // entitledDays = 5, usedDays = 3 (existing) → remaining = 2 → ok
-      // entitledDays = 2, usedDays = 3 → remaining = -1 → FAIL
       await expect(service.update(balanceId, { entitledDays: 2 })).rejects.toThrow(
         UnprocessableEntityException,
       );
@@ -215,6 +255,22 @@ describe('LeaveBalanceService', () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(null);
 
       await expect(service.update('missing', { entitledDays: 10 })).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException when directly setting entitledDays on a VACATION balance', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue(existingVacationRaw as any);
+
+      await expect(service.update('vac-bal-uuid-1', { entitledDays: 15 })).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws BadRequestException when directly setting usedDays on a VACATION balance', async () => {
+      prisma.leaveBalance.findUnique.mockResolvedValue(existingVacationRaw as any);
+
+      await expect(service.update('vac-bal-uuid-1', { usedDays: 5 })).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

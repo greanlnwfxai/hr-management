@@ -138,9 +138,10 @@ model Employee {
 
   // Activity relations
   attendances             Attendance[]
-  leaveRequests           LeaveRequest[]  @relation("EmployeeLeaveRequests")
-  approvedLeaves          LeaveRequest[]  @relation("ApprovedLeaveRequests")
+  leaveRequests           LeaveRequest[]   @relation("EmployeeLeaveRequests")
+  approvedLeaves          LeaveRequest[]   @relation("ApprovedLeaveRequests")
   leaveBalances           LeaveBalance[]
+  leaveAdjustments        LeaveAdjustment[] @relation("EmployeeLeaveAdjustments")
   offSiteRequests         OffSiteRequest[] @relation("EmployeeOffSiteRequests")
   approvedOffSiteRequests OffSiteRequest[] @relation("EmployeeApprovedOffSite")
 
@@ -199,20 +200,38 @@ model LeaveRequest {
 }
 
 model LeaveBalance {
-  id         String    @id @default(uuid())
-  employeeId String
-  employee   Employee  @relation(fields: [employeeId], references: [id])
-  leaveType  LeaveType
-  year       Int
-  totalDays  Int
-  usedDays   Int       @default(0)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String             @id @default(uuid())
+  employeeId  String
+  employee    Employee           @relation(fields: [employeeId], references: [id])
+  leaveType   LeaveType
+  year        Int
+  totalDays   Int
+  usedDays    Int                @default(0)
+  adjustments LeaveAdjustment[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@unique([employeeId, leaveType, year])
   @@index([employeeId])
   @@index([year])
   @@map("leave_balances")
+}
+
+model LeaveAdjustment {
+  id             String       @id @default(uuid())
+  leaveBalanceId String
+  leaveBalance   LeaveBalance @relation(fields: [leaveBalanceId], references: [id])
+  deltaDays      Float
+  reason         String
+  actorUserId    String
+  adjustedById   String?
+  adjustedBy     Employee?    @relation("EmployeeLeaveAdjustments", fields: [adjustedById], references: [id])
+  createdAt      DateTime     @default(now())
+
+  @@index([leaveBalanceId])
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@map("leave_adjustments")
 }
 
 model OffSiteRequest {

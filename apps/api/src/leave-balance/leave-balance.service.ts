@@ -36,9 +36,18 @@ const BALANCE_SELECT = {
 
 type BalanceRaw = Prisma.LeaveBalanceGetPayload<{ select: typeof BALANCE_SELECT }>;
 
-// DB column `totalDays` represents the entitled quota; `remainingDays` is computed.
-function withRemaining(record: BalanceRaw) {
-  return { ...record, remainingDays: record.totalDays - record.usedDays };
+// DB column `totalDays` represents the original entitled quota.
+// `adjustmentDays` is the sum of all LeaveAdjustment.deltaDays for this balance.
+// `effectiveTotalDays` = totalDays + adjustmentDays.
+// `remainingDays` = effectiveTotalDays - usedDays.
+function withRemaining(record: BalanceRaw, adjustmentDays: number = 0) {
+  const effectiveTotalDays = record.totalDays + adjustmentDays;
+  return {
+    ...record,
+    adjustmentDays,
+    effectiveTotalDays,
+    remainingDays: effectiveTotalDays - record.usedDays,
+  };
 }
 
 @Injectable()
@@ -80,7 +89,7 @@ export class LeaveBalanceService {
       select: BALANCE_SELECT,
     });
 
-    return withRemaining(record);
+    return withRemaining(record, 0);
   }
 
   async findAll(query: QueryLeaveBalanceDto) {
@@ -104,8 +113,19 @@ export class LeaveBalanceService {
       this.prisma.leaveBalance.count({ where }),
     ]);
 
+    const ids = data.map((d) => d.id);
+    const adjSums =
+      ids.length > 0
+        ? await this.prisma.leaveAdjustment.groupBy({
+            by: ['leaveBalanceId'],
+            where: { leaveBalanceId: { in: ids } },
+            _sum: { deltaDays: true },
+          })
+        : [];
+    const adjMap = new Map(adjSums.map((a) => [a.leaveBalanceId, a._sum.deltaDays ?? 0]));
+
     return {
-      data: data.map(withRemaining),
+      data: data.map((r) => withRemaining(r, adjMap.get(r.id) ?? 0)),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -133,22 +153,38 @@ export class LeaveBalanceService {
       userRole === UserRole.HR_ADMIN ||
       userRole === UserRole.MANAGER;
 
-    if (canViewAll) return withRemaining(record);
-
-    const emp = await this.prisma.employee.findFirst({
-      where: { userId },
-      select: { id: true },
-    });
-    if (!emp || record.employee.id !== emp.id) {
-      throw new ForbiddenException('Access denied');
+    if (!canViewAll) {
+      const emp = await this.prisma.employee.findFirst({
+        where: { userId },
+        select: { id: true },
+      });
+      if (!emp || record.employee.id !== emp.id) {
+        throw new ForbiddenException('Access denied');
+      }
     }
 
-    return withRemaining(record);
+    const agg = await this.prisma.leaveAdjustment.aggregate({
+      where: { leaveBalanceId: id },
+      _sum: { deltaDays: true },
+    });
+    const adjustmentDays = agg._sum.deltaDays ?? 0;
+
+    return withRemaining(record, adjustmentDays);
   }
 
   async update(id: string, dto: UpdateLeaveBalanceDto) {
     const existing = await this.prisma.leaveBalance.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException(`Leave balance ${id} not found`);
+
+    // Harden: VACATION balance cannot be directly overwritten. Use the adjustment ledger.
+    if ((existing.leaveType as string) === 'VACATION') {
+      if (dto.entitledDays !== undefined || dto.usedDays !== undefined) {
+        throw new BadRequestException(
+          'Vacation leave balance cannot be directly overwritten. ' +
+            'Use POST /leave-balances/:id/adjustments to adjust the entitled quota.',
+        );
+      }
+    }
 
     const newTotal = dto.entitledDays !== undefined ? dto.entitledDays : existing.totalDays;
     const newUsed = dto.usedDays !== undefined ? dto.usedDays : existing.usedDays;
@@ -168,6 +204,6 @@ export class LeaveBalanceService {
       select: BALANCE_SELECT,
     });
 
-    return withRemaining(record);
+    return withRemaining(record, 0);
   }
 }

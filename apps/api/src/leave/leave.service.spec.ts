@@ -10,6 +10,7 @@ type PrismaMock = ReturnType<typeof mockPrisma> & {
   employee: { findFirst: jest.Mock; findUnique: jest.Mock };
   leaveRequest: { findFirst: jest.Mock; findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
   leaveBalance: { findUnique: jest.Mock };
+  leaveAdjustment: { aggregate: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -253,6 +254,21 @@ describe('LeaveService', () => {
       prisma.leaveBalance.findUnique.mockResolvedValue(tightBalance as any);
 
       await expect(service.approve(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
+    });
+
+    it('approves when positive vacation adjustment makes otherwise-insufficient balance sufficient', async () => {
+      // base: totalDays=5, usedDays=3, requested=3 → base remaining=2, would fail without adjustment
+      // after +1 adjustment: effectiveTotal=6, remaining=3, requested=3 → OK
+      const tightBalance = { ...balance, totalDays: 5, usedDays: 3 };
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'approver-emp-uuid' });
+      prisma.leaveBalance.findUnique.mockResolvedValue(tightBalance as any);
+      prisma.leaveAdjustment.aggregate.mockResolvedValue({ _sum: { deltaDays: 1 } });
+      prisma.$transaction.mockImplementation((fn: any) => fn(txMock));
+
+      const result = await service.approve(leaveId, userId, 'HR_ADMIN', {} as any);
+
+      expect(result.status).toBe('APPROVED');
     });
   });
 

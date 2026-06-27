@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   getLeave, getMyLeave, createLeaveRequest, approveLeave, rejectLeave,
   getMyLeaveBalances, getLeaveBalances, createLeaveBalance, updateLeaveBalance,
+  createLeaveAdjustment, getLeaveAdjustments,
   getEmployees,
-  type LeaveRequest, type LeaveBalance, type Employee, type PaginatedResponse, ApiError,
+  type LeaveRequest, type LeaveBalance, type LeaveAdjustment, type Employee, type PaginatedResponse, ApiError,
 } from '@/lib/api';
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
@@ -51,6 +52,8 @@ type BalCreateForm = { employeeId: string; leaveType: string; year: string; enti
 const EMPTY_BAL_CREATE: BalCreateForm = { employeeId: '', leaveType: 'SICK', year: String(new Date().getFullYear()), entitledDays: '' };
 
 type BalEditForm = { entitledDays: string; usedDays: string };
+type AdjustForm = { deltaDays: string; reason: string };
+const EMPTY_ADJUST: AdjustForm = { deltaDays: '', reason: '' };
 
 export default function LeavePage() {
   const { t } = useLanguage();
@@ -152,12 +155,15 @@ export default function LeavePage() {
   const [balAdminPage, setBalAdminPage] = useState(1);
   const [balYearFilter, setBalYearFilter] = useState(String(new Date().getFullYear()));
 
-  const [balModal, setBalModal] = useState<'create' | 'edit' | null>(null);
+  const [balModal, setBalModal] = useState<'create' | 'edit' | 'adjust' | null>(null);
   const [editBalTarget, setEditBalTarget] = useState<LeaveBalance | null>(null);
   const [balCreateForm, setBalCreateForm] = useState<BalCreateForm>(EMPTY_BAL_CREATE);
   const [balEditForm, setBalEditForm] = useState<BalEditForm>({ entitledDays: '', usedDays: '' });
   const [balFormError, setBalFormError] = useState('');
   const [balSubmitting, setBalSubmitting] = useState(false);
+
+  const [adjustForm, setAdjustForm] = useState<AdjustForm>(EMPTY_ADJUST);
+  const [adjustments, setAdjustments] = useState<LeaveAdjustment[]>([]);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
 
@@ -195,7 +201,24 @@ export default function LeavePage() {
     setBalModal('edit');
   }
 
-  function closeBalModal() { setBalModal(null); setEditBalTarget(null); setBalFormError(''); }
+  function closeBalModal() {
+    setBalModal(null);
+    setEditBalTarget(null);
+    setBalFormError('');
+    setAdjustForm(EMPTY_ADJUST);
+    setAdjustments([]);
+  }
+
+  function openBalAdjust(bal: LeaveBalance) {
+    setEditBalTarget(bal);
+    setAdjustForm(EMPTY_ADJUST);
+    setBalFormError('');
+    setAdjustments([]);
+    setBalModal('adjust');
+    getLeaveAdjustments(bal.id, { limit: 10 })
+      .then((d) => setAdjustments(d.data))
+      .catch(() => {});
+  }
 
   async function handleBalCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -241,6 +264,33 @@ export default function LeavePage() {
     }
   }
 
+  async function handleAdjustSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBalFormError('');
+    if (!editBalTarget) return;
+    const delta = Number(adjustForm.deltaDays);
+    if (!adjustForm.deltaDays || isNaN(delta) || delta === 0) {
+      setBalFormError('Delta must be a non-zero number.');
+      return;
+    }
+    if (!adjustForm.reason.trim() || adjustForm.reason.trim().length < 5) {
+      setBalFormError('Reason must be at least 5 characters.');
+      return;
+    }
+    setBalSubmitting(true);
+    try {
+      await createLeaveAdjustment(editBalTarget.id, { deltaDays: delta, reason: adjustForm.reason.trim() });
+      setToast({ message: 'Vacation balance adjusted successfully.', type: 'success' });
+      closeBalModal();
+      loadBalAdmin();
+      loadBalances();
+    } catch (err) {
+      setBalFormError(err instanceof ApiError ? err.message : 'Failed to apply adjustment.');
+    } finally {
+      setBalSubmitting(false);
+    }
+  }
+
   const meta = result?.meta;
   const balMeta = balAdminResult?.meta;
 
@@ -270,7 +320,7 @@ export default function LeavePage() {
               <div key={b.id} className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{b.leaveType} · {b.year}</p>
                 <p className="mt-0.5 text-lg font-semibold text-zinc-900 dark:text-zinc-50">{b.remainingDays}</p>
-                <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('leave_remaining')} / {b.totalDays}</p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('leave_remaining')} / {b.effectiveTotalDays ?? b.totalDays}</p>
               </div>
             ))}
           </div>
@@ -411,7 +461,8 @@ export default function LeavePage() {
                       <tr>
                         {[
                           t('leave_col_employee'), t('leave_col_type'), t('leave_col_year'),
-                          t('leave_col_entitled'), t('leave_col_used'), t('leave_col_remaining'), t('actions'),
+                          t('leave_col_entitled'), 'Adjustment', 'Effective',
+                          t('leave_col_used'), t('leave_col_remaining'), t('actions'),
                         ].map((h) => (
                           <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{h}</th>
                         ))}
@@ -429,12 +480,26 @@ export default function LeavePage() {
                           <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{bal.leaveType}</td>
                           <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{bal.year}</td>
                           <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300 font-medium">{bal.totalDays}</td>
+                          <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400 font-mono text-xs">
+                            {(bal.adjustmentDays ?? 0) !== 0
+                              ? <span className={(bal.adjustmentDays ?? 0) > 0 ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}>
+                                  {(bal.adjustmentDays ?? 0) > 0 ? '+' : ''}{bal.adjustmentDays}
+                                </span>
+                              : <span className="text-zinc-400 dark:text-zinc-500">—</span>
+                            }
+                          </td>
+                          <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300 font-medium">
+                            {bal.effectiveTotalDays ?? bal.totalDays}
+                          </td>
                           <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{bal.usedDays}</td>
                           <td className="px-4 py-3">
                             <span className={`font-medium ${bal.remainingDays <= 2 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>{bal.remainingDays}</span>
                           </td>
                           <td className="px-4 py-3">
-                            <button onClick={() => openBalEdit(bal)} className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('edit')}</button>
+                            {bal.leaveType === 'VACATION'
+                              ? <button onClick={() => openBalAdjust(bal)} className="rounded border border-blue-200 dark:border-blue-700 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30">Adjust</button>
+                              : <button onClick={() => openBalEdit(bal)} className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('edit')}</button>
+                            }
                           </td>
                         </tr>
                       ))}
@@ -491,7 +556,7 @@ export default function LeavePage() {
         </Modal>
       )}
 
-      {/* Balance Edit Modal */}
+      {/* Balance Edit Modal — non-vacation leave types only */}
       {balModal === 'edit' && editBalTarget && (
         <Modal title={t('leave_modal_edit_balance')} onClose={closeBalModal}>
           <div className="mb-3 rounded bg-zinc-50 dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-300">
@@ -513,6 +578,85 @@ export default function LeavePage() {
               </button>
             </div>
           </form>
+        </Modal>
+      )}
+
+      {/* Adjust Vacation Balance Modal — VACATION only */}
+      {balModal === 'adjust' && editBalTarget && (
+        <Modal title="Adjust Vacation Balance" onClose={closeBalModal}>
+          <div className="mb-3 rounded bg-zinc-50 dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-600 dark:text-zinc-300">
+            {editBalTarget.employee ? `${editBalTarget.employee.firstName} ${editBalTarget.employee.lastName}` : '—'}
+            {' · '}VACATION · {editBalTarget.year}
+          </div>
+
+          {balFormError && <div className="mb-3 rounded border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">{balFormError}</div>}
+
+          <form onSubmit={handleAdjustSubmit} className="space-y-4">
+            <Field label="Adjustment Delta *">
+              <input
+                type="number"
+                step="0.5"
+                value={adjustForm.deltaDays}
+                onChange={(e) => setAdjustForm({ ...adjustForm, deltaDays: e.target.value })}
+                className={INPUT}
+                placeholder="e.g. +2 or -1"
+              />
+              <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">Positive = add days, negative = remove days. Non-zero.</p>
+            </Field>
+
+            <Field label="Reason *">
+              <input
+                type="text"
+                value={adjustForm.reason}
+                onChange={(e) => setAdjustForm({ ...adjustForm, reason: e.target.value })}
+                className={INPUT}
+                placeholder="e.g. Correcting data entry error"
+              />
+              <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">Minimum 5 characters. Required.</p>
+            </Field>
+
+            {/* Live preview */}
+            {adjustForm.deltaDays !== '' && !isNaN(Number(adjustForm.deltaDays)) && (
+              <div className="rounded border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 space-y-0.5">
+                <div>Current entitlement: <span className="font-medium">{editBalTarget.effectiveTotalDays ?? editBalTarget.totalDays} days</span></div>
+                <div>Effective after adjustment: <span className="font-medium">{(editBalTarget.effectiveTotalDays ?? editBalTarget.totalDays) + Number(adjustForm.deltaDays)} days</span></div>
+                <div>Remaining after adjustment: <span className={`font-medium ${(editBalTarget.remainingDays + Number(adjustForm.deltaDays)) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'}`}>
+                  {editBalTarget.remainingDays + Number(adjustForm.deltaDays)} days
+                </span></div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button type="button" onClick={closeBalModal} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('cancel')}</button>
+              <button type="submit" disabled={balSubmitting} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+                {balSubmitting ? 'Applying...' : 'Apply Adjustment'}
+              </button>
+            </div>
+          </form>
+
+          {/* Adjustment history */}
+          {adjustments.length > 0 && (
+            <div className="mt-5 border-t border-zinc-200 dark:border-zinc-600 pt-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Adjustment History</p>
+              <div className="space-y-1.5">
+                {adjustments.map((adj) => (
+                  <div key={adj.id} className="flex items-start justify-between text-xs text-zinc-600 dark:text-zinc-300">
+                    <div>
+                      <span className={`mr-1 font-mono font-semibold ${adj.deltaDays > 0 ? 'text-green-700 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                        {adj.deltaDays > 0 ? '+' : ''}{adj.deltaDays}d
+                      </span>
+                      <span className="text-zinc-500 dark:text-zinc-400">{adj.reason}</span>
+                    </div>
+                    <div className="ml-4 shrink-0 text-zinc-400 dark:text-zinc-500">
+                      {adj.adjustedBy ? `${adj.adjustedBy.firstName} ${adj.adjustedBy.lastName}` : '—'}
+                      {' · '}
+                      {new Date(adj.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Modal>
       )}
     </div>
