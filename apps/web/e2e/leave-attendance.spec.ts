@@ -69,10 +69,16 @@ test.describe('Attendance', () => {
     await expect(page.locator('[data-testid="section-todays-attendance"]')).toBeVisible();
   });
 
-  test('Clock In and Clock Out buttons are rendered', async ({ page }) => {
+  test('admin without employee profile shows neutral self-attendance state', async ({ page }) => {
     await page.goto('/attendance');
-    await expect(page.locator('[data-testid="btn-clock-in"]')).toBeVisible();
-    await expect(page.locator('[data-testid="btn-clock-out"]')).toBeVisible();
+    await expect(page.locator('[data-testid="loading-my-att"]')).not.toBeVisible({ timeout: 15000 });
+    // Neutral info state must be visible — no red error box
+    await expect(page.locator('[data-testid="no-profile-info"]').first()).toBeVisible();
+    // Clock In / Clock Out buttons must NOT be rendered for admin with no employee profile
+    await expect(page.locator('[data-testid="btn-clock-in"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="btn-clock-out"]')).toHaveCount(0);
+    // All Attendance Records section must still load for admin
+    await expect(page.locator('[data-testid="section-all-records"]')).toBeVisible({ timeout: 15000 });
   });
 
   test('Bangkok time clock is displayed', async ({ page }) => {
@@ -94,9 +100,10 @@ test.describe('Attendance', () => {
   test('attendance history table headers or empty state are visible', async ({ page }) => {
     await page.goto('/attendance');
     await expect(page.locator('[data-testid="loading-my-att"]')).not.toBeVisible({ timeout: 15000 });
-    // My history section: table or empty state
+    // My history section: table, empty state, or neutral no-profile info (admin with no employee profile)
     const hasTable = await page.locator('table').first().isVisible().catch(() => false);
     const hasEmpty = await page.locator('[data-testid="empty-state"]').first().isVisible().catch(() => false);
-    expect(hasTable || hasEmpty).toBe(true);
+    const hasNoProfile = await page.locator('[data-testid="no-profile-info"]').first().isVisible().catch(() => false);
+    expect(hasTable || hasEmpty || hasNoProfile).toBe(true);
   });
 });

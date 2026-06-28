@@ -95,7 +95,7 @@ export default function AttendancePage() {
         err instanceof ApiError &&
         err.status === 400 &&
         err.message === 'No employee profile linked to this account' &&
-        admin
+        isAdmin(getUser())
       ) {
         setNoEmployeeProfile(true);
       } else {
@@ -104,7 +104,7 @@ export default function AttendancePage() {
     } finally {
       setMyLoading(false);
     }
-  }, [myPage, myStartDate, myEndDate, admin]);
+  }, [myPage, myStartDate, myEndDate]);
 
   const loadAllAttendance = useCallback(async () => {
     if (!admin) return;
@@ -193,7 +193,7 @@ export default function AttendancePage() {
         </h2>
 
         {noEmployeeProfile ? (
-          <div className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-4 py-3">
+          <div data-testid="no-profile-info" className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-4 py-3">
             <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
               บัญชีผู้ดูแลระบบนี้ไม่มีโปรไฟล์พนักงานสำหรับการลงเวลาของฉัน
             </p>
