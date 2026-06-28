@@ -43,6 +43,8 @@ export default function AttendancePage() {
 
   const [toast, setToast] = useState<ToastData | null>(null);
 
+  const [noEmployeeProfile, setNoEmployeeProfile] = useState(false);
+
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
   const [clockLoading, setClockLoading] = useState(false);
 
@@ -77,6 +79,7 @@ export default function AttendancePage() {
   const loadMyAttendance = useCallback(async () => {
     setMyLoading(true);
     setMyError(null);
+    setNoEmployeeProfile(false);
     try {
       const data = await getMyAttendance({
         page: myPage, limit: 10,
@@ -88,11 +91,20 @@ export default function AttendancePage() {
       const rec = data.data.find((r) => r.date?.slice(0, 10) === today);
       if (rec) setTodayRecord(rec);
     } catch (err) {
-      setMyError(err instanceof ApiError ? { message: err.message, status: err.status } : { message: 'Failed to load attendance.' });
+      if (
+        err instanceof ApiError &&
+        err.status === 400 &&
+        err.message === 'No employee profile linked to this account' &&
+        admin
+      ) {
+        setNoEmployeeProfile(true);
+      } else {
+        setMyError(err instanceof ApiError ? { message: err.message, status: err.status } : { message: 'Failed to load attendance.' });
+      }
     } finally {
       setMyLoading(false);
     }
-  }, [myPage, myStartDate, myEndDate]);
+  }, [myPage, myStartDate, myEndDate, admin]);
 
   const loadAllAttendance = useCallback(async () => {
     if (!admin) return;
@@ -180,36 +192,49 @@ export default function AttendancePage() {
           {t('att_todays')}
         </h2>
 
-        {todayRecord && (
-          <div className="mb-4 flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400">
-            <span>{t('att_checkin_label')}: <strong className="text-zinc-900 dark:text-zinc-100">{formatTime(todayRecord.checkIn)}</strong></span>
-            <span>{t('att_checkout_label')}: <strong className="text-zinc-900 dark:text-zinc-100">{formatTime(todayRecord.checkOut)}</strong></span>
-            <span>Status: {statusBadge(todayRecord.status)}</span>
+        {noEmployeeProfile ? (
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-4 py-3">
+            <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+              บัญชีผู้ดูแลระบบนี้ไม่มีโปรไฟล์พนักงานสำหรับการลงเวลาของฉัน
+            </p>
+            <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+              This admin account is not linked to an employee profile for self attendance.
+            </p>
           </div>
-        )}
+        ) : (
+          <>
+            {todayRecord && (
+              <div className="mb-4 flex flex-wrap gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+                <span>{t('att_checkin_label')}: <strong className="text-zinc-900 dark:text-zinc-100">{formatTime(todayRecord.checkIn)}</strong></span>
+                <span>{t('att_checkout_label')}: <strong className="text-zinc-900 dark:text-zinc-100">{formatTime(todayRecord.checkOut)}</strong></span>
+                <span>Status: {statusBadge(todayRecord.status)}</span>
+              </div>
+            )}
 
-        {!todayRecord && !myLoading && (
-          <p className="mb-4 text-sm text-zinc-400 dark:text-zinc-500">{t('att_no_record')}</p>
-        )}
+            {!todayRecord && !myLoading && (
+              <p className="mb-4 text-sm text-zinc-400 dark:text-zinc-500">{t('att_no_record')}</p>
+            )}
 
-        <div className="flex gap-3">
-          <button
-            data-testid="btn-clock-in"
-            onClick={handleClockIn}
-            disabled={clockLoading || hasClockedIn}
-            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            {clockLoading && !hasClockedIn ? t('att_clocking_in') : t('att_clock_in')}
-          </button>
-          <button
-            data-testid="btn-clock-out"
-            onClick={handleClockOut}
-            disabled={clockLoading || !hasClockedIn || hasClockedOut}
-            className="rounded-md bg-zinc-700 dark:bg-zinc-600 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-600 dark:hover:bg-zinc-500 disabled:opacity-50"
-          >
-            {clockLoading && hasClockedIn && !hasClockedOut ? t('att_clocking_out') : t('att_clock_out')}
-          </button>
-        </div>
+            <div className="flex gap-3">
+              <button
+                data-testid="btn-clock-in"
+                onClick={handleClockIn}
+                disabled={clockLoading || hasClockedIn}
+                className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                {clockLoading && !hasClockedIn ? t('att_clocking_in') : t('att_clock_in')}
+              </button>
+              <button
+                data-testid="btn-clock-out"
+                onClick={handleClockOut}
+                disabled={clockLoading || !hasClockedIn || hasClockedOut}
+                className="rounded-md bg-zinc-700 dark:bg-zinc-600 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-600 dark:hover:bg-zinc-500 disabled:opacity-50"
+              >
+                {clockLoading && hasClockedIn && !hasClockedOut ? t('att_clocking_out') : t('att_clock_out')}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* My attendance history */}
@@ -228,8 +253,18 @@ export default function AttendancePage() {
           </div>
         </div>
         {myLoading && <LoadingState testid="loading-my-att" message={t('loading_att')} />}
-        {!myLoading && myError && <ErrorState testid="error-state" message={myError.message} status={myError.status} onRetry={loadMyAttendance} />}
-        {!myLoading && !myError && myResult && (
+        {!myLoading && noEmployeeProfile && (
+          <div className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-4 py-3">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              บัญชีผู้ดูแลระบบนี้ไม่มีโปรไฟล์พนักงานสำหรับการลงเวลาของฉัน
+            </p>
+            <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+              This admin account is not linked to an employee profile for self attendance.
+            </p>
+          </div>
+        )}
+        {!myLoading && !noEmployeeProfile && myError && <ErrorState testid="error-state" message={myError.message} status={myError.status} onRetry={loadMyAttendance} />}
+        {!myLoading && !noEmployeeProfile && !myError && myResult && (
           <>
             {myResult.data.length === 0 ? (
               <EmptyState testid="empty-state" message={t('att_empty_history')} />
