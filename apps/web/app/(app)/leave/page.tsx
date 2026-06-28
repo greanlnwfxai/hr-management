@@ -5,8 +5,10 @@ import {
   getLeave, getMyLeave, createLeaveRequest, approveLeave, rejectLeave,
   getMyLeaveBalances, getLeaveBalances, createLeaveBalance, updateLeaveBalance,
   createLeaveAdjustment, getLeaveAdjustments,
+  getVacationSetupSuggest, createVacationSetup,
   getEmployees,
-  type LeaveRequest, type LeaveBalance, type LeaveAdjustment, type Employee, type PaginatedResponse, ApiError,
+  type LeaveRequest, type LeaveBalance, type LeaveAdjustment, type Employee,
+  type VacationSetupSuggest, type PaginatedResponse, ApiError,
 } from '@/lib/api';
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
@@ -155,7 +157,7 @@ export default function LeavePage() {
   const [balAdminPage, setBalAdminPage] = useState(1);
   const [balYearFilter, setBalYearFilter] = useState(String(new Date().getFullYear()));
 
-  const [balModal, setBalModal] = useState<'create' | 'edit' | 'adjust' | null>(null);
+  const [balModal, setBalModal] = useState<'create' | 'edit' | 'adjust' | 'vacation-setup' | null>(null);
   const [editBalTarget, setEditBalTarget] = useState<LeaveBalance | null>(null);
   const [balCreateForm, setBalCreateForm] = useState<BalCreateForm>(EMPTY_BAL_CREATE);
   const [balEditForm, setBalEditForm] = useState<BalEditForm>({ entitledDays: '', usedDays: '' });
@@ -288,6 +290,80 @@ export default function LeavePage() {
       setBalFormError(err instanceof ApiError ? err.message : 'Failed to apply adjustment.');
     } finally {
       setBalSubmitting(false);
+    }
+  }
+
+  // ── Vacation Balance Setup ─────────────────────────────────────────────────
+  const [setupEmployeeId, setSetupEmployeeId] = useState('');
+  const [setupYear, setSetupYear] = useState(String(new Date().getFullYear()));
+  const [setupSuggest, setSetupSuggest] = useState<VacationSetupSuggest | null>(null);
+  const [setupSuggestLoading, setSetupSuggestLoading] = useState(false);
+  const [setupEntitledDays, setSetupEntitledDays] = useState('');
+  const [setupRemainingDays, setSetupRemainingDays] = useState('');
+  const [setupNote, setSetupNote] = useState('');
+  const [setupFormError, setSetupFormError] = useState('');
+  const [setupSubmitting, setSetupSubmitting] = useState(false);
+
+  function openVacationSetup() {
+    setSetupEmployeeId('');
+    setSetupYear(String(new Date().getFullYear()));
+    setSetupSuggest(null);
+    setSetupEntitledDays('');
+    setSetupRemainingDays('');
+    setSetupNote('');
+    setSetupFormError('');
+    setBalModal('vacation-setup');
+  }
+
+  async function fetchVacationSuggest(empId: string, yr: string) {
+    const yearNum = Number(yr);
+    if (!empId || !yr || isNaN(yearNum) || yearNum < 2020) {
+      setSetupSuggest(null);
+      return;
+    }
+    setSetupSuggestLoading(true);
+    setSetupSuggest(null);
+    try {
+      const data = await getVacationSetupSuggest(empId, yearNum);
+      setSetupSuggest(data);
+      if (data.isEligible) {
+        setSetupEntitledDays(String(data.suggestedEntitledDays));
+      }
+    } catch {
+      setSetupSuggest(null);
+    } finally {
+      setSetupSuggestLoading(false);
+    }
+  }
+
+  async function handleVacationSetup(e: React.FormEvent) {
+    e.preventDefault();
+    setSetupFormError('');
+    const entitledDays = Number(setupEntitledDays);
+    const remainingDays = Number(setupRemainingDays);
+    const year = Number(setupYear);
+    if (!setupEmployeeId) { setSetupFormError('Employee is required.'); return; }
+    if (!setupYear || isNaN(year) || year < 2020) { setSetupFormError('Valid year is required.'); return; }
+    if (setupEntitledDays === '' || isNaN(entitledDays) || entitledDays < 0) { setSetupFormError('Entitled days must be a non-negative integer.'); return; }
+    if (setupRemainingDays === '' || isNaN(remainingDays) || remainingDays < 0) { setSetupFormError('Remaining days must be a non-negative integer.'); return; }
+    if (remainingDays > entitledDays) { setSetupFormError('Remaining days cannot exceed entitled days.'); return; }
+    setSetupSubmitting(true);
+    try {
+      await createVacationSetup({
+        employeeId: setupEmployeeId,
+        year,
+        entitledDays,
+        remainingDays,
+        setupNote: setupNote.trim() || undefined,
+      });
+      setToast({ message: 'Vacation balance set up successfully.', type: 'success' });
+      setBalModal(null);
+      loadBalAdmin();
+      loadBalances();
+    } catch (err) {
+      setSetupFormError(err instanceof ApiError ? err.message : 'Failed to set up vacation balance.');
+    } finally {
+      setSetupSubmitting(false);
     }
   }
 
@@ -438,6 +514,13 @@ export default function LeavePage() {
                 className="w-24 rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none"
               />
               <button
+                data-testid="btn-vacation-setup"
+                onClick={openVacationSetup}
+                className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
+              >
+                Vacation Setup
+              </button>
+              <button
                 data-testid="btn-add-balance"
                 onClick={openBalCreate}
                 className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white"
@@ -575,6 +658,143 @@ export default function LeavePage() {
               <button type="button" onClick={closeBalModal} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('cancel')}</button>
               <button type="submit" disabled={balSubmitting} className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-4 py-2 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white disabled:opacity-50">
                 {balSubmitting ? t('emp_saving') : t('save')}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Vacation Balance Setup Modal */}
+      {balModal === 'vacation-setup' && (
+        <Modal title="Vacation Balance Setup" onClose={() => setBalModal(null)}>
+          {setupFormError && (
+            <div className="mb-3 rounded border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">
+              {setupFormError}
+            </div>
+          )}
+          <form onSubmit={handleVacationSetup} className="space-y-4">
+            <Field label="Employee *">
+              <select
+                required
+                value={setupEmployeeId}
+                onChange={(e) => {
+                  setSetupEmployeeId(e.target.value);
+                  setSetupEntitledDays('');
+                  fetchVacationSuggest(e.target.value, setupYear);
+                }}
+                className={INPUT}
+              >
+                <option value="">Select employee…</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.employeeCode})
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Year *">
+              <input
+                type="number"
+                required
+                min={2020}
+                value={setupYear}
+                onChange={(e) => {
+                  setSetupYear(e.target.value);
+                  setSetupEntitledDays('');
+                  fetchVacationSuggest(setupEmployeeId, e.target.value);
+                }}
+                className={INPUT}
+                placeholder={String(new Date().getFullYear())}
+              />
+            </Field>
+
+            {/* Suggestion panel */}
+            {setupSuggestLoading && (
+              <div className="rounded border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                Calculating entitlement…
+              </div>
+            )}
+
+            {setupSuggest && !setupSuggestLoading && (
+              <div className={`rounded border px-3 py-2.5 text-xs space-y-1 ${setupSuggest.isEligible ? 'border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300' : 'border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}>
+                <div className="font-medium">{setupSuggest.tierLabel} · {setupSuggest.completedYears} year(s) of service</div>
+                <div>Hire date: {setupSuggest.hireDate}</div>
+                {setupSuggest.isEligible
+                  ? <div>Policy entitlement: <span className="font-semibold">{setupSuggest.suggestedEntitledDays} days</span></div>
+                  : <div className="font-semibold">Not eligible — less than 1 year of service. Cannot set up vacation balance.</div>
+                }
+                {setupSuggest.hasExistingBalance && (
+                  <div className="mt-1 font-semibold text-red-700 dark:text-red-400">
+                    Warning: A VACATION balance already exists for this employee in {setupYear}. Submitting will return a 409 conflict.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Field label="Entitled Days *">
+              <input
+                type="number"
+                required
+                min={0}
+                value={setupEntitledDays}
+                onChange={(e) => setSetupEntitledDays(e.target.value)}
+                className={INPUT}
+                placeholder="e.g. 10"
+                disabled={setupSuggest !== null && !setupSuggest.isEligible}
+              />
+              {setupSuggest?.isEligible && setupEntitledDays !== '' && Number(setupEntitledDays) !== setupSuggest.suggestedEntitledDays && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  Override: policy suggests {setupSuggest.suggestedEntitledDays} days — this will be recorded as an override.
+                </p>
+              )}
+            </Field>
+
+            <Field label="Remaining Days *">
+              <input
+                type="number"
+                required
+                min={0}
+                value={setupRemainingDays}
+                onChange={(e) => setSetupRemainingDays(e.target.value)}
+                className={INPUT}
+                placeholder="e.g. 8"
+                disabled={setupSuggest !== null && !setupSuggest.isEligible}
+              />
+            </Field>
+
+            {/* Live usedDays preview */}
+            {setupEntitledDays !== '' && setupRemainingDays !== '' && !isNaN(Number(setupEntitledDays)) && !isNaN(Number(setupRemainingDays)) && (
+              <div className="rounded border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 space-y-0.5">
+                <div>Entitled: <span className="font-medium">{setupEntitledDays} days</span></div>
+                <div>Remaining: <span className="font-medium">{setupRemainingDays} days</span></div>
+                <div>Used (derived): <span className={`font-medium ${Number(setupEntitledDays) - Number(setupRemainingDays) < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                  {Number(setupEntitledDays) - Number(setupRemainingDays)} days
+                </span></div>
+              </div>
+            )}
+
+            <Field label="Setup Note (optional)">
+              <input
+                type="text"
+                value={setupNote}
+                onChange={(e) => setSetupNote(e.target.value)}
+                className={INPUT}
+                maxLength={500}
+                placeholder="e.g. Employee transferred from branch; 2 days already used."
+              />
+            </Field>
+
+            <div className="flex justify-end gap-3 pt-1">
+              <button type="button" onClick={() => setBalModal(null)} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={setupSubmitting || (setupSuggest !== null && !setupSuggest.isEligible)}
+                className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+              >
+                {setupSubmitting ? 'Setting up…' : 'Set Up Balance'}
               </button>
             </div>
           </form>

@@ -554,6 +554,54 @@ export function getLeaveAdjustments(balanceId: string, params?: { page?: number;
   return apiFetch<PaginatedResponse<LeaveAdjustment>>(`/leave-balances/${balanceId}/adjustments${query}`);
 }
 
+export type VacationSetupSuggest = {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  year: number;
+  hireDate: string;
+  completedYears: number;
+  completedMonths: number;
+  isEligible: boolean;
+  suggestedEntitledDays: number;
+  tierLabel: string;
+  hasExistingBalance: boolean;
+  existingBalance: { id: string; totalDays: number; usedDays: number } | null;
+};
+
+export type VacationSetupResult = {
+  id: string;
+  employeeId: string;
+  leaveType: string;
+  year: number;
+  totalDays: number;
+  usedDays: number;
+  remainingDays: number;
+  completedYears: number;
+  suggestedEntitledDays: number;
+  entitlementOverridden: boolean;
+  createdAt: string;
+};
+
+export function getVacationSetupSuggest(employeeId: string, year: number) {
+  return apiFetch<VacationSetupSuggest>(
+    `/leave-balances/vacation-setup/suggest?employeeId=${employeeId}&year=${year}`,
+  );
+}
+
+export function createVacationSetup(body: {
+  employeeId: string;
+  year: number;
+  entitledDays: number;
+  remainingDays: number;
+  setupNote?: string;
+}) {
+  return apiFetch<VacationSetupResult>('/leave-balances/vacation-setup', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 // ── Account Provisioning ──────────────────────────────────────────────────────
 
 export type EmployeeAccountInfo = {

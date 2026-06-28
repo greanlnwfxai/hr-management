@@ -14,6 +14,7 @@ import { LeaveModule } from './leave/leave.module';
 import { OffSiteModule } from './off-site/off-site.module';
 import { PositionsModule } from './positions/positions.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { VacationSetupModule } from './vacation-setup/vacation-setup.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { PrismaModule } from './prisma/prisma.module';
     LeaveModule,
     LeaveBalanceModule,
     LeaveAdjustmentModule,
+    VacationSetupModule,
     OffSiteModule,
     DashboardModule,
   ],
