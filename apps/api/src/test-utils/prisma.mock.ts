@@ -54,6 +54,7 @@ export function mockPrisma() {
     },
     offSiteRequest: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
     },
     geofenceConfig: {
       findUnique: jest.fn(),

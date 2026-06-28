@@ -44,3 +44,17 @@ export enum WorkMode {
   ONSITE  = 'ONSITE',
   OFFSITE = 'OFFSITE',
 }
+
+export enum AttendanceSource {
+  COMPANY_GEOFENCE   = 'COMPANY_GEOFENCE',
+  OFFSITE_PLANNED    = 'OFFSITE_PLANNED',
+  OFFSITE_UNPLANNED  = 'OFFSITE_UNPLANNED',
+}
+
+export enum AttendanceReviewStatus {
+  AUTO_ACCEPTED    = 'AUTO_ACCEPTED',
+  PENDING_REVIEW   = 'PENDING_REVIEW',
+  APPROVED         = 'APPROVED',
+  REJECTED         = 'REJECTED',
+  MISSING_CHECKOUT = 'MISSING_CHECKOUT',
+}

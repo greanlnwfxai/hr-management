@@ -7,13 +7,28 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { AttendanceStatus as PrismaAttendanceStatus, OffSiteStatus as PrismaOffSiteStatus, WorkMode as PrismaWorkMode } from '@prisma/client';
-import { AttendanceStatus, OffSiteStatus, UserRole, WorkMode } from '../common/enums';
+import type {
+  AttendanceReviewStatus as PrismaAttendanceReviewStatus,
+  AttendanceSource as PrismaAttendanceSource,
+  AttendanceStatus as PrismaAttendanceStatus,
+  OffSiteStatus as PrismaOffSiteStatus,
+  WorkMode as PrismaWorkMode,
+} from '@prisma/client';
+import {
+  AttendanceReviewStatus,
+  AttendanceSource,
+  AttendanceStatus,
+  OffSiteStatus,
+  UserRole,
+  WorkMode,
+} from '../common/enums';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
+import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 import { GeofenceConfigService } from './geofence-config.service';
@@ -34,6 +49,22 @@ const ATTENDANCE_SELECT = {
   status: true,
   workMode: true,
   note: true,
+  attendanceSource: true,
+  reviewStatus: true,
+  workLocationName: true,
+  offsiteReason: true,
+  offSiteRequestId: true,
+  checkInLatitude: true,
+  checkInLongitude: true,
+  checkInAccuracyMeters: true,
+  checkInDistanceFromCompanyMeters: true,
+  checkOutLatitude: true,
+  checkOutLongitude: true,
+  checkOutAccuracyMeters: true,
+  checkOutDistanceFromCompanyMeters: true,
+  reviewedById: true,
+  reviewedAt: true,
+  reviewNote: true,
   employee: {
     select: {
       id: true,
@@ -135,8 +166,10 @@ export class AttendanceService {
   }
 
   async clockOut(userId: string, dto: ClockOutDto, ctx?: AttendanceAuditContext) {
-    await this.validateGeofence(dto, 'CLOCK_OUT', ctx);
-
+    // Bug fix: fetch record first so we can skip geofence for off-site check-outs.
+    // Previously, validateGeofence() was called before fetching the record, making
+    // it impossible to check attendanceSource. Off-site records must not fail company
+    // geofence validation on clock-out.
     const employeeId = await this.requireEmployeeId(userId);
     const date = this.todayUtc();
 
@@ -145,6 +178,13 @@ export class AttendanceService {
     });
     if (!record) throw new NotFoundException('No clock-in found for today');
     if (record.checkOut) throw new ConflictException('Already clocked out for today');
+
+    // Only validate company geofence for COMPANY_GEOFENCE records.
+    // Off-site records bypass company radius — their location was captured at clock-in.
+    const src = (record as any).attendanceSource ?? AttendanceSource.COMPANY_GEOFENCE;
+    if (src === AttendanceSource.COMPANY_GEOFENCE) {
+      await this.validateGeofence(dto, 'CLOCK_OUT', ctx);
+    }
 
     const result = await this.prisma.attendance.update({
       where: { id: record.id },
@@ -175,6 +215,176 @@ export class AttendanceService {
         hasCheckIn: result.checkIn !== null,
         hasCheckOut: true,
         hasNote: result.note !== null && result.note !== undefined,
+      },
+    });
+
+    return result;
+  }
+
+  async clockInOffsite(userId: string, dto: OffsiteClockInDto, ctx?: AttendanceAuditContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.todayBangkok();
+    const now = new Date();
+
+    const existing = await this.prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    if (existing) throw new ConflictException('Already clocked in for today');
+
+    // Planned path: look up an APPROVED off-site request for today (Bangkok calendar date).
+    const approvedRequest = await this.prisma.offSiteRequest.findFirst({
+      where: {
+        employeeId,
+        date,
+        status: OffSiteStatus.APPROVED as unknown as PrismaOffSiteStatus,
+      },
+      select: { id: true },
+    });
+
+    const attendanceSource = approvedRequest
+      ? AttendanceSource.OFFSITE_PLANNED
+      : AttendanceSource.OFFSITE_UNPLANNED;
+
+    const reviewStatus = approvedRequest
+      ? AttendanceReviewStatus.AUTO_ACCEPTED
+      : AttendanceReviewStatus.PENDING_REVIEW;
+
+    // Compute distance from company HQ (best-effort; null when geofence not configured).
+    const config = await this.geofenceConfig.getEffectiveConfig();
+    let checkInDistanceFromCompanyMeters: number | null = null;
+    if (config.latitude !== null && config.longitude !== null) {
+      checkInDistanceFromCompanyMeters = this.geofenceService.calculateDistanceMeters(
+        dto.latitude,
+        dto.longitude,
+        config.latitude,
+        config.longitude,
+      );
+    }
+
+    const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
+
+    const result = await this.prisma.attendance.create({
+      data: {
+        employeeId,
+        date,
+        checkIn: now,
+        status: status as unknown as PrismaAttendanceStatus,
+        workMode: WorkMode.OFFSITE as unknown as PrismaWorkMode,
+        note: dto.note,
+        attendanceSource: attendanceSource as unknown as PrismaAttendanceSource,
+        reviewStatus: reviewStatus as unknown as PrismaAttendanceReviewStatus,
+        workLocationName: dto.workLocationName,
+        offsiteReason: dto.reason,
+        checkInLatitude: dto.latitude,
+        checkInLongitude: dto.longitude,
+        checkInAccuracyMeters: dto.accuracy,
+        checkInDistanceFromCompanyMeters,
+        ...(approvedRequest && { offSiteRequestId: approvedRequest.id }),
+      },
+      select: ATTENDANCE_SELECT,
+    });
+
+    const accuracyBucket = dto.accuracy <= 20 ? 'HIGH' : dto.accuracy <= 50 ? 'MEDIUM' : 'LOW';
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_OFFSITE_CLOCK_IN',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: result.id,
+        employeeId,
+        date: result.date,
+        status: result.status,
+        workMode: WorkMode.OFFSITE,
+        attendanceSource,
+        reviewStatus,
+        clockInAt: result.checkIn,
+        hasCoordinates: true,
+        accuracyBucket,
+        workLocationName: dto.workLocationName,
+        hasReason: true,
+        hasNote: dto.note !== undefined,
+        isPlanned: !!approvedRequest,
+        hasOffSiteRequestId: !!approvedRequest,
+        hasDistanceData: checkInDistanceFromCompanyMeters !== null,
+      },
+    });
+
+    return result;
+  }
+
+  async clockOutOffsite(userId: string, dto: OffsiteClockOutDto, ctx?: AttendanceAuditContext) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.todayBangkok();
+
+    const record = await this.prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    if (!record) throw new NotFoundException('No clock-in found for today');
+    if (record.checkOut) throw new ConflictException('Already clocked out for today');
+
+    const src = (record as any).attendanceSource;
+    if (!src || src === AttendanceSource.COMPANY_GEOFENCE) {
+      throw new BadRequestException(
+        'This endpoint is for off-site attendance only. Use POST /attendance/clock-out for office clock-out.',
+      );
+    }
+
+    const config = await this.geofenceConfig.getEffectiveConfig();
+    let checkOutDistanceFromCompanyMeters: number | null = null;
+    if (config.latitude !== null && config.longitude !== null) {
+      checkOutDistanceFromCompanyMeters = this.geofenceService.calculateDistanceMeters(
+        dto.latitude,
+        dto.longitude,
+        config.latitude,
+        config.longitude,
+      );
+    }
+
+    const result = await this.prisma.attendance.update({
+      where: { id: record.id },
+      data: {
+        checkOut: new Date(),
+        checkOutLatitude: dto.latitude,
+        checkOutLongitude: dto.longitude,
+        checkOutAccuracyMeters: dto.accuracy,
+        checkOutDistanceFromCompanyMeters,
+        ...(dto.note !== undefined && { note: dto.note }),
+      },
+      select: ATTENDANCE_SELECT,
+    });
+
+    const accuracyBucket = dto.accuracy <= 20 ? 'HIGH' : dto.accuracy <= 50 ? 'MEDIUM' : 'LOW';
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_OFFSITE_CLOCK_OUT',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: result.id,
+        employeeId,
+        date: result.date,
+        status: result.status,
+        workMode: WorkMode.OFFSITE,
+        attendanceSource: src,
+        clockInAt: result.checkIn,
+        clockOutAt: result.checkOut,
+        hasCoordinates: true,
+        accuracyBucket,
+        hasNote: dto.note !== undefined,
+        hasDistanceData: checkOutDistanceFromCompanyMeters !== null,
       },
     });
 
@@ -470,6 +680,15 @@ export class AttendanceService {
   private todayUtc(): Date {
     const now = new Date();
     return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  }
+
+  // Returns today's calendar date in Asia/Bangkok (UTC+7, no DST).
+  // Off-site clock-in uses this so that staff working after midnight UTC
+  // (i.e., 07:00–00:00 BKK) are recorded on the correct Thai calendar date.
+  private todayBangkok(): Date {
+    const BANGKOK_OFFSET_MS = 7 * 60 * 60 * 1000;
+    const nowBkk = new Date(Date.now() + BANGKOK_OFFSET_MS);
+    return new Date(Date.UTC(nowBkk.getUTCFullYear(), nowBkk.getUTCMonth(), nowBkk.getUTCDate()));
   }
 
   // Business rule: LATE if clock-in is strictly after 08:30 Asia/Bangkok.

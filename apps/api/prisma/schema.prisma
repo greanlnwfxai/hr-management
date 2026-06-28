@@ -54,6 +54,20 @@ enum WorkMode {
   OFFSITE
 }
 
+enum AttendanceSource {
+  COMPANY_GEOFENCE
+  OFFSITE_PLANNED
+  OFFSITE_UNPLANNED
+}
+
+enum AttendanceReviewStatus {
+  AUTO_ACCEPTED
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  MISSING_CHECKOUT
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,6 +158,7 @@ model Employee {
   leaveAdjustments        LeaveAdjustment[] @relation("EmployeeLeaveAdjustments")
   offSiteRequests         OffSiteRequest[] @relation("EmployeeOffSiteRequests")
   approvedOffSiteRequests OffSiteRequest[] @relation("EmployeeApprovedOffSite")
+  reviewedAttendances     Attendance[]     @relation("AttendanceReviewer")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -165,12 +180,41 @@ model Attendance {
   status     AttendanceStatus @default(PRESENT)
   workMode   WorkMode         @default(ONSITE)
   note       String?
-  createdAt  DateTime         @default(now())
-  updatedAt  DateTime         @updatedAt
+
+  // Off-site fields
+  attendanceSource  AttendanceSource       @default(COMPANY_GEOFENCE)
+  reviewStatus      AttendanceReviewStatus?
+  workLocationName  String?                @db.VarChar(200)
+  offsiteReason     String?                @db.VarChar(500)
+
+  // Off-site GPS (stored for dispute resolution per OQ#2; never in audit log)
+  checkInLatitude                  Float?
+  checkInLongitude                 Float?
+  checkInAccuracyMeters            Float?
+  checkInDistanceFromCompanyMeters Float?
+  checkOutLatitude                 Float?
+  checkOutLongitude                Float?
+  checkOutAccuracyMeters           Float?
+  checkOutDistanceFromCompanyMeters Float?
+
+  // Off-site request link (planned path)
+  offSiteRequestId String?
+  offSiteRequest   OffSiteRequest? @relation(fields: [offSiteRequestId], references: [id])
+
+  // Review fields (populated by REQ-002D admin review)
+  reviewedById String?
+  reviewedBy   Employee? @relation("AttendanceReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([employeeId, date])
   @@index([date])
   @@index([status])
+  @@index([attendanceSource])
+  @@index([reviewStatus])
   @@map("attendances")
 }
 
@@ -247,6 +291,8 @@ model OffSiteRequest {
   rejectReason String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
+
+  attendances Attendance[]
 
   @@index([employeeId])
   @@index([status])

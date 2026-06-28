@@ -12,10 +12,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
+import { AttendanceSource, AttendanceReviewStatus } from '../common/enums';
 
 type PrismaMock = ReturnType<typeof mockPrisma> & {
   employee: { findFirst: jest.Mock };
   attendance: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock; findMany: jest.Mock; count: jest.Mock };
+  offSiteRequest: { findMany: jest.Mock; findFirst: jest.Mock };
   $transaction: jest.Mock;
 };
 
@@ -430,6 +432,9 @@ describe('AttendanceService', () => {
 
     it('enforces geofence on clock-out for mobile source (missing location)', async () => {
       geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      // Bug-fix: record is fetched before validateGeofence, so these mocks are now required.
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
 
       await expect(
         service.clockOut(userId, { source: 'mobile' }),
@@ -456,6 +461,9 @@ describe('AttendanceService', () => {
     it('throws 422 on clock-out when source is "mobile", geofence enabled, and user is outside radius', async () => {
       geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       geofenceService.isWithinRadius.mockReturnValue(false);
+      // Bug-fix: record is fetched before validateGeofence, so these mocks are now required.
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
 
       await expect(service.clockOut(userId, mobileDto)).rejects.toThrow(
         UnprocessableEntityException,
@@ -940,6 +948,9 @@ describe('AttendanceService', () => {
     it('emits ATTENDANCE_GEOFENCE_REJECTED with CLOCK_OUT and clock-out-geofence-rejected on rejected clock-out', async () => {
       geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
       geofenceService.isWithinRadius.mockReturnValue(false);
+      // Bug-fix: record is fetched before validateGeofence.
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
 
       await expect(
         service.clockOut(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
@@ -1023,6 +1034,332 @@ describe('AttendanceService', () => {
 
       const event = mockAuditLog.record.mock.calls[0][0];
       expect(event.metadata).toMatchObject({ configSource: 'db', geofenceEnabled: true });
+    });
+  });
+
+  // ── clockOut bug-fix: off-site records bypass company geofence ────────────
+
+  describe('clockOut off-site geofence bypass', () => {
+    const offsiteRecord = {
+      ...mockOpenRecord,
+      attendanceSource: 'OFFSITE_PLANNED',
+      workMode: 'OFFSITE',
+    };
+
+    it('skips company geofence on clock-out for an OFFSITE_PLANNED record', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: true,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env' as const,
+      });
+      geofenceService.isWithinRadius.mockReturnValue(false); // would fail if geofence were called
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(offsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue({ ...mockAttendanceFull, checkOut: new Date() } as any);
+
+      await expect(
+        service.clockOut(userId, { source: 'mobile', latitude: 13.0, longitude: 100.0, accuracy: 25 }),
+      ).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('skips company geofence on clock-out for an OFFSITE_UNPLANNED record', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: true,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env' as const,
+      });
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockOpenRecord,
+        attendanceSource: 'OFFSITE_UNPLANNED',
+      } as any);
+      prisma.attendance.update.mockResolvedValue({ ...mockAttendanceFull, checkOut: new Date() } as any);
+
+      await expect(
+        service.clockOut(userId, { source: 'mobile', latitude: 13.0, longitude: 100.0, accuracy: 25 }),
+      ).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── clockInOffsite ─────────────────────────────────────────────────────────
+
+  describe('clockInOffsite', () => {
+    const offsiteDto = {
+      latitude: 13.9,
+      longitude: 100.9,
+      accuracy: 25,
+      workLocationName: 'Client Office — Siam',
+      reason: 'Client presentation Q2',
+    };
+
+    const disabledConfig = {
+      enabled: false,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    it('creates OFFSITE_UNPLANNED / PENDING_REVIEW when no approved request exists', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'OFFSITE_UNPLANNED',
+        reviewStatus: 'PENDING_REVIEW',
+        workMode: 'OFFSITE',
+      } as any);
+
+      const result = await service.clockInOffsite(userId, offsiteDto);
+
+      expect(prisma.attendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            attendanceSource: AttendanceSource.OFFSITE_UNPLANNED,
+            reviewStatus: AttendanceReviewStatus.PENDING_REVIEW,
+            workMode: 'OFFSITE',
+            workLocationName: offsiteDto.workLocationName,
+            offsiteReason: offsiteDto.reason,
+          }),
+        }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('creates OFFSITE_PLANNED / AUTO_ACCEPTED when an approved request exists', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue({ id: 'osr-1' });
+      prisma.attendance.create.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'OFFSITE_PLANNED',
+        reviewStatus: 'AUTO_ACCEPTED',
+        workMode: 'OFFSITE',
+        offSiteRequestId: 'osr-1',
+      } as any);
+
+      await service.clockInOffsite(userId, offsiteDto);
+
+      expect(prisma.attendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            attendanceSource: AttendanceSource.OFFSITE_PLANNED,
+            reviewStatus: AttendanceReviewStatus.AUTO_ACCEPTED,
+            offSiteRequestId: 'osr-1',
+          }),
+        }),
+      );
+    });
+
+    it('stores GPS fields in the DB record', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull } as any);
+
+      await service.clockInOffsite(userId, offsiteDto);
+
+      expect(prisma.attendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            checkInLatitude: offsiteDto.latitude,
+            checkInLongitude: offsiteDto.longitude,
+            checkInAccuracyMeters: offsiteDto.accuracy,
+          }),
+        }),
+      );
+    });
+
+    it('audit metadata does NOT contain raw latitude or longitude', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, id: attendanceId } as any);
+
+      await service.clockInOffsite(userId, offsiteDto);
+
+      expect(mockAuditLog.record).toHaveBeenCalled();
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.action).toBe('ATTENDANCE_OFFSITE_CLOCK_IN');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).toHaveProperty('hasCoordinates', true);
+      expect(event.metadata).toHaveProperty('accuracyBucket');
+    });
+
+    it('throws ConflictException when already clocked in today', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+
+      await expect(service.clockInOffsite(userId, offsiteDto)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws BadRequestException when no employee profile is linked', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+
+      await expect(service.clockInOffsite(userId, offsiteDto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('computes distance from company when geofence has coordinates', async () => {
+      const configWithCoords = { ...disabledConfig, latitude: COMPANY_LAT, longitude: COMPANY_LON };
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(configWithCoords);
+      geofenceService.calculateDistanceMeters.mockReturnValue(5000);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull } as any);
+
+      await service.clockInOffsite(userId, offsiteDto);
+
+      expect(geofenceService.calculateDistanceMeters).toHaveBeenCalledWith(
+        offsiteDto.latitude, offsiteDto.longitude, COMPANY_LAT, COMPANY_LON,
+      );
+      expect(prisma.attendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ checkInDistanceFromCompanyMeters: 5000 }),
+        }),
+      );
+    });
+
+    it('sets distance to null when geofence has no coordinates', async () => {
+      const noCoordConfig = { ...disabledConfig, latitude: null, longitude: null };
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(noCoordConfig);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull } as any);
+
+      await service.clockInOffsite(userId, offsiteDto);
+
+      expect(prisma.attendance.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ checkInDistanceFromCompanyMeters: null }),
+        }),
+      );
+    });
+  });
+
+  // ── clockOutOffsite ────────────────────────────────────────────────────────
+
+  describe('clockOutOffsite', () => {
+    const offsiteClockOutDto = {
+      latitude: 13.9,
+      longitude: 100.9,
+      accuracy: 30,
+    };
+
+    const openOffsiteRecord = {
+      ...mockOpenRecord,
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      workMode: 'OFFSITE',
+    };
+
+    const disabledConfig = {
+      enabled: false,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    it('clocks out and stores GPS fields', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(openOffsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue({
+        ...mockAttendanceFull,
+        checkOut: new Date(),
+        attendanceSource: 'OFFSITE_UNPLANNED',
+        reviewStatus: 'PENDING_REVIEW',
+      } as any);
+
+      const result = await service.clockOutOffsite(userId, offsiteClockOutDto);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            checkOutLatitude: offsiteClockOutDto.latitude,
+            checkOutLongitude: offsiteClockOutDto.longitude,
+            checkOutAccuracyMeters: offsiteClockOutDto.accuracy,
+          }),
+        }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('throws NotFoundException when no clock-in record exists', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+
+      await expect(service.clockOutOffsite(userId, offsiteClockOutDto)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ConflictException when already clocked out', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...openOffsiteRecord,
+        checkOut: new Date(),
+      } as any);
+
+      await expect(service.clockOutOffsite(userId, offsiteClockOutDto)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws BadRequestException when existing record is COMPANY_GEOFENCE', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockOpenRecord,
+        attendanceSource: 'COMPANY_GEOFENCE',
+      } as any);
+
+      await expect(service.clockOutOffsite(userId, offsiteClockOutDto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when existing record has no attendanceSource (old ONSITE record)', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      // attendanceSource is undefined (old record, before migration)
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord } as any);
+
+      await expect(service.clockOutOffsite(userId, offsiteClockOutDto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('audit metadata does NOT contain raw latitude or longitude', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(openOffsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue({
+        ...mockAttendanceFull,
+        checkOut: new Date(),
+        attendanceSource: 'OFFSITE_UNPLANNED',
+      } as any);
+
+      await service.clockOutOffsite(userId, offsiteClockOutDto);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.action).toBe('ATTENDANCE_OFFSITE_CLOCK_OUT');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).toHaveProperty('hasCoordinates', true);
+      expect(event.metadata).toHaveProperty('accuracyBucket');
     });
   });
 });

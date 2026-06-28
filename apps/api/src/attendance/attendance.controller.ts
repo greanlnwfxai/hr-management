@@ -28,6 +28,8 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
+import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
 
@@ -66,6 +68,43 @@ export class AttendanceController {
     @Req() req: Request,
   ) {
     return this.attendance.clockOut(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
+  }
+
+  @Post('offsite/clock-in')
+  @ApiOperation({ summary: 'Off-site clock-in (GPS required, no company radius check)' })
+  @ApiResponse({ status: 201, description: 'Off-site attendance record created' })
+  @ApiResponse({ status: 409, description: 'Already clocked in today' })
+  @ApiResponse({ status: 422, description: 'GPS accuracy too poor (> 100 m)' })
+  offsiteClockIn(
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: OffsiteClockInDto,
+    @Req() req: Request,
+  ) {
+    return this.attendance.clockInOffsite(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
+  }
+
+  @Post('offsite/clock-out')
+  @ApiOperation({ summary: 'Off-site clock-out (GPS required)' })
+  @ApiResponse({ status: 201, description: 'Off-site clock-out recorded' })
+  @ApiResponse({ status: 400, description: 'Active clock-in is not an off-site record' })
+  @ApiResponse({ status: 404, description: 'No clock-in found for today' })
+  @ApiResponse({ status: 409, description: 'Already clocked out today' })
+  offsiteClockOut(
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: OffsiteClockOutDto,
+    @Req() req: Request,
+  ) {
+    return this.attendance.clockOutOffsite(user.id, dto, {
       actorUserId: user.id,
       actorRole: user.role,
       ipAddress: req?.ip ?? null,
