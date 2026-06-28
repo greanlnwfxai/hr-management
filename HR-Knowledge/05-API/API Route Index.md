@@ -91,11 +91,15 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 
 | Method | Path | Auth | Roles | Description |
 |---|---|---|---|---|
-| POST | /leave-balances | ✅ | SUPER_ADMIN, HR_ADMIN | Create balance |
+| POST | /leave-balances | ✅ | SUPER_ADMIN, HR_ADMIN | Create balance (non-VACATION types) |
 | GET | /leave-balances/my | ✅ | Any | Own balances (paginated) |
 | GET | /leave-balances | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | All balances (paginated) |
-| GET | /leave-balances/:id | ✅ | Any (owner, manager, admin) | Single balance |
-| PATCH | /leave-balances/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Update entitledDays or usedDays |
+| GET | /leave-balances/:id | ✅ | Any (owner, manager, admin) | Single balance (all types: includes `adjustmentDays`, `effectiveTotalDays`; 0 for non-VACATION) |
+| PATCH | /leave-balances/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Update entitledDays or usedDays — **VACATION type returns 400** |
+| POST | /leave-balances/:id/adjustments | ✅ | SUPER_ADMIN, HR_ADMIN | Append signed-delta correction to VACATION ledger |
+| GET | /leave-balances/:id/adjustments | ✅ | SUPER_ADMIN, HR_ADMIN | List all adjustments for a balance (paginated, newest-first) |
+| GET | /leave-balances/vacation-setup/suggest | ✅ | SUPER_ADMIN, HR_ADMIN | Get tenure data and policy suggestion for an employee/year |
+| POST | /leave-balances/vacation-setup | ✅ | SUPER_ADMIN, HR_ADMIN | Create VACATION balance with usedDays = entitledDays − remainingDays |
 
 ---
 

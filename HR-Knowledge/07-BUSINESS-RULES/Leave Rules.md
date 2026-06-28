@@ -41,6 +41,38 @@ Step 4 is atomic — partial state (balance deducted but status not updated, or 
 - A `LeaveBalance` record must be created by HR **before** the first approval can succeed for a given `(employeeId, leaveType, year)` combination
 - Balance is unique per `(employeeId, leaveType, year)`
 
+## Vacation Entitlement Policy
+
+VACATION leave entitlement is determined by completed years of service from `Employee.hireDate`. HR Admins use dedicated setup endpoints (not the generic `POST /leave-balances`) to create VACATION balances.
+
+### Tenure Tiers
+
+| Completed years of service | Entitled days |
+|---|---|
+| < 1 year | 0 (ineligible — no balance created) |
+| ≥ 1 and < 3 years | 7 |
+| ≥ 3 and < 5 years | 10 |
+| ≥ 5 and < 7 years | 12 |
+| ≥ 7 years | 15 |
+
+- Tenure source: `Employee.hireDate` (not `createdAt`)
+- Tenure method: calendar-based UTC year subtraction
+- No proration in v1
+
+### Adjustment Ledger Rules
+
+Post-setup corrections to VACATION entitlement must use the adjustment ledger, not `PATCH /leave-balances/:id` (which returns 400 for VACATION type).
+
+- `POST /leave-balances/:id/adjustments` — requires `deltaDays` (Float, signed, non-zero) and `reason` (min 5 chars)
+- Adjustment rejected (422) if it would produce negative remaining days
+- Each adjustment is immutable — no updates or deletes
+- Restricted to SUPER_ADMIN and HR_ADMIN
+- Audit event `LEAVE_BALANCE_ADJUSTED` fires on every successful adjustment
+
+Effective entitlement: `effectiveTotalDays = totalDays + SUM(adjustment.deltaDays)`
+
+See [[Vacation Leave Policy]] and [[ADR-026 Vacation Leave Entitlement and Adjustment Ledger]] for the full setup and correction workflow.
+
 ## Leave Types
 
 | Type | Description | Notes |
@@ -84,12 +116,14 @@ See [[ADR-023 Department Manager Leave Approval Scope]].
 
 ## Related ADRs
 
+- [[ADR-026 Vacation Leave Entitlement and Adjustment Ledger]]
 - [[ADR-011 Leave Workflow]]
 - [[ADR-006 RBAC]]
 - [[ADR-023 Department Manager Leave Approval Scope]]
 
 ## Related Notes
 
+- [[Vacation Leave Policy]]
 - [[Leave Request Module]]
 - [[Leave Balance Module]]
 - [[RBAC Rules]]

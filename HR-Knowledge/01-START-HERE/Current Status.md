@@ -1,25 +1,26 @@
 # Current Status
 
-Last updated: 2026-06-26
+Last updated: 2026-06-28
 
-## Current Product State — v1.2.26 ✅
+## Current Product State — v1.2.35 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.26-step-connect-icon-cache-bust` (latest commit `c51ec4e`), it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.35-vacation-entitlement-manual-setup` (latest commit `e2872b6`), it includes:
 
 - Stable NestJS API with username/email login
-- Web admin: profile/password change, employee account management, audit log review, off-site request management, department manager assignment
+- Web admin: profile/password change, employee account management, audit log review, off-site request management, department manager assignment, vacation balance setup
 - Mobile: attendance, leave, calendar, profile/password change, manager approval, off-site request, and fully refreshed v1.2.0 UI with summary cards
 - Forced `mustChangePassword` flow on web and mobile
 - Security harness scripts, security CI, Dependabot, and accepted-risk policy
-- **Full Audit Log Pack — complete**: append-only audit trail, 10 event types, RBAC-restricted read API, admin web UI, failed geofence rejection audit
+- **Full Audit Log Pack — complete**: append-only audit trail, 10+ event types, RBAC-restricted read API, admin web UI, failed geofence rejection audit
 - **Full Attendance Geofence Pack — complete**: backend-enforced mobile geofence, DB-backed admin config, admin web UI, rejected-attempt audit logging
 - **Off-site Work Request Workflow — complete**: employee self-service off-site request, admin/manager approval, OFFSITE clock-in bypass for approved dates
 - **Department Manager Scoping — complete**: MANAGER approve/reject scoped to managed department via `Department.managerId`
 - **STEP Connect PWA — complete**: Standalone PWA navigation, STEP Connect branding, icon cache-busting. Production-verified on iPhone.
+- **Vacation Leave Entitlement — complete**: Immutable adjustment ledger for VACATION balance corrections, policy-aware manual setup with tenure tiers, Admin Web UI modal
 
 ## ADR Pack
 
-25 Architecture Decision Records. See [[ADR Index]].
+26 Architecture Decision Records. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
 ADR-020 added: Attendance Geofence and Admin Configuration.
@@ -28,6 +29,7 @@ ADR-022 added: Off-site Work Request Workflow.
 ADR-023 added: Department Manager Leave Approval Scope.
 ADR-024 added: Mobile Employee Self-Service v1.2.0 UI Refresh.
 ADR-025 added: STEP Connect PWA Branding and Standalone Delivery.
+ADR-026 added: Vacation Leave Entitlement, Manual Setup, and Adjustment Ledger.
 
 ## Major Delivered Areas
 
@@ -36,12 +38,22 @@ ADR-025 added: STEP Connect PWA Branding and Standalone Delivery.
 | Core backend | Auth, employee, department, position, attendance, leave, leave balance, dashboard | T-005–T-023 | ✅ Done |
 | Username/account management | Username/email login, HR account provisioning, password reset, `GET /employees/:id/account` | T-050, T-055 | ✅ Done |
 | Mobile | Dashboard, attendance, leave request, manager approval, profile/password change, calendar, off-site request, v1.2.0 UI refresh | T-044–T-056A, T-071 | ✅ Done |
-| Web admin | Profile/password change, forced password change flow, employee detail account management, audit log review | T-053–T-055, T-057B-7 | ✅ Done |
+| Web admin | Profile/password change, forced password change flow, employee detail account management, audit log review, vacation balance setup modal | T-053–T-055, T-057B-7, REQ-001D | ✅ Done |
 | Security process | Security harness, accepted-risk policy, CI security job, Dependabot, agent workflow docs | T-052A.1, T-052A.3, T-052A.4 | ✅ Done |
-| Audit Log Pack | Prisma model, audit service, 10 event types, read API, admin web UI, Playwright e2e, rejected geofence audit | T-057B-1 through T-057B-7, T-065 | ✅ Done |
+| Audit Log Pack | Prisma model, audit service, 10+ event types, read API, admin web UI, Playwright e2e, rejected geofence audit | T-057B-1 through T-057B-7, T-065 | ✅ Done |
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
+| Vacation Leave Entitlement | Adjustment ledger, VACATION PATCH block, policy-aware setup endpoint, Admin Web UI modal | REQ-001A through REQ-001D | ✅ Done |
 
-Current documented API surface: **49 endpoints including `GET /health`** (v1.2.0 added 6 off-site endpoints).
+Current documented API surface: **53 endpoints including `GET /health`** (v1.2.35 added 4 vacation/adjustment endpoints).
+
+## Vacation Leave Entitlement Release Summary
+
+| Task | Tag | Commit | Scope |
+|---|---|---|---|
+| REQ-001A | `v1.2.32-vacation-balance-adjustment-spec` | — | Adjustment ledger specification |
+| REQ-001B | `v1.2.33-vacation-balance-adjustment-ledger` | — | LeaveAdjustment model, POST/GET /adjustments, VACATION PATCH block |
+| REQ-001C | `v1.2.34-vacation-entitlement-manual-setup-spec` | — | Vacation entitlement policy and manual setup specification |
+| REQ-001D | `v1.2.35-vacation-entitlement-manual-setup` | `e2872b6` | vacation-setup module, GET suggest, POST setup, Admin Web modal, 431 backend tests |
 
 ## STEP Connect PWA Release Summary
 
@@ -106,6 +118,8 @@ See [[Attendance Geofence]] for full architecture details.
 - Mobile geofence enforcement is backend-authoritative for ONSITE mode; the mobile app never decides attendance eligibility
 - OFFSITE clock-in bypasses the geofence radius check if an approved `OffSiteRequest` exists for the employee and today
 - MANAGER approve/reject (leave and off-site) is scoped to the department they manage via `Department.managerId`
+- VACATION leave balances must be created via `POST /leave-balances/vacation-setup`; direct `PATCH /leave-balances/:id` is blocked (400) for VACATION type
+- Post-setup corrections to VACATION entitlement must use the adjustment ledger (`POST /leave-balances/:id/adjustments`)
 
 ## Current Known Limitations
 
@@ -125,10 +139,13 @@ See [[Attendance Geofence]] for full architecture details.
 | 12 | Geofence | Single office location only; multi-office requires schema redesign | Future work |
 | 13 | Geofence | GPS spoofing undetectable without device integrity APIs (SafetyNet / DeviceCheck) | Future work |
 | 14 | Geofence | Rejected clock-in/out audit logging implemented in T-065; runtime verification and operational observation still recommended | Follow-up verification in T-067 |
+| 15 | Vacation | Adjustment ledger is VACATION-only in v1; other leave types still use PATCH | Extend ledger to other types when needed |
+| 16 | Vacation | No proration — employees crossing a tier mid-year receive full higher-tier entitlement | Proration policy deferred to v1.1 |
+| 17 | Vacation | MANAGER cannot read adjustment history (`GET /adjustments` restricted to SUPER_ADMIN/HR_ADMIN) | Future: department-scoped read access if required |
 
 ## Next Recommended Task
 
-**T-086 (TBD)** — Further feature development or STEP Connect PWA enhancements (e.g., service worker / offline support, notifications).
+**HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused). Further feature development or STEP Connect enhancements also possible.
 
 ## Security / Process Notes
 
@@ -147,9 +164,10 @@ See [[Attendance Geofence]] for full architecture details.
 - [[Audit Log Module]]
 - [[Attendance Geofence]]
 - [[Off-site Work Mode]]
+- [[Vacation Leave Policy]]
 - [[ADR Index]]
 - [[API Route Index]]
 - [[RBAC Rules]]
 - [[Production Geofence Readiness]]
 
-#hr-management #status #v1-2-0
+#hr-management #status #v1-2-35
