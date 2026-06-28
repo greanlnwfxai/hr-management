@@ -1362,4 +1362,384 @@ describe('AttendanceService', () => {
       expect(event.metadata).toHaveProperty('accuracyBucket');
     });
   });
+
+  // ── findOffsiteReview ──────────────────────────────────────────────────────
+
+  describe('findOffsiteReview', () => {
+    const mockOffsiteRecord = {
+      ...mockAttendanceFull,
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+      checkInLatitude: 13.9,
+    };
+
+    it('returns paginated off-site records with correct meta', async () => {
+      prisma.$transaction.mockResolvedValue([[mockOffsiteRecord], 3] as any);
+
+      const result = await service.findOffsiteReview({ page: 1, limit: 20 });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.meta).toMatchObject({ total: 3, page: 1, limit: 20, totalPages: 1 });
+    });
+
+    it('passes reviewStatus filter when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0] as any);
+
+      await service.findOffsiteReview({ reviewStatus: AttendanceReviewStatus.APPROVED });
+
+      expect(prisma.attendance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            reviewStatus: AttendanceReviewStatus.APPROVED,
+          }),
+        }),
+      );
+    });
+
+    it('applies employeeId filter when provided', async () => {
+      prisma.$transaction.mockResolvedValue([[mockOffsiteRecord], 1] as any);
+
+      const result = await service.findOffsiteReview({ employeeId });
+
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('returns empty data with zero total when no records match', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0] as any);
+
+      const result = await service.findOffsiteReview({});
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta.total).toBe(0);
+      expect(result.meta.totalPages).toBe(0);
+    });
+
+    it('always filters to OFFSITE_UNPLANNED and OFFSITE_PLANNED sources (never leaks COMPANY_GEOFENCE)', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0] as any);
+
+      await service.findOffsiteReview({});
+
+      expect(prisma.attendance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            attendanceSource: expect.objectContaining({
+              in: expect.arrayContaining([
+                AttendanceSource.OFFSITE_UNPLANNED,
+                AttendanceSource.OFFSITE_PLANNED,
+              ]),
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  // ── approveOffsiteAttendance ───────────────────────────────────────────────
+
+  describe('approveOffsiteAttendance', () => {
+    const ctx = {
+      actorUserId: 'admin-uuid-1',
+      actorRole: 'SUPER_ADMIN',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    const pendingRecord = {
+      ...mockAttendanceFull,
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+      checkInLatitude: 13.9,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    const approvedRecord = {
+      ...pendingRecord,
+      reviewStatus: 'APPROVED',
+      reviewedAt: new Date(),
+    };
+
+    it('throws NotFoundException when record does not exist', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(null);
+
+      await expect(service.approveOffsiteAttendance('missing-id', userId, {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException when record is a COMPANY_GEOFENCE record', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'COMPANY_GEOFENCE',
+        reviewStatus: 'PENDING_REVIEW',
+      } as any);
+
+      await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record has no attendanceSource', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: null,
+        reviewStatus: 'PENDING_REVIEW',
+      } as any);
+
+      await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record is AUTO_ACCEPTED (not reviewable)', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'OFFSITE_PLANNED',
+        reviewStatus: 'AUTO_ACCEPTED',
+      } as any);
+
+      await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record is already APPROVED', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        reviewStatus: 'APPROVED',
+      } as any);
+
+      await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record is already REJECTED', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        reviewStatus: 'REJECTED',
+      } as any);
+
+      await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('updates record to APPROVED status', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      const result = await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: attendanceId },
+          data: expect.objectContaining({ reviewStatus: AttendanceReviewStatus.APPROVED }),
+        }),
+      );
+      expect(result).toMatchObject({ id: attendanceId });
+    });
+
+    it('sets reviewedById when reviewer has an employee profile', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewedById: 'reviewer-emp-id' }),
+        }),
+      );
+    });
+
+    it('omits reviewedById when reviewer has no employee profile', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({ reviewedById: expect.anything() }),
+        }),
+      );
+    });
+
+    it('sets reviewNote when provided', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue({ ...approvedRecord, reviewNote: 'Confirmed' } as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, { reviewNote: 'Confirmed' }, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewNote: 'Confirmed' }),
+        }),
+      );
+    });
+
+    it('records ATTENDANCE_OFFSITE_APPROVED audit event', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_OFFSITE_APPROVED',
+          targetType: 'ATTENDANCE',
+          targetId: attendanceId,
+          result: 'SUCCESS',
+          actorUserId: ctx.actorUserId,
+          actorRole: ctx.actorRole,
+        }),
+      );
+    });
+
+    it('audit metadata contains no raw GPS coordinates', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('checkInLatitude');
+      expect(event.metadata).not.toHaveProperty('checkInLongitude');
+      expect(event.metadata).toHaveProperty('hasCoordinates');
+    });
+
+    it('still approves and returns result when audit write fails (best-effort)', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(result).toBeDefined();
+    });
+  });
+
+  // ── rejectOffsiteAttendance ────────────────────────────────────────────────
+
+  describe('rejectOffsiteAttendance', () => {
+    const ctx = {
+      actorUserId: 'admin-uuid-1',
+      actorRole: 'HR_ADMIN',
+      ipAddress: '10.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    const pendingRecord = {
+      ...mockAttendanceFull,
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+      checkInLatitude: 13.9,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    const rejectedRecord = {
+      ...pendingRecord,
+      reviewStatus: 'REJECTED',
+      reviewedAt: new Date(),
+      reviewNote: 'No documentation',
+    };
+
+    it('throws NotFoundException when record does not exist', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(null);
+
+      await expect(service.rejectOffsiteAttendance('missing-id', userId, {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws BadRequestException when record is a COMPANY_GEOFENCE record', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'COMPANY_GEOFENCE',
+        reviewStatus: 'PENDING_REVIEW',
+      } as any);
+
+      await expect(service.rejectOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record is AUTO_ACCEPTED', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockAttendanceFull,
+        attendanceSource: 'OFFSITE_PLANNED',
+        reviewStatus: 'AUTO_ACCEPTED',
+      } as any);
+
+      await expect(service.rejectOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException when record is already REJECTED', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        reviewStatus: 'REJECTED',
+      } as any);
+
+      await expect(service.rejectOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('updates record to REJECTED status', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      const result = await service.rejectOffsiteAttendance(attendanceId, userId, { reviewNote: 'No documentation' }, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: attendanceId },
+          data: expect.objectContaining({
+            reviewStatus: AttendanceReviewStatus.REJECTED,
+            reviewNote: 'No documentation',
+          }),
+        }),
+      );
+      expect(result).toMatchObject({ id: attendanceId });
+    });
+
+    it('records ATTENDANCE_OFFSITE_REJECTED audit event', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      await service.rejectOffsiteAttendance(attendanceId, userId, { reviewNote: 'Reason' }, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_OFFSITE_REJECTED',
+          targetType: 'ATTENDANCE',
+          targetId: attendanceId,
+          result: 'SUCCESS',
+        }),
+      );
+    });
+
+    it('audit metadata contains no raw GPS coordinates', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      await service.rejectOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('checkInLatitude');
+      expect(event.metadata).not.toHaveProperty('checkInLongitude');
+      expect(event.metadata).toHaveProperty('hasCoordinates');
+    });
+
+    it('still rejects and returns result when audit write fails (best-effort)', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.rejectOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(result).toBeDefined();
+    });
+  });
 });

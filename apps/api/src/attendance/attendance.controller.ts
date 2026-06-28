@@ -32,6 +32,9 @@ import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
 import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
+import { ApproveOffsiteDto } from './dto/approve-offsite.dto';
+import { RejectOffsiteDto } from './dto/reject-offsite.dto';
+import { QueryOffsiteReviewDto } from './dto/query-offsite-review.dto';
 
 @ApiTags('Attendance')
 @ApiBearerAuth()
@@ -163,6 +166,59 @@ export class AttendanceController {
   @ApiForbiddenResponse({ description: 'Insufficient role' })
   findAll(@Query() query: QueryAttendanceDto) {
     return this.attendance.findAll(query);
+  }
+
+  @Get('offsite-review')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'List off-site attendance records for review (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Paginated off-site attendance list' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  findOffsiteReview(@Query() query: QueryOffsiteReviewDto) {
+    return this.attendance.findOffsiteReview(query);
+  }
+
+  @Patch('offsite-review/:id/approve')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Approve a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Attendance UUID' })
+  @ApiResponse({ status: 200, description: 'Attendance record approved' })
+  @ApiResponse({ status: 400, description: 'Record is not off-site or not PENDING_REVIEW' })
+  @ApiResponse({ status: 404, description: 'Attendance record not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  approveOffsiteRecord(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveOffsiteDto,
+    @CurrentUser() user: { id: string; role: string },
+    @Req() req: Request,
+  ) {
+    return this.attendance.approveOffsiteAttendance(id, user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
+  }
+
+  @Patch('offsite-review/:id/reject')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Reject a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Attendance UUID' })
+  @ApiResponse({ status: 200, description: 'Attendance record rejected' })
+  @ApiResponse({ status: 400, description: 'Record is not off-site or not PENDING_REVIEW' })
+  @ApiResponse({ status: 404, description: 'Attendance record not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  rejectOffsiteRecord(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectOffsiteDto,
+    @CurrentUser() user: { id: string; role: string },
+    @Req() req: Request,
+  ) {
+    return this.attendance.rejectOffsiteAttendance(id, user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
   }
 
   @Get(':id')

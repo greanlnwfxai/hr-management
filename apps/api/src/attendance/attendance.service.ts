@@ -31,6 +31,9 @@ import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
 import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
 import { QueryAttendanceDto } from './dto/query-attendance.dto';
+import { ApproveOffsiteDto } from './dto/approve-offsite.dto';
+import { RejectOffsiteDto } from './dto/reject-offsite.dto';
+import { QueryOffsiteReviewDto } from './dto/query-offsite-review.dto';
 import { GeofenceConfigService } from './geofence-config.service';
 import { GeofenceService } from './geofence.service';
 
@@ -541,6 +544,172 @@ export class AttendanceService {
       updatedAt: row.updatedAt,
       source: 'db' as const,
     };
+  }
+
+  async findOffsiteReview(query: QueryOffsiteReviewDto) {
+    const { page = 1, limit = 20, startDate, endDate, employeeId, reviewStatus } = query;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.AttendanceWhereInput = {
+      attendanceSource: {
+        in: [
+          AttendanceSource.OFFSITE_UNPLANNED,
+          AttendanceSource.OFFSITE_PLANNED,
+        ] as unknown as PrismaAttendanceSource[],
+      },
+      ...(reviewStatus && { reviewStatus: reviewStatus as unknown as PrismaAttendanceReviewStatus }),
+      ...(employeeId && { employeeId }),
+      ...this.buildDateFilter(startDate, endDate),
+    };
+
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.attendance.findMany({
+        where,
+        skip,
+        take: limit,
+        select: ATTENDANCE_SELECT,
+        orderBy: { date: 'desc' },
+      }),
+      this.prisma.attendance.count({ where }),
+    ]);
+
+    return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async approveOffsiteAttendance(
+    id: string,
+    userId: string,
+    dto: ApproveOffsiteDto,
+    ctx?: AttendanceAuditContext,
+  ) {
+    const record = await this.prisma.attendance.findUnique({
+      where: { id },
+      select: ATTENDANCE_SELECT,
+    });
+    if (!record) throw new NotFoundException(`Attendance ${id} not found`);
+
+    const src = (record as any).attendanceSource as string | null;
+    if (!src || src === AttendanceSource.COMPANY_GEOFENCE) {
+      throw new BadRequestException(
+        'This attendance record is not an off-site record and cannot be reviewed.',
+      );
+    }
+
+    const revStatus = (record as any).reviewStatus as string | null;
+    if (revStatus !== AttendanceReviewStatus.PENDING_REVIEW) {
+      throw new BadRequestException(
+        `Only PENDING_REVIEW records can be approved. Current status: ${revStatus ?? 'none'}.`,
+      );
+    }
+
+    const reviewerEmp = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const result = await this.prisma.attendance.update({
+      where: { id },
+      data: {
+        reviewStatus: AttendanceReviewStatus.APPROVED as unknown as PrismaAttendanceReviewStatus,
+        reviewedAt: new Date(),
+        ...(reviewerEmp && { reviewedById: reviewerEmp.id }),
+        ...(dto.reviewNote !== undefined && { reviewNote: dto.reviewNote }),
+      },
+      select: ATTENDANCE_SELECT,
+    });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_OFFSITE_APPROVED',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: id,
+        employeeId: record.employee.id,
+        date: record.date,
+        attendanceSource: src,
+        previousReviewStatus: revStatus,
+        newReviewStatus: AttendanceReviewStatus.APPROVED,
+        hasReviewNote: !!dto.reviewNote,
+        hasReviewedByEmployee: reviewerEmp !== null,
+        hasCoordinates: !!(record as any).checkInLatitude,
+      },
+    });
+
+    return result;
+  }
+
+  async rejectOffsiteAttendance(
+    id: string,
+    userId: string,
+    dto: RejectOffsiteDto,
+    ctx?: AttendanceAuditContext,
+  ) {
+    const record = await this.prisma.attendance.findUnique({
+      where: { id },
+      select: ATTENDANCE_SELECT,
+    });
+    if (!record) throw new NotFoundException(`Attendance ${id} not found`);
+
+    const src = (record as any).attendanceSource as string | null;
+    if (!src || src === AttendanceSource.COMPANY_GEOFENCE) {
+      throw new BadRequestException(
+        'This attendance record is not an off-site record and cannot be reviewed.',
+      );
+    }
+
+    const revStatus = (record as any).reviewStatus as string | null;
+    if (revStatus !== AttendanceReviewStatus.PENDING_REVIEW) {
+      throw new BadRequestException(
+        `Only PENDING_REVIEW records can be rejected. Current status: ${revStatus ?? 'none'}.`,
+      );
+    }
+
+    const reviewerEmp = await this.prisma.employee.findFirst({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const result = await this.prisma.attendance.update({
+      where: { id },
+      data: {
+        reviewStatus: AttendanceReviewStatus.REJECTED as unknown as PrismaAttendanceReviewStatus,
+        reviewedAt: new Date(),
+        ...(reviewerEmp && { reviewedById: reviewerEmp.id }),
+        ...(dto.reviewNote !== undefined && { reviewNote: dto.reviewNote }),
+      },
+      select: ATTENDANCE_SELECT,
+    });
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_OFFSITE_REJECTED',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: id,
+        employeeId: record.employee.id,
+        date: record.date,
+        attendanceSource: src,
+        previousReviewStatus: revStatus,
+        newReviewStatus: AttendanceReviewStatus.REJECTED,
+        hasReviewNote: !!dto.reviewNote,
+        hasReviewedByEmployee: reviewerEmp !== null,
+        hasCoordinates: !!(record as any).checkInLatitude,
+      },
+    });
+
+    return result;
   }
 
   // Geofence validation — only applied when source='mobile'.

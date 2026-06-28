@@ -16,6 +16,9 @@ describe('AttendanceController', () => {
     findOne: jest.Mock;
     getGeofenceConfig: jest.Mock;
     updateGeofenceConfig: jest.Mock;
+    findOffsiteReview: jest.Mock;
+    approveOffsiteAttendance: jest.Mock;
+    rejectOffsiteAttendance: jest.Mock;
   };
 
   const mockUser = { id: 'user-uuid-1', role: 'EMPLOYEE' };
@@ -40,6 +43,9 @@ describe('AttendanceController', () => {
       findOne: jest.fn().mockResolvedValue(mockRecord),
       getGeofenceConfig: jest.fn().mockResolvedValue(mockGeofenceConfig),
       updateGeofenceConfig: jest.fn().mockResolvedValue({ ...mockGeofenceConfig, radiusMeters: 200 }),
+      findOffsiteReview: jest.fn().mockResolvedValue(mockPaginated),
+      approveOffsiteAttendance: jest.fn().mockResolvedValue({ ...mockRecord, reviewStatus: 'APPROVED' }),
+      rejectOffsiteAttendance: jest.fn().mockResolvedValue({ ...mockRecord, reviewStatus: 'REJECTED' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -124,6 +130,40 @@ describe('AttendanceController', () => {
     expect(result).toMatchObject({ radiusMeters: 200 });
   });
 
+  it('findOffsiteReview delegates to service with query', async () => {
+    const query = { page: 1, limit: 20 } as any;
+    const result = await controller.findOffsiteReview(query);
+
+    expect(service.findOffsiteReview).toHaveBeenCalledWith(query);
+    expect(result).toEqual(mockPaginated);
+  });
+
+  it('approveOffsiteRecord delegates to service with id, user.id, dto, and audit context', async () => {
+    const dto = { reviewNote: 'Confirmed' } as any;
+    const result = await controller.approveOffsiteRecord('att-uuid-1', dto, mockAdminUser as any, undefined as any);
+
+    expect(service.approveOffsiteAttendance).toHaveBeenCalledWith('att-uuid-1', mockAdminUser.id, dto, {
+      actorUserId: mockAdminUser.id,
+      actorRole: mockAdminUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
+    expect(result).toMatchObject({ reviewStatus: 'APPROVED' });
+  });
+
+  it('rejectOffsiteRecord delegates to service with id, user.id, dto, and audit context', async () => {
+    const dto = { reviewNote: 'No documentation' } as any;
+    const result = await controller.rejectOffsiteRecord('att-uuid-1', dto, mockAdminUser as any, undefined as any);
+
+    expect(service.rejectOffsiteAttendance).toHaveBeenCalledWith('att-uuid-1', mockAdminUser.id, dto, {
+      actorUserId: mockAdminUser.id,
+      actorRole: mockAdminUser.role,
+      ipAddress: null,
+      userAgent: null,
+    });
+    expect(result).toMatchObject({ reviewStatus: 'REJECTED' });
+  });
+
   describe('RBAC metadata — @Roles decorator', () => {
     it('getGeofenceConfig is restricted to SUPER_ADMIN and HR_ADMIN', () => {
       const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.getGeofenceConfig);
@@ -143,6 +183,21 @@ describe('AttendanceController', () => {
     it('findMy has no role restriction (any authenticated user)', () => {
       const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.findMy);
       expect(roles).toBeUndefined();
+    });
+
+    it('findOffsiteReview is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.findOffsiteReview);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+    });
+
+    it('approveOffsiteRecord is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.approveOffsiteRecord);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+    });
+
+    it('rejectOffsiteRecord is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+      const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.rejectOffsiteRecord);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
     });
   });
 });
