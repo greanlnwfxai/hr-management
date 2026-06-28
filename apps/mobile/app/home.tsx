@@ -468,8 +468,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Outside geofence: not yet checked in ── */}
-        {!hasActiveOffsiteCheckIn && isOutside && !alreadyClockedIn && (
+        {/* ── Outside geofence or GPS unavailable: show off-site option ── */}
+        {!hasActiveOffsiteCheckIn && !alreadyClockedIn && (isOutside || geofenceZone === 'gps_unavailable') && (
           <View style={styles.heroActionRow}>
             {isOffSiteApproved ? (
               <View style={[styles.offsiteBanner, styles.offsiteBannerGreen]}>
@@ -502,7 +502,7 @@ export default function HomeScreen() {
         )}
 
         {/* ── Normal on-site clock-in / clock-out buttons ── */}
-        {!hasActiveOffsiteCheckIn && (!isOutside || alreadyClockedIn) && (
+        {!hasActiveOffsiteCheckIn && (geofenceZone !== 'outside' || alreadyClockedIn) && (
           <View style={styles.heroActionRow}>
             <Pressable
               style={({ pressed }) => [
