@@ -15,9 +15,7 @@ import { useAuth } from '../src/auth/useAuth';
 import { useDashboard } from '../src/hooks/useDashboard';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useHomeSummaries } from '../src/hooks/useHomeSummaries';
-import { useDeviceLocation } from '../src/hooks/useDeviceLocation';
 import { getGeofenceLocation, getTodayOffSiteStatus } from '../src/api/client';
-import { haversineMeters } from '../src/utils/haversine';
 import { roleLabel } from '../src/utils/roles';
 import { GeofenceMapModal, MobileBottomNav } from '../src/components';
 import type { ClockAction } from '../src/components/GeofenceMapModal';
@@ -200,7 +198,7 @@ function formatDays(value: number): string {
 }
 
 // Geofence location state for the home screen
-type GeofenceZone = 'loading' | 'inside' | 'outside' | 'gps_unavailable' | 'unconfigured';
+type GeofenceZone = 'loading' | 'configured' | 'unconfigured';
 
 import type { AttendanceReviewStatus } from '../src/api/types';
 
@@ -246,8 +244,6 @@ export default function HomeScreen() {
     monthAttendance,
     refresh: summaryRefresh,
   } = useHomeSummaries();
-  const { getLocation } = useDeviceLocation();
-
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [mapModalAction, setMapModalAction] = useState<ClockAction>('in');
   const [geofenceZone, setGeofenceZone] = useState<GeofenceZone>('loading');
@@ -263,41 +259,25 @@ export default function HomeScreen() {
     if (!isLoading && !isAuthenticated) router.replace('/login');
   }, [isLoading, isAuthenticated]);
 
-  // Geofence detection — runs once after token is available
+  // Geofence config check — runs once after token is available
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
 
-    async function detectZone() {
-      try {
-        const [config, loc] = await Promise.all([
-          getGeofenceLocation(token!),
-          getLocation().catch(() => null),
-        ]);
-
-        if (cancelled) return;
-
-        if (!config.enabled || config.latitude === null || config.longitude === null) {
-          setGeofenceZone('unconfigured');
-          return;
-        }
-        if (!loc) {
-          setGeofenceZone('gps_unavailable');
-          return;
-        }
-
-        const dist = haversineMeters(config.latitude, config.longitude, loc.latitude, loc.longitude);
-        if (!mountedRef.current) return;
-        setGeofenceZone(dist <= config.radiusMeters ? 'inside' : 'outside');
-      } catch {
+    getGeofenceLocation(token)
+      .then((config) => {
+        if (cancelled || !mountedRef.current) return;
+        setGeofenceZone(
+          config.enabled && config.latitude !== null && config.longitude !== null
+            ? 'configured'
+            : 'unconfigured',
+        );
+      })
+      .catch(() => {
         if (!cancelled && mountedRef.current) setGeofenceZone('unconfigured');
-      }
-    }
+      });
 
-    void detectZone();
-
-    // Also fetch today's off-site pre-approval
-    getTodayOffSiteStatus(token!)
+    getTodayOffSiteStatus(token)
       .then((rec) => { if (!cancelled && mountedRef.current) setTodayOffSite(rec); })
       .catch(() => { /* non-critical */ });
 
@@ -325,7 +305,6 @@ export default function HomeScreen() {
   const outDisabled = forced || !displayUser || !token || inBusy  || outBusy || !alreadyClockedIn || alreadyClockedOut;
 
   // Off-site derived state
-  const isOutside = geofenceZone === 'outside';
   const hasActiveOffsiteCheckIn = today?.workMode === 'OFFSITE' && Boolean(today?.checkIn) && !today?.checkOut;
   const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
   const employeeName = profile?.employee
@@ -468,8 +447,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Outside geofence or GPS unavailable: show off-site option ── */}
-        {!hasActiveOffsiteCheckIn && !alreadyClockedIn && (isOutside || geofenceZone === 'gps_unavailable') && (
+        {/* ── Geofence configured and not yet clocked in: show off-site option ── */}
+        {!hasActiveOffsiteCheckIn && !alreadyClockedIn && geofenceZone === 'configured' && (
           <View style={styles.heroActionRow}>
             {isOffSiteApproved ? (
               <View style={[styles.offsiteBanner, styles.offsiteBannerGreen]}>
@@ -502,7 +481,7 @@ export default function HomeScreen() {
         )}
 
         {/* ── Normal on-site clock-in / clock-out buttons ── */}
-        {!hasActiveOffsiteCheckIn && (geofenceZone !== 'outside' || alreadyClockedIn) && (
+        {!hasActiveOffsiteCheckIn && (
           <View style={styles.heroActionRow}>
             <Pressable
               style={({ pressed }) => [
