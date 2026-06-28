@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,9 +15,13 @@ import { useAuth } from '../src/auth/useAuth';
 import { useDashboard } from '../src/hooks/useDashboard';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useHomeSummaries } from '../src/hooks/useHomeSummaries';
+import { useDeviceLocation } from '../src/hooks/useDeviceLocation';
+import { getGeofenceLocation, getTodayOffSiteStatus } from '../src/api/client';
+import { haversineMeters } from '../src/utils/haversine';
 import { roleLabel } from '../src/utils/roles';
 import { GeofenceMapModal, MobileBottomNav } from '../src/components';
 import type { ClockAction } from '../src/components/GeofenceMapModal';
+import type { OffSiteRequestRecord } from '../src/api/types';
 
 const THAI_DAY_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
@@ -195,6 +199,31 @@ function formatDays(value: number): string {
   return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
 }
 
+// Geofence location state for the home screen
+type GeofenceZone = 'loading' | 'inside' | 'outside' | 'gps_unavailable' | 'unconfigured';
+
+import type { AttendanceReviewStatus } from '../src/api/types';
+
+function reviewStatusLabel(status: AttendanceReviewStatus): string {
+  switch (status) {
+    case 'AUTO_ACCEPTED': return 'อนุมัติแล้ว (ตามคำขอ)';
+    case 'PENDING_REVIEW': return 'รอ HR ตรวจสอบ';
+    case 'APPROVED': return 'อนุมัติแล้ว';
+    case 'REJECTED': return 'ไม่อนุมัติ';
+    case 'MISSING_CHECKOUT': return 'ไม่ได้ลงเวลาออก';
+  }
+}
+
+function reviewStatusColor(status: AttendanceReviewStatus): string {
+  switch (status) {
+    case 'AUTO_ACCEPTED': return '#16a34a';
+    case 'PENDING_REVIEW': return '#d97706';
+    case 'APPROVED': return '#16a34a';
+    case 'REJECTED': return '#dc2626';
+    case 'MISSING_CHECKOUT': return '#ea580c';
+  }
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { token, user, isAuthenticated, isLoading, signOut } = useAuth();
@@ -217,13 +246,63 @@ export default function HomeScreen() {
     monthAttendance,
     refresh: summaryRefresh,
   } = useHomeSummaries();
+  const { getLocation } = useDeviceLocation();
 
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [mapModalAction, setMapModalAction] = useState<ClockAction>('in');
+  const [geofenceZone, setGeofenceZone] = useState<GeofenceZone>('loading');
+  const [todayOffSite, setTodayOffSite] = useState<OffSiteRequestRecord | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.replace('/login');
   }, [isLoading, isAuthenticated]);
+
+  // Geofence detection — runs once after token is available
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    async function detectZone() {
+      try {
+        const [config, loc] = await Promise.all([
+          getGeofenceLocation(token!),
+          getLocation().catch(() => null),
+        ]);
+
+        if (cancelled) return;
+
+        if (!config.enabled || config.latitude === null || config.longitude === null) {
+          setGeofenceZone('unconfigured');
+          return;
+        }
+        if (!loc) {
+          setGeofenceZone('gps_unavailable');
+          return;
+        }
+
+        const dist = haversineMeters(config.latitude, config.longitude, loc.latitude, loc.longitude);
+        if (!mountedRef.current) return;
+        setGeofenceZone(dist <= config.radiusMeters ? 'inside' : 'outside');
+      } catch {
+        if (!cancelled && mountedRef.current) setGeofenceZone('unconfigured');
+      }
+    }
+
+    void detectZone();
+
+    // Also fetch today's off-site pre-approval
+    getTodayOffSiteStatus(token!)
+      .then((rec) => { if (!cancelled && mountedRef.current) setTodayOffSite(rec); })
+      .catch(() => { /* non-critical */ });
+
+    return () => { cancelled = true; };
+  }, [token]);
 
   const handleLogout = async () => {
     await signOut();
@@ -244,6 +323,11 @@ export default function HomeScreen() {
   const alreadyClockedOut = Boolean(today?.checkOut);
   const inDisabled  = forced || !displayUser || !token || inBusy  || outBusy || alreadyClockedIn;
   const outDisabled = forced || !displayUser || !token || inBusy  || outBusy || !alreadyClockedIn || alreadyClockedOut;
+
+  // Off-site derived state
+  const isOutside = geofenceZone === 'outside';
+  const hasActiveOffsiteCheckIn = today?.workMode === 'OFFSITE' && Boolean(today?.checkIn) && !today?.checkOut;
+  const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
   const employeeName = profile?.employee
     ? `${profile.employee.firstName} ${profile.employee.lastName}`
     : null;
@@ -352,48 +436,116 @@ export default function HomeScreen() {
           </View>
         )}
 
-        <View style={styles.heroActionRow}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.heroCheckInBtn,
-              inDisabled && styles.heroActionDisabled,
-              pressed && !inDisabled && { opacity: 0.85 },
-            ]}
-            onPress={() => { if (!inDisabled) { setMapModalAction('in'); setMapModalVisible(true); } }}
-            disabled={inDisabled}
-            accessibilityRole="button"
-            accessibilityLabel="เช็คอิน"
-          >
-            {inBusy ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+        {/* ── Outside geofence: active off-site checkout card ── */}
+        {hasActiveOffsiteCheckIn && (
+          <View style={styles.offsiteActiveCard}>
+            <View style={styles.offsiteActiveCardRow}>
+              <View style={[styles.workModeBadge]}>
+                <Text style={styles.workModeBadgeText}>นอกสถานที่</Text>
+              </View>
+              {today?.reviewStatus && (
+                <View style={[styles.reviewBadge, { backgroundColor: reviewStatusColor(today.reviewStatus) + '20' }]}>
+                  <Text style={[styles.reviewBadgeText, { color: reviewStatusColor(today.reviewStatus) }]}>
+                    {reviewStatusLabel(today.reviewStatus)}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {today?.workLocationName ? (
+              <Text style={styles.offsiteActiveLocation}>📍 {today.workLocationName}</Text>
+            ) : null}
+            <Pressable
+              style={({ pressed }) => [
+                styles.offsiteCheckoutBtn,
+                pressed && { opacity: 0.85 },
+              ]}
+              onPress={() => router.push('/offsite-checkout')}
+              accessibilityRole="button"
+              accessibilityLabel="ลงเวลาออก (นอกสถานที่)"
+            >
+              <Text style={styles.offsiteCheckoutBtnText}>📍 ลงเวลาออก (นอกสถานที่)</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Outside geofence: not yet checked in ── */}
+        {!hasActiveOffsiteCheckIn && isOutside && !alreadyClockedIn && (
+          <View style={styles.heroActionRow}>
+            {isOffSiteApproved ? (
+              <View style={[styles.offsiteBanner, styles.offsiteBannerGreen]}>
+                <Text style={[styles.offsiteBannerText, styles.offsiteBannerTextGreen]}>
+                  ✓ มีคำขออนุมัติสำหรับวันนี้
+                </Text>
+              </View>
             ) : (
-              <Text style={styles.heroActionIcon}>▶</Text>
+              <View style={[styles.offsiteBanner, styles.offsiteBannerAmber]}>
+                <Text style={[styles.offsiteBannerText, styles.offsiteBannerTextAmber]}>
+                  บันทึกนี้จะถูกส่งให้ HR ตรวจสอบ
+                </Text>
+              </View>
             )}
-            <Text style={styles.heroActionBtnText}>
-              {alreadyClockedIn ? 'เช็คอินแล้ว' : 'เช็คอิน'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.heroCheckOutBtn,
-              outDisabled && styles.heroActionDisabled,
-              pressed && !outDisabled && { opacity: 0.85 },
-            ]}
-            onPress={() => { if (!outDisabled) { setMapModalAction('out'); setMapModalVisible(true); } }}
-            disabled={outDisabled}
-            accessibilityRole="button"
-            accessibilityLabel="เช็คเอาท์"
-          >
-            {outBusy ? (
-              <ActivityIndicator size="small" color="#ffffff" />
-            ) : (
-              <Text style={styles.heroActionIcon}>◀</Text>
-            )}
-            <Text style={styles.heroActionBtnText}>
-              {alreadyClockedOut ? 'เช็คเอาท์แล้ว' : 'เช็คเอาท์'}
-            </Text>
-          </Pressable>
-        </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.offsiteCheckinBtn,
+                forced && styles.heroActionDisabled,
+                pressed && !forced && { opacity: 0.85 },
+              ]}
+              onPress={() => { if (!forced) router.push('/offsite-checkin'); }}
+              disabled={forced}
+              accessibilityRole="button"
+              accessibilityLabel="ลงเวลาเข้า (นอกสถานที่)"
+            >
+              <Text style={styles.heroActionIcon}>📍</Text>
+              <Text style={styles.heroActionBtnText}>ลงเวลาเข้า (นอกสถานที่)</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Normal on-site clock-in / clock-out buttons ── */}
+        {!hasActiveOffsiteCheckIn && (!isOutside || alreadyClockedIn) && (
+          <View style={styles.heroActionRow}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.heroCheckInBtn,
+                inDisabled && styles.heroActionDisabled,
+                pressed && !inDisabled && { opacity: 0.85 },
+              ]}
+              onPress={() => { if (!inDisabled) { setMapModalAction('in'); setMapModalVisible(true); } }}
+              disabled={inDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="เช็คอิน"
+            >
+              {inBusy ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.heroActionIcon}>▶</Text>
+              )}
+              <Text style={styles.heroActionBtnText}>
+                {alreadyClockedIn ? 'เช็คอินแล้ว' : 'เช็คอิน'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.heroCheckOutBtn,
+                outDisabled && styles.heroActionDisabled,
+                pressed && !outDisabled && { opacity: 0.85 },
+              ]}
+              onPress={() => { if (!outDisabled) { setMapModalAction('out'); setMapModalVisible(true); } }}
+              disabled={outDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="เช็คเอาท์"
+            >
+              {outBusy ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.heroActionIcon}>◀</Text>
+              )}
+              <Text style={styles.heroActionBtnText}>
+                {alreadyClockedOut ? 'เช็คเอาท์แล้ว' : 'เช็คเอาท์'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {clockActionError ? (
           <View style={styles.heroFeedbackError}>
@@ -807,4 +959,69 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   pressed: { opacity: 0.8 },
+
+  // Off-site active card (shown when today.workMode === 'OFFSITE' and no checkout)
+  offsiteActiveCard: {
+    backgroundColor: 'rgba(13,148,136,0.15)',
+    borderRadius: 12,
+    padding: 14,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(13,148,136,0.35)',
+  },
+  offsiteActiveCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  offsiteActiveLocation: { fontSize: 13, color: '#ccfbf1', lineHeight: 18 },
+  offsiteCheckoutBtn: {
+    backgroundColor: '#0d9488',
+    borderRadius: 10,
+    paddingVertical: 11,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  offsiteCheckoutBtnText: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
+
+  // Off-site checkin button (outside geofence, not clocked in)
+  offsiteCheckinBtn: {
+    width: '100%',
+    backgroundColor: '#0d9488',
+    borderRadius: 100,
+    paddingVertical: 13,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#0d9488',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+
+  // Outside geofence info banners (inside heroActionRow)
+  offsiteBanner: {
+    width: '100%',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  offsiteBannerGreen: { backgroundColor: 'rgba(22,163,74,0.15)', borderColor: 'rgba(22,163,74,0.35)' },
+  offsiteBannerAmber: { backgroundColor: 'rgba(217,119,6,0.15)', borderColor: 'rgba(217,119,6,0.35)' },
+  offsiteBannerText: { fontSize: 13, fontWeight: '600' },
+  offsiteBannerTextGreen: { color: '#86efac' },
+  offsiteBannerTextAmber: { color: '#fde68a' },
+
+  // Work mode + review status badges
+  workModeBadge: {
+    backgroundColor: 'rgba(13,148,136,0.25)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  workModeBadgeText: { fontSize: 11, fontWeight: '600', color: '#99f6e4' },
+  reviewBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  reviewBadgeText: { fontSize: 11, fontWeight: '600' },
 });

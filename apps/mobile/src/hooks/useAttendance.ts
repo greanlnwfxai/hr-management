@@ -103,20 +103,18 @@ export function useAttendance(): AttendanceState {
       return;
     }
 
-    const isOffSiteApproved = todayOffSite?.status === 'APPROVED';
     setClockInState('submitting');
     try {
       const result = await apiClockIn(token, {
         source: 'mobile',
         ...location,
-        ...(isOffSiteApproved && { workMode: 'OFFSITE' }),
       });
       setToday(prev =>
         prev
           ? { ...prev, checkIn: result.checkIn, status: result.status }
           : {
               ...result,
-              workMode: isOffSiteApproved ? 'OFFSITE' : 'ONSITE',
+              workMode: 'ONSITE',
               note: null,
               employee: { id: '', employeeCode: '', firstName: '', lastName: '' },
               createdAt: new Date().toISOString(),
@@ -134,7 +132,7 @@ export function useAttendance(): AttendanceState {
       setClockActionError(translateClockError(err instanceof Error ? err.message : ''));
       setClockInState('error');
     }
-  }, [token, clockInState, getLocation, fetchData, handleSessionExpired, todayOffSite]);
+  }, [token, clockInState, getLocation, fetchData, handleSessionExpired]);
 
   const performClockOut = useCallback(async () => {
     if (!token || clockOutState === 'locating' || clockOutState === 'submitting') return;

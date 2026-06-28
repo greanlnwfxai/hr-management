@@ -107,6 +107,18 @@ export interface AttendanceEmployee {
 
 export type WorkMode = 'ONSITE' | 'OFFSITE';
 
+export type AttendanceSource =
+  | 'COMPANY_GEOFENCE'
+  | 'OFFSITE_PLANNED'
+  | 'OFFSITE_UNPLANNED';
+
+export type AttendanceReviewStatus =
+  | 'AUTO_ACCEPTED'
+  | 'PENDING_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'MISSING_CHECKOUT';
+
 export interface AttendanceRecord {
   id: string;
   date: string;
@@ -118,6 +130,10 @@ export interface AttendanceRecord {
   employee: AttendanceEmployee;
   createdAt: string;
   updatedAt: string;
+  // Off-site fields — optional; absent on older ONSITE records
+  attendanceSource?: AttendanceSource;
+  reviewStatus?: AttendanceReviewStatus | null;
+  workLocationName?: string | null;
 }
 
 export interface AttendanceHistoryResponse {
@@ -220,4 +236,22 @@ export interface OffSiteRequestRecord {
 export interface CreateOffSiteRequestPayload {
   date: string;
   reason?: string;
+}
+
+// ─── Off-site Clock Actions ───────────────────────────────────────────────────
+
+export interface OffsiteClockInPayload {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  workLocationName: string;
+  reason: string;
+  note?: string;
+}
+
+export interface OffsiteClockOutPayload {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  note?: string;
 }

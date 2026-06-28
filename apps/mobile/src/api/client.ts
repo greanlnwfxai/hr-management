@@ -23,6 +23,8 @@ import {
   type GeofenceLocation,
   type OffSiteRequestRecord,
   type CreateOffSiteRequestPayload,
+  type OffsiteClockInPayload,
+  type OffsiteClockOutPayload,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -259,6 +261,20 @@ export async function clockOut(
   payload: MobileLocationPayload,
 ): Promise<ClockActionResult> {
   return authPost<ClockActionResult>('/attendance/clock-out', token, payload);
+}
+
+export async function clockInOffsite(
+  token: string,
+  payload: OffsiteClockInPayload,
+): Promise<AttendanceRecord> {
+  return authPost<AttendanceRecord>('/attendance/offsite/clock-in', token, payload);
+}
+
+export async function clockOutOffsite(
+  token: string,
+  payload: OffsiteClockOutPayload,
+): Promise<AttendanceRecord> {
+  return authPost<AttendanceRecord>('/attendance/offsite/clock-out', token, payload);
 }
 
 // ─── Leave ────────────────────────────────────────────────────────────────────

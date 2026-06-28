@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useOffSiteRequests } from '../src/hooks/useOffSiteRequests';
-import type { AttendanceRecord, AttendanceStatus, OffSiteRequestRecord } from '../src/api/types';
+import type { AttendanceRecord, AttendanceReviewStatus, AttendanceStatus, OffSiteRequestRecord } from '../src/api/types';
 import { MobileBottomNav } from '../src/components';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -53,6 +53,26 @@ function statusColor(status: AttendanceStatus): string {
     case 'PRESENT': return '#16a34a';
     case 'LATE': return '#d97706';
     case 'ABSENT': return '#dc2626';
+  }
+}
+
+function reviewStatusLabel(status: AttendanceReviewStatus): string {
+  switch (status) {
+    case 'AUTO_ACCEPTED': return 'อนุมัติแล้ว (ตามคำขอ)';
+    case 'PENDING_REVIEW': return 'รอ HR ตรวจสอบ';
+    case 'APPROVED': return 'อนุมัติแล้ว';
+    case 'REJECTED': return 'ไม่อนุมัติ';
+    case 'MISSING_CHECKOUT': return 'ไม่ได้ลงเวลาออก';
+  }
+}
+
+function reviewStatusColor(status: AttendanceReviewStatus): string {
+  switch (status) {
+    case 'AUTO_ACCEPTED': return '#16a34a';
+    case 'PENDING_REVIEW': return '#d97706';
+    case 'APPROVED': return '#16a34a';
+    case 'REJECTED': return '#dc2626';
+    case 'MISSING_CHECKOUT': return '#ea580c';
   }
 }
 
@@ -195,7 +215,19 @@ function HistoryTimeline({ records }: { records: AttendanceRecord[] }) {
                     <Text style={styles.offSiteHistoryBadgeText}>นอกสถานที่</Text>
                   </View>
                 )}
+                {rec.workMode === 'OFFSITE' && rec.reviewStatus && (
+                  <View style={[styles.reviewStatusBadge, { backgroundColor: reviewStatusColor(rec.reviewStatus) + '20' }]}>
+                    <Text style={[styles.reviewStatusBadgeText, { color: reviewStatusColor(rec.reviewStatus) }]}>
+                      {reviewStatusLabel(rec.reviewStatus)}
+                    </Text>
+                  </View>
+                )}
               </View>
+              {rec.workMode === 'OFFSITE' && rec.workLocationName ? (
+                <Text style={styles.workLocationText} numberOfLines={1}>
+                  📍 {rec.workLocationName}
+                </Text>
+              ) : null}
               {rec.checkOut ? (
                 <Text style={styles.timelineCardSub}>
                   ออกงาน: {formatTime(rec.checkOut)}
@@ -574,14 +606,25 @@ const styles = StyleSheet.create({
 
   // Off-site badge in history timeline
   offSiteHistoryBadge: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: '#ccfbf1',
     borderRadius: 4,
     paddingHorizontal: 5,
     paddingVertical: 1,
     marginLeft: 6,
   },
-  offSiteHistoryBadgeText: { fontSize: 10, fontWeight: '600', color: '#1a56db' },
-  timelineCardSubRow: { flexDirection: 'row', alignItems: 'center' },
+  offSiteHistoryBadgeText: { fontSize: 10, fontWeight: '600', color: '#0d9488' },
+  timelineCardSubRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
+
+  // Review status badge in history timeline
+  reviewStatusBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  reviewStatusBadgeText: { fontSize: 10, fontWeight: '600' },
+
+  // Work location name subtitle
+  workLocationText: { fontSize: 12, color: '#374151', fontStyle: 'italic', marginTop: 2 },
 
   // Off-site request list rows
   offSiteRow: {
