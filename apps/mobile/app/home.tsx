@@ -268,7 +268,7 @@ export default function HomeScreen() {
       .then((config) => {
         if (cancelled || !mountedRef.current) return;
         setGeofenceZone(
-          config.enabled && config.latitude !== null && config.longitude !== null
+          config.latitude !== null && config.longitude !== null
             ? 'configured'
             : 'unconfigured',
         );
