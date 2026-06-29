@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useDashboard } from '../src/hooks/useDashboard';
@@ -234,6 +234,7 @@ export default function HomeScreen() {
     clockOutState,
     clockActionError,
     clockActionMessage,
+    clockOutOutsideGeofence,
     performClockIn,
     performClockOut,
   } = useAttendance();
@@ -283,6 +284,12 @@ export default function HomeScreen() {
 
     return () => { cancelled = true; };
   }, [token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      attRefresh();
+    }, [attRefresh]),
+  );
 
   const handleLogout = async () => {
     await signOut();
@@ -480,6 +487,16 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Mixed checkout pending review banner ── */}
+        {today?.workMode === 'ONSITE' && today?.reviewStatus === 'PENDING_REVIEW' && alreadyClockedOut && (
+          <View style={styles.pendingReviewBanner}>
+            <Text style={styles.pendingReviewBannerTitle}>⏳ รอ HR ตรวจสอบ</Text>
+            <Text style={styles.pendingReviewBannerText}>
+              บันทึกการเช็คเอาท์นอกสถานที่ถูกส่งให้ HR ตรวจสอบแล้ว
+            </Text>
+          </View>
+        )}
+
         {/* ── Normal on-site clock-in / clock-out buttons ── */}
         {!hasActiveOffsiteCheckIn && (
           <View style={styles.heroActionRow}>
@@ -526,7 +543,21 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {clockActionError ? (
+        {clockOutOutsideGeofence && alreadyClockedIn && !alreadyClockedOut ? (
+          <View style={styles.mixedCheckoutCTA}>
+            <Text style={styles.mixedCheckoutCTAText}>
+              ไม่สามารถเช็คเอาท์ได้ คุณอยู่นอกพื้นที่บริษัท
+            </Text>
+            <Pressable
+              style={({ pressed }) => [styles.mixedCheckoutCTABtn, pressed && { opacity: 0.85 }]}
+              onPress={() => router.push('/mixed-checkout')}
+              accessibilityRole="button"
+              accessibilityLabel="เช็คเอาท์นอกสถานที่"
+            >
+              <Text style={styles.mixedCheckoutCTABtnText}>เช็คเอาท์นอกสถานที่</Text>
+            </Pressable>
+          </View>
+        ) : clockActionError ? (
           <View style={styles.heroFeedbackError}>
             <Text style={styles.heroFeedbackErrorText}>{clockActionError}</Text>
           </View>
@@ -693,6 +724,10 @@ export default function HomeScreen() {
             else void performClockOut();
           }}
           onCancel={() => setMapModalVisible(false)}
+          onMixedCheckout={mapModalAction === 'out' ? () => {
+            setMapModalVisible(false);
+            router.push('/mixed-checkout');
+          } : undefined}
         />
       )}
     </SafeAreaView>
@@ -992,6 +1027,36 @@ const styles = StyleSheet.create({
   offsiteBannerText: { fontSize: 13, fontWeight: '600' },
   offsiteBannerTextGreen: { color: '#86efac' },
   offsiteBannerTextAmber: { color: '#fde68a' },
+
+  // ONSITE mixed checkout pending review banner
+  pendingReviewBanner: {
+    backgroundColor: 'rgba(217,119,6,0.15)',
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(217,119,6,0.4)',
+  },
+  pendingReviewBannerTitle: { fontSize: 14, fontWeight: '700', color: '#fde68a' },
+  pendingReviewBannerText: { fontSize: 13, color: '#fde68a', lineHeight: 18, opacity: 0.85 },
+
+  // Fallback CTA for 422 OUTSIDE_GEOFENCE after modal confirmed inside
+  mixedCheckoutCTA: {
+    backgroundColor: 'rgba(13,148,136,0.15)',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(13,148,136,0.4)',
+  },
+  mixedCheckoutCTAText: { fontSize: 13, color: '#ccfbf1', lineHeight: 18 },
+  mixedCheckoutCTABtn: {
+    backgroundColor: '#0d9488',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center' as const,
+  },
+  mixedCheckoutCTABtnText: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
 
   // Work mode + review status badges
   workModeBadge: {

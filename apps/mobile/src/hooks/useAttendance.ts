@@ -7,7 +7,7 @@ import {
   clockOut as apiClockOut,
   getTodayOffSiteStatus,
 } from '../api/client';
-import { SessionExpiredError } from '../api/types';
+import { SessionExpiredError, ApiCodedError } from '../api/types';
 import type { AttendanceRecord, OffSiteRequestRecord, PaginatedMeta } from '../api/types';
 import { useAuth } from '../auth/useAuth';
 import { useDeviceLocation } from './useDeviceLocation';
@@ -27,6 +27,7 @@ export interface AttendanceState {
   clockOutState: ClockActionState;
   clockActionError: string | null;
   clockActionMessage: string | null;
+  clockOutOutsideGeofence: boolean;
   performClockIn: () => Promise<void>;
   performClockOut: () => Promise<void>;
   todayOffSite: OffSiteRequestRecord | null;
@@ -49,6 +50,7 @@ export function useAttendance(): AttendanceState {
   const [clockOutState, setClockOutState] = useState<ClockActionState>('idle');
   const [clockActionError, setClockActionError] = useState<string | null>(null);
   const [clockActionMessage, setClockActionMessage] = useState<string | null>(null);
+  const [clockOutOutsideGeofence, setClockOutOutsideGeofence] = useState(false);
 
   const handleSessionExpired = useCallback(async () => {
     await signOut();
@@ -73,6 +75,7 @@ export function useAttendance(): AttendanceState {
       setTodayOffSite(offSiteData);
       setLastUpdated(new Date());
       setLoadState('success');
+      if (todayData?.checkOut) setClockOutOutsideGeofence(false);
     } catch (err) {
       if (err instanceof SessionExpiredError) {
         void handleSessionExpired();
@@ -139,6 +142,7 @@ export function useAttendance(): AttendanceState {
 
     setClockActionError(null);
     setClockActionMessage(null);
+    setClockOutOutsideGeofence(false);
     setClockOutState('locating');
 
     let location: { latitude: number; longitude: number; accuracy: number };
@@ -162,7 +166,12 @@ export function useAttendance(): AttendanceState {
         void handleSessionExpired();
         return;
       }
-      setClockActionError(translateClockError(err instanceof Error ? err.message : ''));
+      if (err instanceof ApiCodedError && err.code === 'OUTSIDE_GEOFENCE') {
+        setClockOutOutsideGeofence(true);
+        setClockActionError('คุณอยู่นอกพื้นที่บริษัท กรุณาใช้เช็คเอาท์นอกสถานที่');
+      } else {
+        setClockActionError(translateClockError(err instanceof Error ? err.message : ''));
+      }
       setClockOutState('error');
     }
   }, [token, clockOutState, getLocation, fetchData, handleSessionExpired]);
@@ -179,6 +188,7 @@ export function useAttendance(): AttendanceState {
     clockOutState,
     clockActionError,
     clockActionMessage,
+    clockOutOutsideGeofence,
     performClockIn,
     performClockOut,
     todayOffSite,

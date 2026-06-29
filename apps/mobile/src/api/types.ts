@@ -5,6 +5,13 @@ export class SessionExpiredError extends Error {
   }
 }
 
+export class ApiCodedError extends Error {
+  constructor(message: string, public readonly code: string, public readonly statusCode: number) {
+    super(message);
+    this.name = 'ApiCodedError';
+  }
+}
+
 export interface ApiError {
   statusCode: number;
   message: string;
@@ -253,5 +260,14 @@ export interface OffsiteClockOutPayload {
   latitude: number;
   longitude: number;
   accuracy: number;
+  note?: string;
+}
+
+export interface MixedCheckoutExceptionPayload {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  workLocationName: string;
+  reason: string;
   note?: string;
 }

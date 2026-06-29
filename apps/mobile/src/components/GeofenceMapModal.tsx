@@ -24,6 +24,7 @@ interface GeofenceMapModalProps {
   token: string;
   onConfirm: () => void;
   onCancel: () => void;
+  onMixedCheckout?: () => void;
 }
 
 type LoadState = 'loading' | 'ready' | 'no-config' | 'error';
@@ -34,6 +35,7 @@ export function GeofenceMapModal({
   token,
   onConfirm,
   onCancel,
+  onMixedCheckout,
 }: GeofenceMapModalProps) {
   const mapRef = useRef<MapView>(null);
   const { getLocation } = useDeviceLocation();
@@ -221,19 +223,30 @@ export function GeofenceMapModal({
             >
               <Text style={styles.btnCancelText}>ยกเลิก</Text>
             </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.btnConfirm,
-                action === 'out' && styles.btnConfirmOut,
-                confirmDisabled && styles.btnDisabled,
-                pressed && !confirmDisabled && { opacity: 0.85 },
-              ]}
-              onPress={onConfirm}
-              disabled={confirmDisabled}
-              accessibilityRole="button"
-            >
-              <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
-            </Pressable>
+            {action === 'out' && isInsideRadius === false && loadState === 'ready' && onMixedCheckout ? (
+              <Pressable
+                style={({ pressed }) => [styles.btnMixedCheckout, pressed && { opacity: 0.85 }]}
+                onPress={onMixedCheckout}
+                accessibilityRole="button"
+                accessibilityLabel="เช็คเอาท์นอกสถานที่"
+              >
+                <Text style={styles.btnConfirmText}>เช็คเอาท์นอกสถานที่</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.btnConfirm,
+                  action === 'out' && styles.btnConfirmOut,
+                  confirmDisabled && styles.btnDisabled,
+                  pressed && !confirmDisabled && { opacity: 0.85 },
+                ]}
+                onPress={onConfirm}
+                disabled={confirmDisabled}
+                accessibilityRole="button"
+              >
+                <Text style={styles.btnConfirmText}>{confirmLabel}</Text>
+              </Pressable>
+            )}
           </View>
 
         </View>
@@ -360,4 +373,11 @@ const styles = StyleSheet.create({
   btnConfirmOut: { backgroundColor: '#e05c3e' },
   btnDisabled: { opacity: 0.5 },
   btnConfirmText: { fontSize: 15, fontWeight: '700', color: '#ffffff' },
+  btnMixedCheckout: {
+    flex: 2,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: '#0d9488',
+  },
 });

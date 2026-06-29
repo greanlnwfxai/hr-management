@@ -25,6 +25,8 @@ import {
   type CreateOffSiteRequestPayload,
   type OffsiteClockInPayload,
   type OffsiteClockOutPayload,
+  type MixedCheckoutExceptionPayload,
+  ApiCodedError,
 } from './types';
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -143,6 +145,18 @@ async function authPost<T>(path: string, token: string, body: unknown): Promise<
   if (!response.ok) {
     let parsed: unknown;
     try { parsed = await response.json(); } catch { parsed = null; }
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'code' in parsed &&
+      typeof (parsed as { code: unknown }).code === 'string'
+    ) {
+      throw new ApiCodedError(
+        normalizeApiMessage(parsed),
+        (parsed as { code: string }).code,
+        response.status,
+      );
+    }
     throw new Error(normalizeApiMessage(parsed));
   }
 
@@ -275,6 +289,13 @@ export async function clockOutOffsite(
   payload: OffsiteClockOutPayload,
 ): Promise<AttendanceRecord> {
   return authPost<AttendanceRecord>('/attendance/offsite/clock-out', token, payload);
+}
+
+export async function submitMixedCheckoutException(
+  token: string,
+  payload: MixedCheckoutExceptionPayload,
+): Promise<AttendanceRecord> {
+  return authPost<AttendanceRecord>('/attendance/offsite/mixed-checkout-exception', token, payload);
 }
 
 // ─── Leave ────────────────────────────────────────────────────────────────────
