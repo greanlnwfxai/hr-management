@@ -470,6 +470,36 @@ describe('AttendanceService', () => {
       );
     });
 
+    it('OUTSIDE_GEOFENCE error includes structured code field when outside radius on clock-out', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
+
+      try {
+        await service.clockOut(userId, mobileDto);
+        fail('Expected UnprocessableEntityException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(UnprocessableEntityException);
+        expect(err.getResponse()).toMatchObject({ code: 'OUTSIDE_GEOFENCE' });
+      }
+    });
+
+    it('OUTSIDE_GEOFENCE error includes structured code field when outside radius on clock-in', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+
+      try {
+        await service.clockIn(userId, mobileDto);
+        fail('Expected UnprocessableEntityException');
+      } catch (err: any) {
+        expect(err).toBeInstanceOf(UnprocessableEntityException);
+        expect(err.getResponse()).toMatchObject({ code: 'OUTSIDE_GEOFENCE' });
+      }
+    });
+
     it('skips geofence on clock-out for web source', async () => {
       geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
       prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
@@ -1414,7 +1444,7 @@ describe('AttendanceService', () => {
       expect(result.meta.totalPages).toBe(0);
     });
 
-    it('always filters to OFFSITE_UNPLANNED and OFFSITE_PLANNED sources (never leaks COMPANY_GEOFENCE)', async () => {
+    it('uses OR to include both OFFSITE records and mixed checkout exceptions (COMPANY_GEOFENCE + non-null reviewStatus)', async () => {
       prisma.$transaction.mockResolvedValue([[], 0] as any);
 
       await service.findOffsiteReview({});
@@ -1422,15 +1452,289 @@ describe('AttendanceService', () => {
       expect(prisma.attendance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            attendanceSource: expect.objectContaining({
-              in: expect.arrayContaining([
-                AttendanceSource.OFFSITE_UNPLANNED,
-                AttendanceSource.OFFSITE_PLANNED,
-              ]),
-            }),
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                attendanceSource: expect.objectContaining({
+                  in: expect.arrayContaining([
+                    AttendanceSource.OFFSITE_UNPLANNED,
+                    AttendanceSource.OFFSITE_PLANNED,
+                  ]),
+                }),
+              }),
+              expect.objectContaining({
+                attendanceSource: AttendanceSource.COMPANY_GEOFENCE,
+              }),
+            ]),
           }),
         }),
       );
+    });
+
+    it('returns mixed checkout exception records (COMPANY_GEOFENCE + PENDING_REVIEW)', async () => {
+      const mixedRecord = {
+        ...mockAttendanceFull,
+        attendanceSource: 'COMPANY_GEOFENCE',
+        reviewStatus: 'PENDING_REVIEW',
+        checkOut: new Date(),
+        checkOutLatitude: 13.9,
+        workLocationName: 'Client Office',
+        offsiteReason: 'Client meeting',
+      };
+      prisma.$transaction.mockResolvedValue([[mixedRecord], 1] as any);
+
+      const result = await service.findOffsiteReview({});
+
+      expect(result.data).toHaveLength(1);
+      expect(result.meta.total).toBe(1);
+    });
+  });
+
+  // ── mixedCheckoutException ─────────────────────────────────────────────────
+
+  describe('mixedCheckoutException', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '10.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    const enabledConfig = {
+      enabled: true,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    const validDto = {
+      latitude: 13.8,
+      longitude: 100.4,
+      accuracy: 30,
+      workLocationName: 'Client Office',
+      reason: 'Client meeting assigned by manager',
+    };
+
+    const onsiteRecord = {
+      ...mockOpenRecord,
+      attendanceSource: 'COMPANY_GEOFENCE',
+      reviewStatus: null,
+      workMode: 'ONSITE',
+    };
+
+    const submittedRecord = {
+      ...mockAttendanceFull,
+      attendanceSource: 'COMPANY_GEOFENCE',
+      reviewStatus: 'PENDING_REVIEW',
+      workMode: 'ONSITE',
+      checkOut: new Date(),
+      checkOutLatitude: 13.8,
+      checkOutLongitude: 100.4,
+      workLocationName: 'Client Office',
+      offsiteReason: 'Client meeting assigned by manager',
+    };
+
+    it('successfully submits mixed checkout exception for active ONSITE record outside geofence', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false); // outside geofence
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      const result = await service.mixedCheckoutException(userId, validDto, ctx);
+
+      expect(result).toBeDefined();
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: attendanceId },
+          data: expect.objectContaining({
+            reviewStatus: AttendanceReviewStatus.PENDING_REVIEW,
+            workLocationName: 'Client Office',
+            offsiteReason: 'Client meeting assigned by manager',
+            checkOutLatitude: 13.8,
+            checkOutLongitude: 100.4,
+            checkOutAccuracyMeters: 30,
+          }),
+        }),
+      );
+    });
+
+    it('preserves attendanceSource=COMPANY_GEOFENCE and does not change workMode', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await service.mixedCheckoutException(userId, validDto, ctx);
+
+      const updateCall = prisma.attendance.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('attendanceSource');
+      expect(updateCall.data).not.toHaveProperty('workMode');
+    });
+
+    it('sets reviewStatus to PENDING_REVIEW', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await service.mixedCheckoutException(userId, validDto, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            reviewStatus: AttendanceReviewStatus.PENDING_REVIEW,
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when no clock-in record exists for today', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ConflictException when already checked out', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...onsiteRecord,
+        checkOut: new Date(),
+      } as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws ConflictException when exception already submitted (reviewStatus not null)', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...onsiteRecord,
+        reviewStatus: 'PENDING_REVIEW',
+      } as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws UnprocessableEntityException when attendanceSource is not COMPANY_GEOFENCE', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...onsiteRecord,
+        attendanceSource: 'OFFSITE_UNPLANNED',
+      } as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('throws UnprocessableEntityException when employee is inside company geofence', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(true); // inside geofence
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('throws BadRequestException when user has no linked employee', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).rejects.toThrow(BadRequestException);
+    });
+
+    it('allows exception when geofence is disabled (cannot validate position)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        ...enabledConfig,
+        enabled: false,
+      });
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('allows exception when geofence is unconfigured (no coordinates)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        ...enabledConfig,
+        enabled: true,
+        latitude: null,
+        longitude: null,
+      });
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await expect(service.mixedCheckoutException(userId, validDto)).resolves.toBeDefined();
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+    });
+
+    it('emits ATTENDANCE_MIXED_CHECKOUT_SUBMITTED audit event on success', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await service.mixedCheckoutException(userId, validDto, ctx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_MIXED_CHECKOUT_SUBMITTED',
+          targetType: 'ATTENDANCE',
+          result: 'SUCCESS',
+        }),
+      );
+    });
+
+    it('audit metadata contains no raw GPS coordinates', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+
+      await service.mixedCheckoutException(userId, validDto, ctx);
+
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('checkOutLatitude');
+      expect(event.metadata).not.toHaveProperty('checkOutLongitude');
+      expect(event.metadata).toHaveProperty('hasCoordinates', true);
+      expect(event.metadata).toHaveProperty('accuracyBucket');
+      expect(event.metadata).toHaveProperty('workLocationName', 'Client Office');
+    });
+
+    it('still submits and returns result when audit write fails (best-effort)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(false);
+      geofenceService.calculateDistanceMeters.mockReturnValue(500);
+
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue(submittedRecord as any);
+      mockAuditLog.record.mockRejectedValueOnce(new Error('audit DB down'));
+
+      const result = await service.mixedCheckoutException(userId, validDto, ctx);
+
+      expect(result).toBeDefined();
     });
   });
 
@@ -1466,14 +1770,37 @@ describe('AttendanceService', () => {
       await expect(service.approveOffsiteAttendance('missing-id', userId, {})).rejects.toThrow(NotFoundException);
     });
 
-    it('throws BadRequestException when record is a COMPANY_GEOFENCE record', async () => {
+    it('throws BadRequestException when record is COMPANY_GEOFENCE with null reviewStatus (normal on-site, not a mixed checkout)', async () => {
       prisma.attendance.findUnique.mockResolvedValue({
         ...mockAttendanceFull,
         attendanceSource: 'COMPANY_GEOFENCE',
-        reviewStatus: 'PENDING_REVIEW',
+        reviewStatus: null,
       } as any);
 
       await expect(service.approveOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('approves COMPANY_GEOFENCE record when reviewStatus is PENDING_REVIEW (mixed checkout exception)', async () => {
+      const mixedRecord = {
+        ...mockAttendanceFull,
+        attendanceSource: 'COMPANY_GEOFENCE',
+        reviewStatus: 'PENDING_REVIEW',
+        checkIn: new Date(),
+        checkOut: new Date(),
+        checkOutLatitude: 13.9,
+      };
+      prisma.attendance.findUnique.mockResolvedValue(mixedRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue({ ...mixedRecord, reviewStatus: 'APPROVED' } as any);
+
+      const result = await service.approveOffsiteAttendance(attendanceId, userId, {});
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewStatus: AttendanceReviewStatus.APPROVED }),
+        }),
+      );
+      expect(result).toBeDefined();
     });
 
     it('throws BadRequestException when record has no attendanceSource', async () => {
@@ -1651,14 +1978,37 @@ describe('AttendanceService', () => {
       await expect(service.rejectOffsiteAttendance('missing-id', userId, {})).rejects.toThrow(NotFoundException);
     });
 
-    it('throws BadRequestException when record is a COMPANY_GEOFENCE record', async () => {
+    it('throws BadRequestException when record is COMPANY_GEOFENCE with null reviewStatus (normal on-site, not a mixed checkout)', async () => {
       prisma.attendance.findUnique.mockResolvedValue({
         ...mockAttendanceFull,
         attendanceSource: 'COMPANY_GEOFENCE',
-        reviewStatus: 'PENDING_REVIEW',
+        reviewStatus: null,
       } as any);
 
       await expect(service.rejectOffsiteAttendance(attendanceId, userId, {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects COMPANY_GEOFENCE record when reviewStatus is PENDING_REVIEW (mixed checkout exception)', async () => {
+      const mixedRecord = {
+        ...mockAttendanceFull,
+        attendanceSource: 'COMPANY_GEOFENCE',
+        reviewStatus: 'PENDING_REVIEW',
+        checkIn: new Date(),
+        checkOut: new Date(),
+        checkOutLatitude: 13.9,
+      };
+      prisma.attendance.findUnique.mockResolvedValue(mixedRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue({ ...mixedRecord, reviewStatus: 'REJECTED' } as any);
+
+      const result = await service.rejectOffsiteAttendance(attendanceId, userId, { reviewNote: 'Unverified location' });
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewStatus: AttendanceReviewStatus.REJECTED }),
+        }),
+      );
+      expect(result).toBeDefined();
     });
 
     it('throws BadRequestException when record is AUTO_ACCEPTED', async () => {

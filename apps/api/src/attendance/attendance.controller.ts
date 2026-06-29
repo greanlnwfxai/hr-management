@@ -28,6 +28,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { MixedCheckoutExceptionDto } from './dto/mixed-checkout-exception.dto';
 import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
 import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
@@ -108,6 +109,25 @@ export class AttendanceController {
     @Req() req: Request,
   ) {
     return this.attendance.clockOutOffsite(user.id, dto, {
+      actorUserId: user.id,
+      actorRole: user.role,
+      ipAddress: req?.ip ?? null,
+      userAgent: (req?.headers?.['user-agent'] as string) ?? null,
+    });
+  }
+
+  @Post('offsite/mixed-checkout-exception')
+  @ApiOperation({ summary: 'Submit mixed checkout exception for ONSITE attendance outside company geofence (HR review required)' })
+  @ApiResponse({ status: 200, description: 'Mixed checkout exception submitted — record set to PENDING_REVIEW' })
+  @ApiResponse({ status: 404, description: 'No clock-in found for today' })
+  @ApiResponse({ status: 409, description: 'Already checked out or exception already submitted' })
+  @ApiResponse({ status: 422, description: 'Record is not ONSITE, or employee is inside geofence' })
+  mixedCheckoutException(
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: MixedCheckoutExceptionDto,
+    @Req() req: Request,
+  ) {
+    return this.attendance.mixedCheckoutException(user.id, dto, {
       actorUserId: user.id,
       actorRole: user.role,
       ipAddress: req?.ip ?? null,

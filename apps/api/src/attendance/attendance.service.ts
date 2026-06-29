@@ -27,6 +27,7 @@ import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { MixedCheckoutExceptionDto } from './dto/mixed-checkout-exception.dto';
 import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
 import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 import { PatchGeofenceConfigDto } from './dto/patch-geofence-config.dto';
@@ -394,6 +395,110 @@ export class AttendanceService {
     return result;
   }
 
+  async mixedCheckoutException(
+    userId: string,
+    dto: MixedCheckoutExceptionDto,
+    ctx?: AttendanceAuditContext,
+  ) {
+    const employeeId = await this.requireEmployeeId(userId);
+    const date = this.todayUtc();
+
+    const record = await this.prisma.attendance.findUnique({
+      where: { employeeId_date: { employeeId, date } },
+    });
+    if (!record) throw new NotFoundException('No clock-in found for today');
+    if (record.checkOut) throw new ConflictException('Already clocked out for today');
+
+    const src = (record as any).attendanceSource ?? AttendanceSource.COMPANY_GEOFENCE;
+    if (src !== AttendanceSource.COMPANY_GEOFENCE) {
+      throw new UnprocessableEntityException(
+        'This endpoint is for ONSITE attendance only. Off-site records should use POST /attendance/offsite/clock-out.',
+      );
+    }
+
+    const revStatus = (record as any).reviewStatus as string | null;
+    if (revStatus !== null) {
+      throw new ConflictException(
+        'A mixed checkout exception has already been submitted for this attendance record.',
+      );
+    }
+
+    // Reject the exception when the employee is actually inside the company geofence —
+    // they should use the normal clock-out instead.
+    const config = await this.geofenceConfig.getEffectiveConfig();
+    if (config.enabled && config.latitude !== null && config.longitude !== null) {
+      const within = this.geofenceService.isWithinRadius(
+        dto.latitude,
+        dto.longitude,
+        config.latitude,
+        config.longitude,
+        config.radiusMeters,
+      );
+      if (within) {
+        throw new UnprocessableEntityException(
+          'You are inside the company area. Please use the normal clock-out instead.',
+        );
+      }
+    }
+
+    let checkOutDistanceFromCompanyMeters: number | null = null;
+    if (config.latitude !== null && config.longitude !== null) {
+      checkOutDistanceFromCompanyMeters = this.geofenceService.calculateDistanceMeters(
+        dto.latitude,
+        dto.longitude,
+        config.latitude,
+        config.longitude,
+      );
+    }
+
+    const result = await this.prisma.attendance.update({
+      where: { id: record.id },
+      data: {
+        checkOut: new Date(),
+        checkOutLatitude: dto.latitude,
+        checkOutLongitude: dto.longitude,
+        checkOutAccuracyMeters: dto.accuracy,
+        checkOutDistanceFromCompanyMeters,
+        workLocationName: dto.workLocationName,
+        offsiteReason: dto.reason,
+        ...(dto.note !== undefined && { note: dto.note }),
+        reviewStatus: AttendanceReviewStatus.PENDING_REVIEW as unknown as PrismaAttendanceReviewStatus,
+        // attendanceSource stays COMPANY_GEOFENCE — check-in truth preserved
+        // workMode stays ONSITE — payroll unchanged
+      },
+      select: ATTENDANCE_SELECT,
+    });
+
+    const accuracyBucket = dto.accuracy <= 20 ? 'HIGH' : dto.accuracy <= 50 ? 'MEDIUM' : 'LOW';
+
+    await this.recordBestEffort({
+      actorUserId: ctx?.actorUserId ?? null,
+      actorRole: ctx?.actorRole ?? null,
+      action: 'ATTENDANCE_MIXED_CHECKOUT_SUBMITTED',
+      targetType: 'ATTENDANCE',
+      targetId: result.id,
+      targetLabel: result.id,
+      result: 'SUCCESS',
+      ipAddress: ctx?.ipAddress ?? null,
+      userAgent: ctx?.userAgent ?? null,
+      metadata: {
+        attendanceId: result.id,
+        employeeId,
+        date: result.date,
+        attendanceSource: AttendanceSource.COMPANY_GEOFENCE,
+        newReviewStatus: AttendanceReviewStatus.PENDING_REVIEW,
+        workLocationName: dto.workLocationName,
+        hasCoordinates: true,
+        accuracyBucket,
+        hasDistanceData: checkOutDistanceFromCompanyMeters !== null,
+        hasNote: dto.note !== undefined,
+        checkoutAt: result.checkOut,
+      },
+    });
+
+    return result;
+  }
+
   async findMyAttendance(userId: string, query: QueryAttendanceDto) {
     const employeeId = await this.requireEmployeeId(userId);
     const { page = 1, limit = 20, startDate, endDate } = query;
@@ -551,12 +656,22 @@ export class AttendanceService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.AttendanceWhereInput = {
-      attendanceSource: {
-        in: [
-          AttendanceSource.OFFSITE_UNPLANNED,
-          AttendanceSource.OFFSITE_PLANNED,
-        ] as unknown as PrismaAttendanceSource[],
-      },
+      OR: [
+        {
+          attendanceSource: {
+            in: [
+              AttendanceSource.OFFSITE_UNPLANNED,
+              AttendanceSource.OFFSITE_PLANNED,
+            ] as unknown as PrismaAttendanceSource[],
+          },
+        },
+        // Mixed checkout exceptions: ONSITE check-in → off-site check-out pending HR review.
+        // Identified by COMPANY_GEOFENCE source + non-null reviewStatus.
+        {
+          attendanceSource: AttendanceSource.COMPANY_GEOFENCE as unknown as PrismaAttendanceSource,
+          reviewStatus: { not: null } as any,
+        },
+      ],
       ...(reviewStatus && { reviewStatus: reviewStatus as unknown as PrismaAttendanceReviewStatus }),
       ...(employeeId && { employeeId }),
       ...this.buildDateFilter(startDate, endDate),
@@ -589,13 +704,19 @@ export class AttendanceService {
     if (!record) throw new NotFoundException(`Attendance ${id} not found`);
 
     const src = (record as any).attendanceSource as string | null;
-    if (!src || src === AttendanceSource.COMPANY_GEOFENCE) {
+    const revStatus = (record as any).reviewStatus as string | null;
+
+    // Mixed checkout exceptions (COMPANY_GEOFENCE + PENDING_REVIEW) are reviewable.
+    // Normal COMPANY_GEOFENCE records (no reviewStatus) and null-source records are not.
+    const isMixedCheckout =
+      src === AttendanceSource.COMPANY_GEOFENCE &&
+      revStatus === AttendanceReviewStatus.PENDING_REVIEW;
+    if (!src || (src === AttendanceSource.COMPANY_GEOFENCE && !isMixedCheckout)) {
       throw new BadRequestException(
         'This attendance record is not an off-site record and cannot be reviewed.',
       );
     }
 
-    const revStatus = (record as any).reviewStatus as string | null;
     if (revStatus !== AttendanceReviewStatus.PENDING_REVIEW) {
       throw new BadRequestException(
         `Only PENDING_REVIEW records can be approved. Current status: ${revStatus ?? 'none'}.`,
@@ -657,13 +778,19 @@ export class AttendanceService {
     if (!record) throw new NotFoundException(`Attendance ${id} not found`);
 
     const src = (record as any).attendanceSource as string | null;
-    if (!src || src === AttendanceSource.COMPANY_GEOFENCE) {
+    const revStatus = (record as any).reviewStatus as string | null;
+
+    // Mixed checkout exceptions (COMPANY_GEOFENCE + PENDING_REVIEW) are reviewable.
+    // Normal COMPANY_GEOFENCE records (no reviewStatus) and null-source records are not.
+    const isMixedCheckout =
+      src === AttendanceSource.COMPANY_GEOFENCE &&
+      revStatus === AttendanceReviewStatus.PENDING_REVIEW;
+    if (!src || (src === AttendanceSource.COMPANY_GEOFENCE && !isMixedCheckout)) {
       throw new BadRequestException(
         'This attendance record is not an off-site record and cannot be reviewed.',
       );
     }
 
-    const revStatus = (record as any).reviewStatus as string | null;
     if (revStatus !== AttendanceReviewStatus.PENDING_REVIEW) {
       throw new BadRequestException(
         `Only PENDING_REVIEW records can be rejected. Current status: ${revStatus ?? 'none'}.`,
@@ -796,9 +923,10 @@ export class AttendanceService {
         configSource: config.source,
         geofenceEnabled: config.enabled,
       });
-      throw new UnprocessableEntityException(
-        'You are outside the allowed company area.',
-      );
+      throw new UnprocessableEntityException({
+        message: 'You are outside the allowed company area.',
+        code: 'OUTSIDE_GEOFENCE',
+      });
     }
   }
 
