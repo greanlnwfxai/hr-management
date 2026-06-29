@@ -97,13 +97,39 @@ nginx -t (via docker nginx:alpine)  → syntax ok, test successful
 ./scripts/verify.sh                 → PASS  (API build, Prisma schema, Web build)
 ./scripts/api-smoke-test.sh         → PASS  (all 10 checks)
 ./scripts/security-review.sh        → PASS  (dependency audit, secret scan)
-
-curl -sI https://mobilehr.eds-center.com/ | grep cache-control
-  → (no header) — confirms production currently has NO cache headers
-  → after Docker rebuild this will return: Cache-Control: no-store, no-cache, must-revalidate
 ```
 
-## Post-Deploy Verification Steps (manual)
+### curl Header Verification — localhost:3004 (rebuilt container)
+
+```
+curl -sI http://localhost:3004/
+  HTTP/1.1 200 OK
+  Cache-Control: no-store, no-cache, must-revalidate   ✓
+  Pragma: no-cache                                      ✓
+
+curl -sI http://localhost:3004/home
+  HTTP/1.1 200 OK
+  Cache-Control: no-store, no-cache, must-revalidate   ✓  (SPA fallback → index.html)
+  Pragma: no-cache                                      ✓
+
+curl -sI http://localhost:3004/index.html
+  HTTP/1.1 200 OK
+  Cache-Control: no-store, no-cache, must-revalidate   ✓
+  Pragma: no-cache                                      ✓
+
+curl -sI http://localhost:3004/manifest.json
+  HTTP/1.1 200 OK
+  Cache-Control: no-store, no-cache, must-revalidate   ✓
+  Pragma: no-cache                                      ✓
+
+curl -sI http://localhost:3004/_expo/static/js/web/entry-41eec4c91ae23978f9756667a3906fd7.js
+  HTTP/1.1 200 OK
+  Cache-Control: public, max-age=31536000, immutable   ✓
+```
+
+All 5 checks pass. SPA fallback correctly serves `index.html` (with `no-store`) for unknown routes like `/home`.
+
+## Post-Deploy Verification Steps (production)
 1. `curl -sI https://mobilehr.eds-center.com/ | grep -i cache-control` → must show `no-store`
 2. `curl -sI https://mobilehr.eds-center.com/manifest.json | grep -i cache-control` → must show `no-store`
 3. `curl -sI https://mobilehr.eds-center.com/_expo/static/js/web/entry-*.js | grep -i cache-control` → must show `immutable`
