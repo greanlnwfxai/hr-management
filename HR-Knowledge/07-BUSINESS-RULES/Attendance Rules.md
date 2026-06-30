@@ -91,6 +91,20 @@ Review status lifecycle: `PENDING_REVIEW → APPROVED | REJECTED`
 
 See [[Mixed Checkout Exception]] for the full workflow and Admin Web review UI.
 
+## Manager Flexible Attendance (REQ-002H)
+
+Managers may clock in or out at non-standard times due to legitimate management duties (after-hours work, customer visits, emergency service, etc.). REQ-002H defines the policy:
+
+- **Who:** MANAGER role only.
+- **What:** Manager submits a mandatory reason when using flexible attendance (FLEX) at check-in or check-out.
+- **Reviewer:** HR_ADMIN reviews and approves or rejects. SUPER_ADMIN has override authority.
+- **No fixed time limit:** Any check-in/out time is eligible for FLEX; reason is always required.
+- **Final status:** Approved records display `FLEX_APPROVED` in reports (not LATE). Rejected records fall back to normal LATE evaluation.
+- **Actual time always stored:** FLEX does not suppress or alter timestamps.
+- **EMPLOYEE is not affected:** Normal employee late policy is unchanged.
+
+This is specification-only as of 2026-06-30. See `docs/REQ_002H_MANAGER_FLEXIBLE_ATTENDANCE_POLICY_SPEC.md`.
+
 ## Off-site Attendance Review — Manager Approval (Planned)
 
 REQ-002G specifies changing off-site attendance review from HR-only to Manager-first. Planned scope:
