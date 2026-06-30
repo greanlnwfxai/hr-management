@@ -91,6 +91,17 @@ Review status lifecycle: `PENDING_REVIEW → APPROVED | REJECTED`
 
 See [[Mixed Checkout Exception]] for the full workflow and Admin Web review UI.
 
+## Off-site Attendance Review — Manager Approval (Planned)
+
+REQ-002G specifies changing off-site attendance review from HR-only to Manager-first. Planned scope:
+
+- Manager reviews off-site records (full off-site and mixed checkout exception) for employees in their managed department.
+- HR_ADMIN / SUPER_ADMIN retain full visibility and override authority.
+- Scoping mechanism: `Department.managerId` → same pattern as ADR-023 (leave/off-site approval).
+- Fallback to HR queue if employee has no department or department has no assigned Manager.
+
+This is specification-only as of 2026-06-30. See `docs/REQ_002G_MANAGER_BASED_OFFSITE_ATTENDANCE_APPROVAL_SPEC.md`.
+
 ## Clock-in / Clock-out Rules
 
 - An employee can only clock in **once per day** (unique constraint on `(employeeId, date)`)
