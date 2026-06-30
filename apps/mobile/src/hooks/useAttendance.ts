@@ -106,6 +106,12 @@ export function useAttendance(): AttendanceState {
       return;
     }
 
+    if (location.accuracy > 100) {
+      setClockActionError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่อีกครั้ง');
+      setClockInState('error');
+      return;
+    }
+
     setClockInState('submitting');
     try {
       const result = await apiClockIn(token, {
@@ -150,6 +156,12 @@ export function useAttendance(): AttendanceState {
       location = await getLocation();
     } catch (err) {
       setClockActionError(err instanceof Error ? err.message : 'ไม่สามารถอ่านตำแหน่งได้');
+      setClockOutState('error');
+      return;
+    }
+
+    if (location.accuracy > 100) {
+      setClockActionError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่อีกครั้ง');
       setClockOutState('error');
       return;
     }

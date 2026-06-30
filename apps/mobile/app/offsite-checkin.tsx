@@ -102,7 +102,7 @@ export default function OffsiteCheckinScreen() {
   }, []);
 
   const isPlanned = todayOffSite?.status === 'APPROVED';
-  const canSubmit = (gpsStatus === 'ready' || gpsStatus === 'low_accuracy') &&
+  const canSubmit = gpsStatus === 'ready' &&
     workLocationName.trim().length >= 1 &&
     reason.trim().length >= 3 &&
     !submitting;
@@ -127,16 +127,42 @@ export default function OffsiteCheckinScreen() {
   const handleSubmit = useCallback(async () => {
     if (!token || submitting) return;
     if (!validateFields()) return;
-    if (!location) {
-      setSubmitError('ต้องระบุตำแหน่งสำหรับการลงเวลานอกสถานที่');
-      return;
-    }
 
     setSubmitError('');
     setSubmitting(true);
+
+    // Re-acquire fresh GPS at submit time — never use the mount-time cached reading
+    setGpsStatus('loading');
+    let freshLocation: { latitude: number; longitude: number; accuracy: number };
+    try {
+      freshLocation = await getLocation();
+    } catch (err) {
+      if (!mountedRef.current) return;
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('อนุญาต') || msg.includes('permission') || msg.includes('denied')) {
+        setGpsStatus('denied');
+      } else {
+        setGpsStatus('error');
+      }
+      setSubmitting(false);
+      return;
+    }
+
+    if (freshLocation.accuracy > 100) {
+      if (!mountedRef.current) return;
+      setLocation(freshLocation);
+      setGpsStatus('low_accuracy');
+      setSubmitError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่');
+      setSubmitting(false);
+      return;
+    }
+
+    setLocation(freshLocation);
+    setGpsStatus('ready');
+
     try {
       await clockInOffsite(token, {
-        ...location,
+        ...freshLocation,
         workLocationName: workLocationName.trim(),
         reason: reason.trim(),
         ...(note.trim() ? { note: note.trim() } : {}),
@@ -152,20 +178,9 @@ export default function OffsiteCheckinScreen() {
       if (mountedRef.current) {
         setSubmitError(translateError(err instanceof Error ? err.message : ''));
         setSubmitting(false);
-        // Re-acquire GPS on accuracy errors
-        if ((err instanceof Error) && err.message.includes('accuracy')) {
-          setGpsStatus('loading');
-          getLocation()
-            .then((loc) => {
-              if (!mountedRef.current) return;
-              setLocation(loc);
-              setGpsStatus(loc.accuracy > 100 ? 'low_accuracy' : 'ready');
-            })
-            .catch(() => { if (mountedRef.current) setGpsStatus('error'); });
-        }
       }
     }
-  }, [token, submitting, location, workLocationName, reason, note, getLocation, refreshAttendance, signOut, router]);
+  }, [token, submitting, workLocationName, reason, note, getLocation, refreshAttendance, signOut, router]);
 
   return (
     <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
