@@ -4,7 +4,7 @@ import type {
   EmployeeStatus as PrismaEmployeeStatus,
   LeaveStatus as PrismaLeaveStatus,
 } from '@prisma/client';
-import { AttendanceStatus, EmployeeStatus, LeaveStatus } from '../common/enums';
+import { AttendanceStatus, EmployeeStatus, LeaveStatus, UserRole } from '../common/enums';
 import { PrismaService } from '../prisma/prisma.service';
 
 // Thailand is UTC+7 with no DST — this offset never changes.
@@ -23,9 +23,29 @@ export type RangePreset = '7d' | 'thisMonth' | 'lastMonth';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getSummary(range: RangePreset = '7d') {
+  async getSummary(range: RangePreset = '7d', actor?: { userId?: string | null; role?: string | null }) {
     const today = this.todayBangkok();
     const currentYear = this.bangkokYear();
+
+    // Resolve department scope for MANAGER — resolve once, use everywhere.
+    let scopeDeptId: string | undefined;
+    if (actor?.role === UserRole.MANAGER) {
+      const managerEmp = actor.userId
+        ? await this.prisma.employee.findFirst({
+            where: { userId: actor.userId },
+            select: { managedDepartment: { select: { id: true } } },
+          })
+        : null;
+      if (!managerEmp?.managedDepartment) {
+        const { from, to } = this.dateRange(range);
+        return this.buildEmptySummary(from, to, range);
+      }
+      scopeDeptId = managerEmp.managedDepartment.id;
+    }
+
+    const empFilter = scopeDeptId ? { departmentId: scopeDeptId } : {};
+    const attEmpFilter = scopeDeptId ? { employee: { departmentId: scopeDeptId } } : {};
+    const leaveEmpFilter = scopeDeptId ? { employee: { departmentId: scopeDeptId } } : {};
 
     const [
       totalEmployees,
@@ -48,53 +68,57 @@ export class DashboardService {
       recentLeaveRequests,
       currentYearBalances,
     ] = await Promise.all([
-      this.prisma.employee.count(),
+      this.prisma.employee.count({ where: empFilter }),
       this.prisma.employee.count({
-        where: { status: EmployeeStatus.ACTIVE as unknown as PrismaEmployeeStatus },
+        where: { ...empFilter, status: EmployeeStatus.ACTIVE as unknown as PrismaEmployeeStatus },
       }),
       this.prisma.employee.count({
-        where: { status: EmployeeStatus.INACTIVE as unknown as PrismaEmployeeStatus },
+        where: { ...empFilter, status: EmployeeStatus.INACTIVE as unknown as PrismaEmployeeStatus },
       }),
       this.prisma.employee.count({
-        where: { status: EmployeeStatus.RESIGNED as unknown as PrismaEmployeeStatus },
+        where: { ...empFilter, status: EmployeeStatus.RESIGNED as unknown as PrismaEmployeeStatus },
       }),
-      this.prisma.department.count(),
-      this.prisma.position.count(),
+      this.prisma.department.count({ where: scopeDeptId ? { id: scopeDeptId } : {} }),
+      this.prisma.position.count({ where: scopeDeptId ? { departmentId: scopeDeptId } : {} }),
       this.prisma.attendance.count({
         where: {
           date: today,
           status: AttendanceStatus.PRESENT as unknown as PrismaAttendanceStatus,
+          ...attEmpFilter,
         },
       }),
       this.prisma.attendance.count({
         where: {
           date: today,
           status: AttendanceStatus.LATE as unknown as PrismaAttendanceStatus,
+          ...attEmpFilter,
         },
       }),
       this.prisma.attendance.count({
         where: {
           date: today,
           status: AttendanceStatus.ABSENT as unknown as PrismaAttendanceStatus,
+          ...attEmpFilter,
         },
       }),
       this.prisma.attendance.count({
-        where: { date: today, checkIn: { not: null } },
+        where: { date: today, checkIn: { not: null }, ...attEmpFilter },
       }),
       this.prisma.attendance.count({
-        where: { date: today, checkOut: { not: null } },
+        where: { date: today, checkOut: { not: null }, ...attEmpFilter },
       }),
-      this.prisma.leaveRequest.count(),
+      this.prisma.leaveRequest.count({ where: leaveEmpFilter }),
       this.prisma.leaveRequest.count({
-        where: { status: LeaveStatus.PENDING as unknown as PrismaLeaveStatus },
-      }),
-      this.prisma.leaveRequest.count({
-        where: { status: LeaveStatus.APPROVED as unknown as PrismaLeaveStatus },
+        where: { ...leaveEmpFilter, status: LeaveStatus.PENDING as unknown as PrismaLeaveStatus },
       }),
       this.prisma.leaveRequest.count({
-        where: { status: LeaveStatus.REJECTED as unknown as PrismaLeaveStatus },
+        where: { ...leaveEmpFilter, status: LeaveStatus.APPROVED as unknown as PrismaLeaveStatus },
+      }),
+      this.prisma.leaveRequest.count({
+        where: { ...leaveEmpFilter, status: LeaveStatus.REJECTED as unknown as PrismaLeaveStatus },
       }),
       this.prisma.employee.findMany({
+        where: empFilter,
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
@@ -109,6 +133,7 @@ export class DashboardService {
         },
       }),
       this.prisma.attendance.findMany({
+        where: attEmpFilter,
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
@@ -129,6 +154,7 @@ export class DashboardService {
         },
       }),
       this.prisma.leaveRequest.findMany({
+        where: leaveEmpFilter,
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
@@ -150,7 +176,7 @@ export class DashboardService {
         },
       }),
       this.prisma.leaveBalance.findMany({
-        where: { year: currentYear },
+        where: { year: currentYear, ...leaveEmpFilter },
         select: { totalDays: true, usedDays: true },
       }),
     ]);
@@ -160,7 +186,7 @@ export class DashboardService {
     ).length;
 
     const { from, to } = this.dateRange(range);
-    const analytics = await this.computeAnalytics(from, to, range);
+    const analytics = await this.computeAnalytics(from, to, range, scopeDeptId);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -197,14 +223,39 @@ export class DashboardService {
     };
   }
 
-  private async computeAnalytics(from: Date, to: Date, preset: RangePreset) {
+  private buildEmptySummary(from: Date, to: Date, preset: RangePreset) {
+    const dateSeries = this.buildDateSeries(from, to);
+    return {
+      generatedAt: new Date().toISOString(),
+      timezone: 'Asia/Bangkok',
+      employees: { totalEmployees: 0, activeEmployees: 0, inactiveEmployees: 0, resignedEmployees: 0, totalDepartments: 0, totalPositions: 0 },
+      attendance: { todayDate: this.todayBangkok().toISOString().split('T')[0], todayPresentCount: 0, todayLateCount: 0, todayAbsentCount: 0, todayClockedInCount: 0, todayClockedOutCount: 0 },
+      leave: { totalLeaveRequests: 0, pendingLeaveRequests: 0, approvedLeaveRequests: 0, rejectedLeaveRequests: 0, lowLeaveBalanceCount: 0 },
+      recent: { employees: [], attendance: [], leaveRequests: [] },
+      analytics: {
+        range: { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0], preset },
+        attendanceTrend: dateSeries.map((date) => ({ date, present: 0, late: 0, absent: 0 })),
+        leaveStatus: { pending: 0, approved: 0, rejected: 0 },
+        leaveByDepartment: [],
+        offSiteStatus: { pending: 0, approved: 0, rejected: 0 },
+        overtimeTrend: dateSeries.map((date) => ({ date, hours: 0 })),
+        topLeaveRequesters: [],
+        recentOffSite: [],
+      },
+    };
+  }
+
+  private async computeAnalytics(from: Date, to: Date, preset: RangePreset, scopeDeptId?: string) {
+    const empRelFilter = scopeDeptId ? { employee: { departmentId: scopeDeptId } } : {};
+    const deptFilter = scopeDeptId ? { id: scopeDeptId } : {};
+
     const [attendanceRows, leaveRows, offSiteRows, allDepts] = await Promise.all([
       this.prisma.attendance.findMany({
-        where: { date: { gte: from, lte: to } },
+        where: { date: { gte: from, lte: to }, ...empRelFilter },
         select: { date: true, status: true, checkOut: true },
       }),
       this.prisma.leaveRequest.findMany({
-        where: { startDate: { gte: from, lte: to } },
+        where: { startDate: { gte: from, lte: to }, ...empRelFilter },
         select: {
           status: true,
           employeeId: true,
@@ -219,7 +270,7 @@ export class DashboardService {
         },
       }),
       this.prisma.offSiteRequest.findMany({
-        where: { date: { gte: from, lte: to } },
+        where: { date: { gte: from, lte: to }, ...empRelFilter },
         select: {
           id: true,
           date: true,
@@ -230,6 +281,7 @@ export class DashboardService {
         take: 50,
       }),
       this.prisma.department.findMany({
+        where: deptFilter,
         select: { id: true, name: true },
         orderBy: { name: 'asc' },
       }),

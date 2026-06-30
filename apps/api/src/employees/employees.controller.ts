@@ -41,19 +41,23 @@ export class EmployeesController {
   constructor(private employees: EmployeesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List employees (paginated, filterable)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'List employees (paginated, filterable) — MANAGER sees own dept only' })
   @ApiResponse({ status: 200, description: 'Paginated employee list' })
-  findAll(@Query() query: QueryEmployeeDto) {
-    return this.employees.findAll(query);
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  findAll(@Query() query: QueryEmployeeDto, @CurrentUser() user?: Express.User) {
+    const actor = user as { id?: string; role?: string } | undefined;
+    return this.employees.findAll(query, { userId: actor?.id, role: actor?.role });
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get employee by ID' })
+  @ApiOperation({ summary: 'Get employee by ID — MANAGER sees own dept, EMPLOYEE sees self only' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Employee record' })
   @ApiResponse({ status: 404, description: 'Employee not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.employees.findOne(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user?: Express.User) {
+    const actor = user as { id?: string; role?: string } | undefined;
+    return this.employees.findOne(id, { userId: actor?.id, role: actor?.role });
   }
 
   @Post()

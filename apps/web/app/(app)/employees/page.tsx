@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee,
   getAllDepartments, getAllPositions,
@@ -71,8 +72,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function EmployeesPage() {
   const { t } = useLanguage();
+  const router = useRouter();
   const user = getUser();
   const admin = isAdmin(user);
+  const isEmployee = user?.role === 'EMPLOYEE';
+  const isManager = user?.role === 'MANAGER';
 
   const [result, setResult] = useState<PaginatedResponse<Employee> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,7 +98,13 @@ export default function EmployeesPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [positionsFiltered, setPositionsFiltered] = useState<Position[]>([]);
 
+  // Redirect EMPLOYEE away — they have no access to the employee list.
+  useEffect(() => {
+    if (isEmployee) router.replace('/profile');
+  }, [isEmployee, router]);
+
   const load = useCallback(async () => {
+    if (isEmployee) return; // no API call; loading stays true until redirect
     setLoading(true);
     setError(null);
     try {
@@ -105,7 +115,7 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, search, statusFilter, isEmployee]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
@@ -209,7 +219,7 @@ export default function EmployeesPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <h1 data-testid="page-title-employees" className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          {t('page_employees')}
+          {isManager ? t('page_employees_team') : t('page_employees')}
         </h1>
         <div className="flex items-center gap-3">
           {meta && <span className="text-sm text-zinc-400 dark:text-zinc-500">{meta.total} total</span>}

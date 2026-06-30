@@ -48,21 +48,21 @@ describe('DashboardController', () => {
   it('getSummary delegates to service with default 7d range when no range param', async () => {
     const result = await controller.getSummary(undefined);
 
-    expect(service.getSummary).toHaveBeenCalledWith('7d');
+    expect(service.getSummary).toHaveBeenCalledWith('7d', expect.objectContaining({ userId: undefined, role: undefined }));
     expect(result).toEqual(mockSummary);
   });
 
   it('getSummary passes valid range preset to service', async () => {
     await controller.getSummary('thisMonth');
-    expect(service.getSummary).toHaveBeenCalledWith('thisMonth');
+    expect(service.getSummary).toHaveBeenCalledWith('thisMonth', expect.objectContaining({ userId: undefined, role: undefined }));
 
     await controller.getSummary('lastMonth');
-    expect(service.getSummary).toHaveBeenCalledWith('lastMonth');
+    expect(service.getSummary).toHaveBeenCalledWith('lastMonth', expect.objectContaining({ userId: undefined, role: undefined }));
   });
 
   it('getSummary falls back to 7d for invalid range values', async () => {
     await controller.getSummary('invalid');
-    expect(service.getSummary).toHaveBeenCalledWith('7d');
+    expect(service.getSummary).toHaveBeenCalledWith('7d', expect.objectContaining({ userId: undefined, role: undefined }));
   });
 
   it('response includes timezone Asia/Bangkok', async () => {

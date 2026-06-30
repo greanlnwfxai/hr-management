@@ -8,6 +8,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -51,11 +52,12 @@ export class DashboardController {
     },
   })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
-  getSummary(@Query('range') range?: string) {
+  getSummary(@Query('range') range?: string, @CurrentUser() user?: Express.User) {
     const validPresets: RangePreset[] = ['7d', 'thisMonth', 'lastMonth'];
     const preset: RangePreset = validPresets.includes(range as RangePreset)
       ? (range as RangePreset)
       : '7d';
-    return this.dashboard.getSummary(preset);
+    const actor = user as { id?: string; role?: string } | undefined;
+    return this.dashboard.getSummary(preset, { userId: actor?.id, role: actor?.role });
   }
 }

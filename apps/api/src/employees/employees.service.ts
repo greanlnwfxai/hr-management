@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 // Type-only import: erased at runtime, safe even if prisma generate hasn't run.
 import type { EmployeeStatus as PrismaEmployeeStatus, UserRole as PrismaUserRole } from '@prisma/client';
+import { UserRole } from '../common/enums';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -48,14 +50,34 @@ export class EmployeesService {
     private auditLog: AuditLogService,
   ) {}
 
-  async findAll(query: QueryEmployeeDto) {
+  async findAll(query: QueryEmployeeDto, actor?: { userId?: string | null; role?: string | null }) {
     const { page = 1, limit = 20, search, status, departmentId, positionId } = query;
     const skip = (page - 1) * limit;
+
+    if (actor?.role === UserRole.EMPLOYEE) {
+      throw new ForbiddenException('Employees cannot access the employee list');
+    }
+
+    let scopedDepartmentId = departmentId;
+
+    if (actor?.role === UserRole.MANAGER) {
+      if (!actor.userId) {
+        return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      }
+      const managerEmp = await this.prisma.employee.findFirst({
+        where: { userId: actor.userId },
+        select: { managedDepartment: { select: { id: true } } },
+      });
+      if (!managerEmp?.managedDepartment) {
+        return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      }
+      scopedDepartmentId = managerEmp.managedDepartment.id;
+    }
 
     const where: Prisma.EmployeeWhereInput = {
       // Cast: local enum and Prisma enum share identical string values.
       ...(status && { status: status as unknown as PrismaEmployeeStatus }),
-      ...(departmentId && { departmentId }),
+      ...(scopedDepartmentId && { departmentId: scopedDepartmentId }),
       ...(positionId && { positionId }),
       ...(search && {
         OR: [
@@ -78,7 +100,35 @@ export class EmployeesService {
     };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, actor?: { userId?: string | null; role?: string | null }) {
+    if (actor?.role === UserRole.EMPLOYEE) {
+      if (!actor.userId) throw new ForbiddenException('Access denied');
+      const selfEmp = await this.prisma.employee.findFirst({
+        where: { userId: actor.userId },
+        select: { id: true },
+      });
+      if (!selfEmp || selfEmp.id !== id) throw new ForbiddenException('Access denied');
+    }
+
+    if (actor?.role === UserRole.MANAGER) {
+      if (!actor.userId) throw new ForbiddenException('Access denied');
+      const managerEmp = await this.prisma.employee.findFirst({
+        where: { userId: actor.userId },
+        select: { id: true, managedDepartment: { select: { id: true } } },
+      });
+      if (!managerEmp) throw new ForbiddenException('Access denied');
+      if (managerEmp.id !== id) {
+        if (!managerEmp.managedDepartment) throw new ForbiddenException('No managed department');
+        const target = await this.prisma.employee.findUnique({
+          where: { id },
+          select: { departmentId: true },
+        });
+        if (!target || target.departmentId !== managerEmp.managedDepartment.id) {
+          throw new ForbiddenException('Access denied');
+        }
+      }
+    }
+
     const employee = await this.prisma.employee.findUnique({
       where: { id },
       select: EMPLOYEE_SELECT,

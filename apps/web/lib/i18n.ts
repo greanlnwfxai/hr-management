@@ -92,6 +92,8 @@ const translations = {
 
     // Employees
     page_employees: 'Employees',
+    page_employees_team: 'Team Employees',
+    page_dashboard_team: 'Team Dashboard',
     emp_search_placeholder: 'Search employees…',
     emp_add: '+ Add Employee',
     emp_all_statuses: 'All Statuses',
@@ -423,6 +425,8 @@ const translations = {
 
     // Employees
     page_employees: 'พนักงาน',
+    page_employees_team: 'พนักงานในทีม',
+    page_dashboard_team: 'แดชบอร์ดทีม',
     emp_search_placeholder: 'ค้นหาพนักงาน…',
     emp_add: '+ เพิ่มพนักงาน',
     emp_all_statuses: 'ทุกสถานะ',

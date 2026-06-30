@@ -345,4 +345,71 @@ describe('DashboardService', () => {
       expect(analytics.topLeaveRequesters).toEqual([]);
     });
   });
+
+  // ── MANAGER scope ──────────────────────────────────────────────────────────
+
+  describe('getSummary — MANAGER scope', () => {
+    it('returns zeroed summary when MANAGER has no employee record', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      expect(result.employees.totalEmployees).toBe(0);
+      expect(result.leave.totalLeaveRequests).toBe(0);
+      expect(result.recent.employees).toEqual([]);
+    });
+
+    it('returns zeroed summary when MANAGER has no managedDepartment', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({ managedDepartment: null });
+
+      const result = await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      expect(result.employees.totalEmployees).toBe(0);
+      expect(result.analytics.attendanceTrend.length).toBeGreaterThan(0);
+      expect(result.analytics.attendanceTrend.every((d) => d.present === 0 && d.late === 0)).toBe(true);
+    });
+
+    it('resolves managedDepartment.id and scopes KPI queries to that department', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({
+        managedDepartment: { id: 'dept-uuid-1' },
+      });
+      setupMocks(prisma);
+
+      await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      expect(prisma.employee.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId: 'mgr-user-1' } }),
+      );
+      // Verify the scope filter actually reaches the count queries
+      expect(prisma.employee.count).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ departmentId: 'dept-uuid-1' }) }),
+      );
+      expect(prisma.attendance.count).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ employee: { departmentId: 'dept-uuid-1' } }) }),
+      );
+    });
+
+    it('passes full summary shape even when MANAGER scope returns data', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({
+        managedDepartment: { id: 'dept-uuid-1' },
+      });
+      setupMocks(prisma);
+
+      const result = await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      expect(result).toHaveProperty('generatedAt');
+      expect(result).toHaveProperty('employees');
+      expect(result).toHaveProperty('analytics');
+      expect(result.analytics).toHaveProperty('attendanceTrend');
+      expect(result.analytics).toHaveProperty('leaveByDepartment');
+    });
+
+    it('does not scope for SUPER_ADMIN — findFirst is not called', async () => {
+      setupMocks(prisma);
+
+      await service.getSummary('7d', { userId: 'admin-1', role: 'SUPER_ADMIN' });
+
+      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    });
+  });
 });

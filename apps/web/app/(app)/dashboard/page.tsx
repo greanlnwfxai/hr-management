@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getDashboard, type DashboardData, type RangePreset } from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
 import { useLanguage } from '@/hooks/useLanguage';
+import { getUser } from '@/lib/auth';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -411,13 +413,23 @@ const IconRefresh = () => (
 
 export default function DashboardPage() {
   const { t } = useLanguage();
+  const router = useRouter();
+  const user = getUser();
+  const isEmployee = user?.role === 'EMPLOYEE';
+  const isManager = user?.role === 'MANAGER';
   const [range, setRange] = useState<RangePreset>('7d');
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
 
+  // Redirect EMPLOYEE — dashboard is not available for employee role.
+  useEffect(() => {
+    if (isEmployee) router.replace('/profile');
+  }, [isEmployee, router]);
+
   const load = useCallback(async (preset: RangePreset, isRefresh = false) => {
+    if (isEmployee) return;
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
@@ -434,7 +446,7 @@ export default function DashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [t]);
+  }, [t, isEmployee]);
 
   useEffect(() => { load(range); }, [range, load]);
 
@@ -477,7 +489,7 @@ export default function DashboardPage() {
       {/* ── Compact header + filter bar (single row) ── */}
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h1 data-testid="page-title-dashboard" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mr-1">
-          {t('page_dashboard')}
+          {isManager ? t('page_dashboard_team') : t('page_dashboard')}
         </h1>
         <span className="text-xs text-zinc-400 dark:text-zinc-500 mr-auto">
           {formatTimestamp(data.generatedAt)} · {data.timezone}

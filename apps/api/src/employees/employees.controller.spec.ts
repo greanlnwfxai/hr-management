@@ -74,14 +74,14 @@ describe('EmployeesController', () => {
   it('findAll delegates to service and returns paginated result', async () => {
     const result = await controller.findAll({} as any);
 
-    expect(service.findAll).toHaveBeenCalled();
+    expect(service.findAll).toHaveBeenCalledWith({}, expect.objectContaining({ userId: undefined, role: undefined }));
     expect(result).toEqual(mockPaginatedResult);
   });
 
   it('findOne delegates to service with the given id', async () => {
     const result = await controller.findOne('emp-uuid-1');
 
-    expect(service.findOne).toHaveBeenCalledWith('emp-uuid-1');
+    expect(service.findOne).toHaveBeenCalledWith('emp-uuid-1', expect.objectContaining({ userId: undefined, role: undefined }));
     expect(result).toEqual(mockEmployee);
   });
 
