@@ -116,8 +116,8 @@ describe('EmployeesService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('returns empty list when MANAGER has no managedDepartment', async () => {
-      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: null } as any);
+    it('returns empty list when MANAGER has no managedDepartment and no own departmentId', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: null, departmentId: null } as any);
 
       const result = await service.findAll({ page: 1, limit: 20 }, { userId: 'mgr-user-1', role: 'MANAGER' });
 
@@ -132,26 +132,40 @@ describe('EmployeesService', () => {
       expect(result).toEqual({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } });
     });
 
-    it('scopes query to managed department when MANAGER has a managedDepartment', async () => {
+    it('falls back to own departmentId when MANAGER has no managedDepartment', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: null, departmentId: 'own-dept-id' } as any);
+      prisma.$transaction.mockResolvedValue([[mockEmployee], 1] as any);
+
+      await service.findAll({ page: 1, limit: 20 }, { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      // Must scope to own departmentId — not global
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ departmentId: 'own-dept-id' }) }),
+      );
+    });
+
+    it('scopes query to managedDepartment when MANAGER has both managedDepartment and own departmentId', async () => {
       prisma.employee.findFirst.mockResolvedValue({
         managedDepartment: { id: 'dept-uuid-1' },
+        departmentId: 'own-dept-id',
       } as any);
       prisma.$transaction.mockResolvedValue([[mockEmployee], 1] as any);
 
       await service.findAll({ page: 1, limit: 20 }, { userId: 'mgr-user-1', role: 'MANAGER' });
 
-      expect(prisma.employee.findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'mgr-user-1' } }),
-      );
-      // Verify the scope filter actually reaches the findMany where clause
+      // managedDepartment wins over own departmentId
       expect(prisma.employee.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ departmentId: 'dept-uuid-1' }) }),
       );
+      expect(prisma.employee.findMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ departmentId: 'own-dept-id' }) }),
+      );
     });
 
-    it('overrides any provided departmentId filter for MANAGER with managed dept id', async () => {
+    it('overrides any provided departmentId query param for MANAGER', async () => {
       prisma.employee.findFirst.mockResolvedValue({
         managedDepartment: { id: 'dept-uuid-1' },
+        departmentId: 'own-dept-id',
       } as any);
       prisma.$transaction.mockResolvedValue([[], 0] as any);
 
@@ -160,7 +174,7 @@ describe('EmployeesService', () => {
         { userId: 'mgr-user-1', role: 'MANAGER' },
       );
 
-      // Managed dept id must be used — not the query param
+      // Resolved dept id must be used — never the caller-supplied dept-other
       expect(prisma.employee.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ departmentId: 'dept-uuid-1' }) }),
       );
@@ -236,8 +250,36 @@ describe('EmployeesService', () => {
       prisma.employee.findFirst.mockResolvedValue({
         id: 'mgr-emp-id',
         managedDepartment: { id: 'dept-uuid-1' },
+        departmentId: 'dept-uuid-1',
       } as any);
       prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-other' } as any);
+
+      await expect(
+        service.findOne('emp-uuid-1', { userId: 'mgr-user-1', role: 'MANAGER' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('allows MANAGER to fetch employee in own department when no managedDepartment (fallback)', async () => {
+      prisma.employee.findFirst.mockResolvedValue({
+        id: 'mgr-emp-id',
+        managedDepartment: null,
+        departmentId: 'own-dept-id',
+      } as any);
+      prisma.employee.findUnique
+        .mockResolvedValueOnce({ departmentId: 'own-dept-id' } as any)
+        .mockResolvedValueOnce(mockEmployee as any);
+
+      const result = await service.findOne('emp-uuid-1', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      expect(result).toEqual(mockEmployee);
+    });
+
+    it('throws ForbiddenException when MANAGER has no managedDepartment and no own departmentId', async () => {
+      prisma.employee.findFirst.mockResolvedValue({
+        id: 'mgr-emp-id',
+        managedDepartment: null,
+        departmentId: null,
+      } as any);
 
       await expect(
         service.findOne('emp-uuid-1', { userId: 'mgr-user-1', role: 'MANAGER' }),

@@ -33,14 +33,16 @@ export class DashboardService {
       const managerEmp = actor.userId
         ? await this.prisma.employee.findFirst({
             where: { userId: actor.userId },
-            select: { managedDepartment: { select: { id: true } } },
+            select: { managedDepartment: { select: { id: true } }, departmentId: true },
           })
         : null;
-      if (!managerEmp?.managedDepartment) {
+      // Explicit managedDepartment assignment wins; fall back to own department.
+      const resolvedDeptId = managerEmp?.managedDepartment?.id ?? managerEmp?.departmentId ?? null;
+      if (!resolvedDeptId) {
         const { from, to } = this.dateRange(range);
         return this.buildEmptySummary(from, to, range);
       }
-      scopeDeptId = managerEmp.managedDepartment.id;
+      scopeDeptId = resolvedDeptId;
     }
 
     const empFilter = scopeDeptId ? { departmentId: scopeDeptId } : {};

@@ -66,12 +66,14 @@ export class EmployeesService {
       }
       const managerEmp = await this.prisma.employee.findFirst({
         where: { userId: actor.userId },
-        select: { managedDepartment: { select: { id: true } } },
+        select: { managedDepartment: { select: { id: true } }, departmentId: true },
       });
-      if (!managerEmp?.managedDepartment) {
+      // Explicit managedDepartment assignment wins; fall back to own department.
+      const resolvedDeptId = managerEmp?.managedDepartment?.id ?? managerEmp?.departmentId ?? null;
+      if (!resolvedDeptId) {
         return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
       }
-      scopedDepartmentId = managerEmp.managedDepartment.id;
+      scopedDepartmentId = resolvedDeptId;
     }
 
     const where: Prisma.EmployeeWhereInput = {
@@ -114,16 +116,18 @@ export class EmployeesService {
       if (!actor.userId) throw new ForbiddenException('Access denied');
       const managerEmp = await this.prisma.employee.findFirst({
         where: { userId: actor.userId },
-        select: { id: true, managedDepartment: { select: { id: true } } },
+        select: { id: true, managedDepartment: { select: { id: true } }, departmentId: true },
       });
       if (!managerEmp) throw new ForbiddenException('Access denied');
       if (managerEmp.id !== id) {
-        if (!managerEmp.managedDepartment) throw new ForbiddenException('No managed department');
+        // Explicit managedDepartment assignment wins; fall back to own department.
+        const resolvedDeptId = managerEmp.managedDepartment?.id ?? managerEmp.departmentId ?? null;
+        if (!resolvedDeptId) throw new ForbiddenException('Access denied');
         const target = await this.prisma.employee.findUnique({
           where: { id },
           select: { departmentId: true },
         });
-        if (!target || target.departmentId !== managerEmp.managedDepartment.id) {
+        if (!target || target.departmentId !== resolvedDeptId) {
           throw new ForbiddenException('Access denied');
         }
       }

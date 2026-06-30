@@ -359,8 +359,8 @@ describe('DashboardService', () => {
       expect(result.recent.employees).toEqual([]);
     });
 
-    it('returns zeroed summary when MANAGER has no managedDepartment', async () => {
-      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({ managedDepartment: null });
+    it('returns zeroed summary when MANAGER has no managedDepartment and no own departmentId', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({ managedDepartment: null, departmentId: null });
 
       const result = await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
 
@@ -369,9 +369,28 @@ describe('DashboardService', () => {
       expect(result.analytics.attendanceTrend.every((d) => d.present === 0 && d.late === 0)).toBe(true);
     });
 
+    it('falls back to own departmentId and scopes KPI queries when MANAGER has no managedDepartment', async () => {
+      (prisma.employee.findFirst as jest.Mock).mockResolvedValue({
+        managedDepartment: null,
+        departmentId: 'own-dept-id',
+      });
+      setupMocks(prisma);
+
+      await service.getSummary('7d', { userId: 'mgr-user-1', role: 'MANAGER' });
+
+      // Scope filter must reach the count queries using own departmentId
+      expect(prisma.employee.count).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ departmentId: 'own-dept-id' }) }),
+      );
+      expect(prisma.attendance.count).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ employee: { departmentId: 'own-dept-id' } }) }),
+      );
+    });
+
     it('resolves managedDepartment.id and scopes KPI queries to that department', async () => {
       (prisma.employee.findFirst as jest.Mock).mockResolvedValue({
         managedDepartment: { id: 'dept-uuid-1' },
+        departmentId: 'own-dept-id',
       });
       setupMocks(prisma);
 
@@ -380,7 +399,7 @@ describe('DashboardService', () => {
       expect(prisma.employee.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({ where: { userId: 'mgr-user-1' } }),
       );
-      // Verify the scope filter actually reaches the count queries
+      // managedDepartment.id wins over own departmentId
       expect(prisma.employee.count).toHaveBeenCalledWith(
         expect.objectContaining({ where: expect.objectContaining({ departmentId: 'dept-uuid-1' }) }),
       );
@@ -392,6 +411,7 @@ describe('DashboardService', () => {
     it('passes full summary shape even when MANAGER scope returns data', async () => {
       (prisma.employee.findFirst as jest.Mock).mockResolvedValue({
         managedDepartment: { id: 'dept-uuid-1' },
+        departmentId: 'own-dept-id',
       });
       setupMocks(prisma);
 
