@@ -205,7 +205,7 @@ import type { AttendanceReviewStatus } from '../src/api/types';
 function reviewStatusLabel(status: AttendanceReviewStatus): string {
   switch (status) {
     case 'AUTO_ACCEPTED': return 'อนุมัติแล้ว (ตามคำขอ)';
-    case 'PENDING_REVIEW': return 'รอ HR ตรวจสอบ';
+    case 'PENDING_REVIEW': return 'รอหัวหน้างาน/HR ตรวจสอบ';
     case 'APPROVED': return 'อนุมัติแล้ว';
     case 'REJECTED': return 'ไม่อนุมัติ';
     case 'MISSING_CHECKOUT': return 'ไม่ได้ลงเวลาออก';
@@ -490,7 +490,7 @@ export default function HomeScreen() {
         {/* ── Mixed checkout pending review banner ── */}
         {today?.workMode === 'ONSITE' && today?.reviewStatus === 'PENDING_REVIEW' && alreadyClockedOut && (
           <View style={styles.pendingReviewBanner}>
-            <Text style={styles.pendingReviewBannerTitle}>⏳ รอ HR ตรวจสอบ</Text>
+            <Text style={styles.pendingReviewBannerTitle}>⏳ รอหัวหน้างาน/HR ตรวจสอบ</Text>
             <Text style={styles.pendingReviewBannerText}>
               บันทึกการเช็คเอาท์นอกสถานที่ถูกส่งให้ HR ตรวจสอบแล้ว
             </Text>

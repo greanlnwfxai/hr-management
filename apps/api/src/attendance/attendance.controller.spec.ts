@@ -130,11 +130,11 @@ describe('AttendanceController', () => {
     expect(result).toMatchObject({ radiusMeters: 200 });
   });
 
-  it('findOffsiteReview delegates to service with query', async () => {
+  it('findOffsiteReview delegates to service with query, user.id, and user.role', async () => {
     const query = { page: 1, limit: 20 } as any;
-    const result = await controller.findOffsiteReview(query);
+    const result = await controller.findOffsiteReview(query, mockAdminUser as any);
 
-    expect(service.findOffsiteReview).toHaveBeenCalledWith(query);
+    expect(service.findOffsiteReview).toHaveBeenCalledWith(query, mockAdminUser.id, mockAdminUser.role);
     expect(result).toEqual(mockPaginated);
   });
 
@@ -185,19 +185,19 @@ describe('AttendanceController', () => {
       expect(roles).toBeUndefined();
     });
 
-    it('findOffsiteReview is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+    it('findOffsiteReview is restricted to SUPER_ADMIN, HR_ADMIN, and MANAGER', () => {
       const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.findOffsiteReview);
-      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER]);
     });
 
-    it('approveOffsiteRecord is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+    it('approveOffsiteRecord is restricted to SUPER_ADMIN, HR_ADMIN, and MANAGER', () => {
       const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.approveOffsiteRecord);
-      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER]);
     });
 
-    it('rejectOffsiteRecord is restricted to SUPER_ADMIN and HR_ADMIN', () => {
+    it('rejectOffsiteRecord is restricted to SUPER_ADMIN, HR_ADMIN, and MANAGER', () => {
       const roles = Reflect.getMetadata(ROLES_KEY, AttendanceController.prototype.rejectOffsiteRecord);
-      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN]);
+      expect(roles).toEqual([UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER]);
     });
   });
 });

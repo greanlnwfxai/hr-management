@@ -2092,4 +2092,284 @@ describe('AttendanceService', () => {
       expect(result).toBeDefined();
     });
   });
+
+  // ── findOffsiteReview (MANAGER scope) ──────────────────────────────────────
+
+  describe('findOffsiteReview — MANAGER scope', () => {
+    const managerId = 'manager-user-uuid';
+    const managerEmpId = 'manager-emp-uuid';
+    const deptId = 'dept-uuid-1';
+    const otherEmpId = 'other-emp-uuid';
+
+    const pendingRecord = {
+      ...mockAttendanceFull,
+      employee: {
+        id: otherEmpId,
+        employeeCode: 'EMP002',
+        firstName: 'Jane',
+        lastName: 'Smith',
+        department: { id: deptId, name: 'Engineering' },
+        position: null,
+      },
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+    };
+
+    it('returns empty list when manager has no employee record', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+
+      const result = await service.findOffsiteReview({}, managerId, 'MANAGER');
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta.total).toBe(0);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('returns empty list when manager has no managedDepartment', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: managerEmpId, managedDepartment: null });
+
+      const result = await service.findOffsiteReview({}, managerId, 'MANAGER');
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta.total).toBe(0);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('returns only records from the managed department', async () => {
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+      prisma.$transaction.mockResolvedValue([[pendingRecord], 1] as any);
+
+      const result = await service.findOffsiteReview({}, managerId, 'MANAGER');
+
+      expect(result.data).toHaveLength(1);
+      expect(result.meta.total).toBe(1);
+      expect(prisma.$transaction).toHaveBeenCalled();
+      const findManyArgs = (prisma.attendance.findMany as jest.Mock).mock.calls[0][0];
+      expect(findManyArgs.where).toMatchObject({
+        employee: { departmentId: deptId },
+        NOT: { employeeId: managerEmpId },
+      });
+    });
+
+    it('HR/SUPER_ADMIN path returns org-wide results without department filter', async () => {
+      prisma.$transaction.mockResolvedValue([[pendingRecord], 1] as any);
+
+      await service.findOffsiteReview({});
+
+      const findManyArgs = (prisma.attendance.findMany as jest.Mock).mock.calls[0][0];
+      expect(findManyArgs.where).not.toHaveProperty('employee');
+      expect(findManyArgs.where).not.toHaveProperty('NOT');
+    });
+  });
+
+  // ── approveOffsiteAttendance (MANAGER scope) ──────────────────────────────
+
+  describe('approveOffsiteAttendance — MANAGER scope', () => {
+    const managerUserId = 'manager-user-uuid';
+    const managerEmpId = 'manager-emp-uuid';
+    const deptId = 'dept-uuid-1';
+    const otherDeptId = 'other-dept-uuid';
+    const targetEmpId = 'target-emp-uuid';
+
+    const pendingRecord = {
+      ...mockAttendanceFull,
+      employee: {
+        id: targetEmpId,
+        employeeCode: 'EMP002',
+        firstName: 'Jane',
+        lastName: 'Smith',
+        department: { id: deptId, name: 'Engineering' },
+        position: null,
+      },
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+      checkInLatitude: 13.9,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    const approvedRecord = { ...pendingRecord, reviewStatus: 'APPROVED', reviewedAt: new Date() };
+
+    const managerCtx = { actorUserId: managerUserId, actorRole: 'MANAGER', ipAddress: null, userAgent: null };
+
+    it('throws ForbiddenException when manager has no managed department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: managerEmpId, managedDepartment: null });
+
+      await expect(
+        service.approveOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException when attendance employee is in a different department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        employee: { ...pendingRecord.employee, department: { id: otherDeptId, name: 'HR' } },
+      } as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+
+      await expect(
+        service.approveOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException when manager attempts to approve their own record', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        employee: { ...pendingRecord.employee, id: managerEmpId },
+      } as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+
+      await expect(
+        service.approveOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('approves a record in the manager\'s department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      const result = await service.approveOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewStatus: 'APPROVED' }),
+        }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('records actorRole=MANAGER in audit event', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorRole: 'MANAGER', action: 'ATTENDANCE_OFFSITE_APPROVED' }),
+      );
+    });
+  });
+
+  // ── rejectOffsiteAttendance (MANAGER scope) ───────────────────────────────
+
+  describe('rejectOffsiteAttendance — MANAGER scope', () => {
+    const managerUserId = 'manager-user-uuid';
+    const managerEmpId = 'manager-emp-uuid';
+    const deptId = 'dept-uuid-1';
+    const otherDeptId = 'other-dept-uuid';
+    const targetEmpId = 'target-emp-uuid';
+
+    const pendingRecord = {
+      ...mockAttendanceFull,
+      employee: {
+        id: targetEmpId,
+        employeeCode: 'EMP002',
+        firstName: 'Jane',
+        lastName: 'Smith',
+        department: { id: deptId, name: 'Engineering' },
+        position: null,
+      },
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      reviewStatus: 'PENDING_REVIEW',
+      checkInLatitude: 13.9,
+      reviewedById: null,
+      reviewedAt: null,
+      reviewNote: null,
+    };
+
+    const rejectedRecord = { ...pendingRecord, reviewStatus: 'REJECTED', reviewedAt: new Date(), reviewNote: 'ไม่มีเอกสาร' };
+
+    const managerCtx = { actorUserId: managerUserId, actorRole: 'MANAGER', ipAddress: null, userAgent: null };
+
+    it('throws ForbiddenException when manager has no managed department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: managerEmpId, managedDepartment: null });
+
+      await expect(
+        service.rejectOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException when attendance employee is in a different department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        employee: { ...pendingRecord.employee, department: { id: otherDeptId, name: 'HR' } },
+      } as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+
+      await expect(
+        service.rejectOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException when manager attempts to reject their own record', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...pendingRecord,
+        employee: { ...pendingRecord.employee, id: managerEmpId },
+      } as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+
+      await expect(
+        service.rejectOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a record in the manager\'s department', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      const result = await service.rejectOffsiteAttendance(attendanceId, managerUserId, { reviewNote: 'ไม่มีเอกสาร' }, managerCtx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ reviewStatus: 'REJECTED' }),
+        }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('records actorRole=MANAGER in audit event', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({
+        id: managerEmpId,
+        managedDepartment: { id: deptId },
+      });
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      await service.rejectOffsiteAttendance(attendanceId, managerUserId, {}, managerCtx);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({ actorRole: 'MANAGER', action: 'ATTENDANCE_OFFSITE_REJECTED' }),
+      );
+    });
+  });
 });

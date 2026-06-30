@@ -29,11 +29,12 @@ function navForRole(role: AuthUser['role']): NavDef[] {
       ];
     case 'MANAGER':
       return [
-        { href: '/dashboard',  labelKey: 'nav_dashboard',  testid: 'nav-dashboard' },
-        { href: '/employees',  labelKey: 'nav_employees',  testid: 'nav-employees' },
-        { href: '/attendance', labelKey: 'nav_attendance', testid: 'nav-attendance' },
-        { href: '/leave',      labelKey: 'nav_leave',      testid: 'nav-leave' },
-        { href: '/offsite',    labelKey: 'nav_offsite',    testid: 'nav-offsite' },
+        { href: '/dashboard',                 labelKey: 'nav_dashboard',      testid: 'nav-dashboard' },
+        { href: '/employees',                 labelKey: 'nav_employees',      testid: 'nav-employees' },
+        { href: '/attendance',                labelKey: 'nav_attendance',     testid: 'nav-attendance' },
+        { href: '/leave',                     labelKey: 'nav_leave',          testid: 'nav-leave' },
+        { href: '/offsite',                   labelKey: 'nav_offsite',        testid: 'nav-offsite' },
+        { href: '/attendance/offsite-review', labelKey: 'nav_offsite_review', testid: 'nav-offsite-review' },
       ];
     case 'EMPLOYEE':
     default:

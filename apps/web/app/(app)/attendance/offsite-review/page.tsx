@@ -10,7 +10,7 @@ import {
   type PaginatedResponse,
   ApiError,
 } from '@/lib/api';
-import { getUser, isAdmin } from '@/lib/auth';
+import { getUser, isAdminOrManager } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
@@ -175,11 +175,11 @@ export default function OffsiteReviewPage() {
     }
   }
 
-  if (!isAdmin(user)) {
+  if (!isAdminOrManager(user)) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
         <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300">ไม่มีสิทธิ์เข้าถึงหน้านี้</p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">เฉพาะ HR Admin และ Super Admin เท่านั้น</p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">เฉพาะ HR Admin, Super Admin และหัวหน้าทีมเท่านั้น</p>
         <Link href="/attendance" className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline">
           ← กลับไปหน้าลงเวลา
         </Link>
@@ -195,7 +195,9 @@ export default function OffsiteReviewPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 data-testid="page-title-offsite-review" className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-            ตรวจสอบการลงเวลานอกสถานที่
+            {user?.role === 'MANAGER'
+              ? 'ตรวจสอบการลงเวลานอกสถานที่ของทีม'
+              : 'ตรวจสอบการลงเวลานอกสถานที่'}
           </h1>
           <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">อนุมัติหรือปฏิเสธบันทึกที่รอการตรวจสอบ</p>
         </div>

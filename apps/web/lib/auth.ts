@@ -46,3 +46,7 @@ export function clearAuth(): void {
 export function isAdmin(user: AuthUser | null): boolean {
   return user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
 }
+
+export function isAdminOrManager(user: AuthUser | null): boolean {
+  return isAdmin(user) || user?.role === 'MANAGER';
+}

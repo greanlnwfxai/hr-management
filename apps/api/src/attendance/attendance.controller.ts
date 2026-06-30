@@ -189,17 +189,20 @@ export class AttendanceController {
   }
 
   @Get('offsite-review')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
-  @ApiOperation({ summary: 'List off-site attendance records for review (SUPER_ADMIN, HR_ADMIN)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'List off-site attendance records for review (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
   @ApiResponse({ status: 200, description: 'Paginated off-site attendance list' })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
-  findOffsiteReview(@Query() query: QueryOffsiteReviewDto) {
-    return this.attendance.findOffsiteReview(query);
+  findOffsiteReview(
+    @Query() query: QueryOffsiteReviewDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.attendance.findOffsiteReview(query, user.id, user.role);
   }
 
   @Patch('offsite-review/:id/approve')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
-  @ApiOperation({ summary: 'Approve a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Approve a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
   @ApiParam({ name: 'id', description: 'Attendance UUID' })
   @ApiResponse({ status: 200, description: 'Attendance record approved' })
   @ApiResponse({ status: 400, description: 'Record is not off-site or not PENDING_REVIEW' })
@@ -220,8 +223,8 @@ export class AttendanceController {
   }
 
   @Patch('offsite-review/:id/reject')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
-  @ApiOperation({ summary: 'Reject a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
+  @ApiOperation({ summary: 'Reject a PENDING_REVIEW off-site attendance record (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
   @ApiParam({ name: 'id', description: 'Attendance UUID' })
   @ApiResponse({ status: 200, description: 'Attendance record rejected' })
   @ApiResponse({ status: 400, description: 'Record is not off-site or not PENDING_REVIEW' })

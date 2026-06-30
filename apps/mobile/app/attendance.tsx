@@ -59,7 +59,7 @@ function statusColor(status: AttendanceStatus): string {
 function reviewStatusLabel(status: AttendanceReviewStatus): string {
   switch (status) {
     case 'AUTO_ACCEPTED': return 'อนุมัติแล้ว (ตามคำขอ)';
-    case 'PENDING_REVIEW': return 'รอ HR ตรวจสอบ';
+    case 'PENDING_REVIEW': return 'รอหัวหน้างาน/HR ตรวจสอบ';
     case 'APPROVED': return 'อนุมัติแล้ว';
     case 'REJECTED': return 'ไม่อนุมัติ';
     case 'MISSING_CHECKOUT': return 'ไม่ได้ลงเวลาออก';

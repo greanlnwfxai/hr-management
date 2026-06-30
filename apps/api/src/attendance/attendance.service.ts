@@ -83,6 +83,42 @@ const ATTENDANCE_SELECT = {
   updatedAt: true,
 } satisfies Prisma.AttendanceSelect;
 
+// Review API response select — identical to ATTENDANCE_SELECT but without raw GPS coordinates.
+// MANAGER and HR review responses must not expose lat/lon (privacy requirement REQ-002G §8.5).
+const REVIEW_SELECT = {
+  id: true,
+  date: true,
+  checkIn: true,
+  checkOut: true,
+  status: true,
+  workMode: true,
+  note: true,
+  attendanceSource: true,
+  reviewStatus: true,
+  workLocationName: true,
+  offsiteReason: true,
+  offSiteRequestId: true,
+  checkInAccuracyMeters: true,
+  checkInDistanceFromCompanyMeters: true,
+  checkOutAccuracyMeters: true,
+  checkOutDistanceFromCompanyMeters: true,
+  reviewedById: true,
+  reviewedAt: true,
+  reviewNote: true,
+  employee: {
+    select: {
+      id: true,
+      employeeCode: true,
+      firstName: true,
+      lastName: true,
+      department: { select: { id: true, name: true } },
+      position: { select: { id: true, title: true } },
+    },
+  },
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.AttendanceSelect;
+
 @Injectable()
 export class AttendanceService {
   constructor(
@@ -651,9 +687,55 @@ export class AttendanceService {
     };
   }
 
-  async findOffsiteReview(query: QueryOffsiteReviewDto) {
+  async findOffsiteReview(query: QueryOffsiteReviewDto, userId?: string, userRole?: string) {
     const { page = 1, limit = 20, startDate, endDate, employeeId, reviewStatus } = query;
     const skip = (page - 1) * limit;
+
+    // MANAGER scope: return only records from their managed department.
+    if (userRole === UserRole.MANAGER) {
+      if (!userId) return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+
+      const managerEmp = await this.prisma.employee.findFirst({
+        where: { userId },
+        select: { id: true, managedDepartment: { select: { id: true } } },
+      });
+
+      // No employee record or no managed department → empty list (fallback to HR queue).
+      if (!managerEmp?.managedDepartment) {
+        return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      }
+
+      const deptId = managerEmp.managedDepartment.id;
+
+      const where: Prisma.AttendanceWhereInput = {
+        OR: [
+          {
+            attendanceSource: {
+              in: [
+                AttendanceSource.OFFSITE_UNPLANNED,
+                AttendanceSource.OFFSITE_PLANNED,
+              ] as unknown as PrismaAttendanceSource[],
+            },
+          },
+          {
+            attendanceSource: AttendanceSource.COMPANY_GEOFENCE as unknown as PrismaAttendanceSource,
+            reviewStatus: { not: null } as any,
+          },
+        ],
+        employee: { departmentId: deptId },
+        NOT: { employeeId: managerEmp.id },
+        ...(reviewStatus && { reviewStatus: reviewStatus as unknown as PrismaAttendanceReviewStatus }),
+        ...(employeeId && { employeeId }),
+        ...this.buildDateFilter(startDate, endDate),
+      };
+
+      const [data, total] = await this.prisma.$transaction([
+        this.prisma.attendance.findMany({ where, skip, take: limit, select: REVIEW_SELECT, orderBy: { date: 'desc' } }),
+        this.prisma.attendance.count({ where }),
+      ]);
+
+      return { data, meta: { total, page, limit, totalPages: Math.ceil(total / limit) } };
+    }
 
     const where: Prisma.AttendanceWhereInput = {
       OR: [
@@ -682,7 +764,7 @@ export class AttendanceService {
         where,
         skip,
         take: limit,
-        select: ATTENDANCE_SELECT,
+        select: REVIEW_SELECT,
         orderBy: { date: 'desc' },
       }),
       this.prisma.attendance.count({ where }),
@@ -697,6 +779,7 @@ export class AttendanceService {
     dto: ApproveOffsiteDto,
     ctx?: AttendanceAuditContext,
   ) {
+    // Load with ATTENDANCE_SELECT (includes raw GPS) for audit hasCoordinates check.
     const record = await this.prisma.attendance.findUnique({
       where: { id },
       select: ATTENDANCE_SELECT,
@@ -725,8 +808,22 @@ export class AttendanceService {
 
     const reviewerEmp = await this.prisma.employee.findFirst({
       where: { userId },
-      select: { id: true },
+      select: { id: true, managedDepartment: { select: { id: true } } },
     });
+
+    // MANAGER scope check: must have a managed department, record must belong to that
+    // department, and manager cannot self-review.
+    if (ctx?.actorRole === UserRole.MANAGER) {
+      if (!reviewerEmp?.managedDepartment) {
+        throw new ForbiddenException('คุณไม่ได้รับมอบหมายให้ดูแลแผนกใด');
+      }
+      if (record.employee.department?.id !== reviewerEmp.managedDepartment.id) {
+        throw new ForbiddenException('คุณไม่มีสิทธิ์ตรวจสอบบันทึกของพนักงานนอกแผนก');
+      }
+      if (record.employee.id === reviewerEmp.id) {
+        throw new ForbiddenException('ไม่สามารถอนุมัติบันทึกการลงเวลาของตัวเองได้');
+      }
+    }
 
     const result = await this.prisma.attendance.update({
       where: { id },
@@ -736,7 +833,7 @@ export class AttendanceService {
         ...(reviewerEmp && { reviewedById: reviewerEmp.id }),
         ...(dto.reviewNote !== undefined && { reviewNote: dto.reviewNote }),
       },
-      select: ATTENDANCE_SELECT,
+      select: REVIEW_SELECT,
     });
 
     await this.recordBestEffort({
@@ -771,6 +868,7 @@ export class AttendanceService {
     dto: RejectOffsiteDto,
     ctx?: AttendanceAuditContext,
   ) {
+    // Load with ATTENDANCE_SELECT (includes raw GPS) for audit hasCoordinates check.
     const record = await this.prisma.attendance.findUnique({
       where: { id },
       select: ATTENDANCE_SELECT,
@@ -799,8 +897,22 @@ export class AttendanceService {
 
     const reviewerEmp = await this.prisma.employee.findFirst({
       where: { userId },
-      select: { id: true },
+      select: { id: true, managedDepartment: { select: { id: true } } },
     });
+
+    // MANAGER scope check: must have a managed department, record must belong to that
+    // department, and manager cannot self-review.
+    if (ctx?.actorRole === UserRole.MANAGER) {
+      if (!reviewerEmp?.managedDepartment) {
+        throw new ForbiddenException('คุณไม่ได้รับมอบหมายให้ดูแลแผนกใด');
+      }
+      if (record.employee.department?.id !== reviewerEmp.managedDepartment.id) {
+        throw new ForbiddenException('คุณไม่มีสิทธิ์ตรวจสอบบันทึกของพนักงานนอกแผนก');
+      }
+      if (record.employee.id === reviewerEmp.id) {
+        throw new ForbiddenException('ไม่สามารถปฏิเสธบันทึกการลงเวลาของตัวเองได้');
+      }
+    }
 
     const result = await this.prisma.attendance.update({
       where: { id },
@@ -810,7 +922,7 @@ export class AttendanceService {
         ...(reviewerEmp && { reviewedById: reviewerEmp.id }),
         ...(dto.reviewNote !== undefined && { reviewNote: dto.reviewNote }),
       },
-      select: ATTENDANCE_SELECT,
+      select: REVIEW_SELECT,
     });
 
     await this.recordBestEffort({
