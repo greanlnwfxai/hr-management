@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
   clockIn, clockOut, getMyAttendance, getAttendance,
   type AttendanceRecord, type PaginatedResponse, ApiError,
@@ -308,6 +309,21 @@ export default function AttendancePage() {
       {/* Admin: all attendance */}
       {admin && (
         <div>
+          {/* Quick link to off-site attendance review */}
+          <div className="mb-5 flex items-center justify-between rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-200">ตรวจสอบการลงเวลานอกสถานที่</p>
+              <p className="mt-0.5 text-xs text-blue-600 dark:text-blue-400">ดูและอนุมัติ/ปฏิเสธบันทึกที่รอการตรวจสอบ</p>
+            </div>
+            <Link
+              href="/attendance/offsite-review"
+              data-testid="link-offsite-review"
+              className="shrink-0 rounded-md bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              ดูรายการ →
+            </Link>
+          </div>
+
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h2 data-testid="section-all-records" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               {t('att_all_records')}

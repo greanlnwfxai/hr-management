@@ -426,6 +426,72 @@ export function updateGeofenceConfig(body: {
   });
 }
 
+// ── Off-site Attendance Review ────────────────────────────────────────────────
+
+export type OffsiteReviewRecord = {
+  id: string;
+  date: string;
+  checkIn?: string | null;
+  checkOut?: string | null;
+  status: string;
+  workMode: string;
+  note?: string | null;
+  attendanceSource: string | null;
+  reviewStatus: string | null;
+  workLocationName?: string | null;
+  offsiteReason?: string | null;
+  offSiteRequestId?: string | null;
+  checkInAccuracyMeters?: number | null;
+  checkInDistanceFromCompanyMeters?: number | null;
+  checkOutAccuracyMeters?: number | null;
+  checkOutDistanceFromCompanyMeters?: number | null;
+  reviewedAt?: string | null;
+  reviewNote?: string | null;
+  employee?: {
+    id: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+    department?: { id: string; name: string } | null;
+    position?: { id: string; title: string } | null;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export function getOffsiteReview(params?: {
+  page?: number;
+  limit?: number;
+  reviewStatus?: string;
+  startDate?: string;
+  endDate?: string;
+  employeeId?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.reviewStatus) qs.set('reviewStatus', params.reviewStatus);
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<OffsiteReviewRecord>>(`/attendance/offsite-review${query}`);
+}
+
+export function approveOffsiteReview(id: string, reviewNote?: string) {
+  return apiFetch<OffsiteReviewRecord>(`/attendance/offsite-review/${id}/approve`, {
+    method: 'PATCH',
+    body: JSON.stringify(reviewNote !== undefined ? { reviewNote } : {}),
+  });
+}
+
+export function rejectOffsiteReview(id: string, reviewNote?: string) {
+  return apiFetch<OffsiteReviewRecord>(`/attendance/offsite-review/${id}/reject`, {
+    method: 'PATCH',
+    body: JSON.stringify(reviewNote !== undefined ? { reviewNote } : {}),
+  });
+}
+
 // ── Leave ─────────────────────────────────────────────────────────────────────
 
 export type LeaveRequest = {

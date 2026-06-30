@@ -303,6 +303,8 @@ const translations = {
     empty_audit_logs: 'No audit logs found.',
     error_audit_logs: 'Failed to load audit logs.',
 
+    nav_offsite_review: 'Off-site Review',
+
     nav_geofence_settings: 'Geofence Settings',
     page_geofence_settings: 'Geofence Settings',
     geofence_enabled_label: 'Enable Geofence',
@@ -631,6 +633,8 @@ const translations = {
     loading_audit_logs: 'กำลังโหลดประวัติตรวจสอบ…',
     empty_audit_logs: 'ไม่พบประวัติตรวจสอบ',
     error_audit_logs: 'โหลดประวัติตรวจสอบล้มเหลว',
+
+    nav_offsite_review: 'ตรวจสอบนอกสถานที่',
 
     nav_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',
     page_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',
