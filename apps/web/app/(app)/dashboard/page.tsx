@@ -1,12 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getDashboard, type DashboardData, type RangePreset } from '@/lib/api';
+import {
+  getDashboard, getMyAttendance, getMyLeaveBalances, getMyLeave,
+  type DashboardData, type RangePreset, type AttendanceRecord, type LeaveBalance, type LeaveRequest,
+} from '@/lib/api';
 import { ApiError } from '@/lib/api';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
 import { useLanguage } from '@/hooks/useLanguage';
+import { leaveTypeLabel } from '@/lib/i18n';
 import { getUser } from '@/lib/auth';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -409,24 +412,182 @@ const IconRefresh = () => (
   </svg>
 );
 
+// ── Employee Self-Dashboard ────────────────────────────────────────────────────
+
+type SelfData = {
+  attendance: AttendanceRecord[];
+  balances: LeaveBalance[];
+  leave: LeaveRequest[];
+};
+
+function EmployeeSelfView({
+  data,
+  refreshing,
+  onRefresh,
+}: {
+  data: SelfData;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const { t, lang } = useLanguage();
+
+  const todayBangkok = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
+  const todayRecord = data.attendance.find((r) => r.date === todayBangkok);
+  const totalRemaining = data.balances.reduce((sum, b) => sum + b.remainingDays, 0);
+  const pendingLeave = data.leave.filter((l) => l.status === 'PENDING').length;
+
+  const todayAccent = todayRecord?.status === 'PRESENT'
+    ? 'green' : todayRecord?.status === 'LATE'
+    ? 'amber' : todayRecord?.status === 'ABSENT'
+    ? 'red' : 'zinc';
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h1 data-testid="page-title-dashboard" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          {t('page_employee_dashboard')}
+        </h1>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 transition-colors"
+        >
+          <span className={refreshing ? 'animate-spin' : ''}><IconRefresh /></span>
+          {t('dash_refresh')}
+        </button>
+      </div>
+
+      {/* KPI Row */}
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <KpiCard
+          testid="stat-today-att"
+          label={t('emp_dash_today_attendance')}
+          value={todayRecord ? todayRecord.status : '—'}
+          accent={todayAccent as 'zinc' | 'green' | 'amber' | 'red'}
+          icon={<IconClock />}
+        />
+        <KpiCard
+          testid="stat-leave-balance"
+          label={t('emp_dash_leave_balance')}
+          value={totalRemaining}
+          sub={t('emp_dash_days_remaining')}
+          accent="blue"
+          icon={<IconCalendar />}
+        />
+        <KpiCard
+          testid="stat-pending-leave"
+          label={t('dash_pending_leave')}
+          value={pendingLeave}
+          accent="amber"
+          icon={<IconCalendar />}
+        />
+      </div>
+
+      {/* 3-column panels */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Recent Attendance */}
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-3 shadow-sm">
+          <h2 data-testid="section-my-attendance" className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+            {t('emp_dash_recent_attendance')}
+          </h2>
+          {data.attendance.length === 0 ? (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('emp_dash_no_attendance')}</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {data.attendance.slice(0, 7).map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-600 dark:text-zinc-400">{a.date}</span>
+                  <div className="flex items-center gap-1">
+                    {a.checkIn && (
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                        {new Date(a.checkIn).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
+                      </span>
+                    )}
+                    {statusBadge(a.status)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Leave Balance */}
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-3 shadow-sm">
+          <h2 data-testid="section-leave-balance" className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+            {t('emp_dash_leave_balance')}
+          </h2>
+          {data.balances.length === 0 ? (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('emp_dash_no_leave_balance')}</p>
+          ) : (
+            <ul className="space-y-2.5">
+              {data.balances.map((b) => (
+                <li key={b.id}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="text-xs text-zinc-700 dark:text-zinc-300">{leaveTypeLabel(b.leaveType, lang)}</span>
+                    <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 tabular-nums">
+                      {b.remainingDays}
+                      <span className="font-normal text-zinc-400 dark:text-zinc-500"> / {b.totalDays}</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-zinc-100 dark:bg-zinc-700 overflow-hidden">
+                    <div
+                      className="h-1.5 rounded-full bg-blue-400 dark:bg-blue-500 transition-all"
+                      style={{ width: `${b.totalDays > 0 ? Math.round((b.remainingDays / b.totalDays) * 100) : 0}%` }}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* My Leave Requests */}
+        <div className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-3 shadow-sm">
+          <h2 data-testid="section-my-leave" className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+            {t('emp_dash_my_leave')}
+          </h2>
+          {data.leave.length === 0 ? (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('emp_dash_no_leave')}</p>
+          ) : (
+            <ul className="space-y-1.5">
+              {data.leave.slice(0, 5).map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-zinc-700 dark:text-zinc-300 truncate">{leaveTypeLabel(l.leaveType, lang)}</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{l.startDate} – {l.endDate}</p>
+                  </div>
+                  {statusBadge(l.status)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const { t } = useLanguage();
-  const router = useRouter();
   const user = getUser();
   const isEmployee = user?.role === 'EMPLOYEE';
   const isManager = user?.role === 'MANAGER';
+
+  // Non-employee dashboard state
   const [range, setRange] = useState<RangePreset>('7d');
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isEmployee);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
 
-  // Redirect EMPLOYEE — dashboard is not available for employee role.
-  useEffect(() => {
-    if (isEmployee) router.replace('/profile');
-  }, [isEmployee, router]);
+  // Employee self-dashboard state
+  const [selfData, setSelfData] = useState<SelfData | null>(null);
+  const [selfLoading, setSelfLoading] = useState(isEmployee === true);
+  const [selfRefreshing, setSelfRefreshing] = useState(false);
+  const [selfError, setSelfError] = useState<string | null>(null);
 
   const load = useCallback(async (preset: RangePreset, isRefresh = false) => {
     if (isEmployee) return;
@@ -448,7 +609,35 @@ export default function DashboardPage() {
     }
   }, [t, isEmployee]);
 
+  const loadSelf = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setSelfRefreshing(true);
+    else setSelfLoading(true);
+    setSelfError(null);
+    try {
+      const [attRes, balRes, leaveRes] = await Promise.all([
+        getMyAttendance({ limit: 10 }),
+        getMyLeaveBalances(),
+        getMyLeave({ limit: 5 }),
+      ]);
+      setSelfData({ attendance: attRes.data, balances: balRes.data, leave: leaveRes.data });
+    } catch (err) {
+      setSelfError(err instanceof ApiError ? err.message : t('error_emp_dashboard'));
+    } finally {
+      setSelfLoading(false);
+      setSelfRefreshing(false);
+    }
+  }, [t]);
+
+  useEffect(() => { if (isEmployee) loadSelf(); }, [isEmployee, loadSelf]);
   useEffect(() => { load(range); }, [range, load]);
+
+  // Employee self-dashboard early-return
+  if (isEmployee) {
+    if (selfLoading) return <LoadingState testid="loading-state" message={t('loading_emp_dashboard')} />;
+    if (selfError) return <ErrorState testid="error-state" message={selfError} onRetry={() => loadSelf()} />;
+    if (!selfData) return null;
+    return <EmployeeSelfView data={selfData} refreshing={selfRefreshing} onRefresh={() => loadSelf(true)} />;
+  }
 
   if (loading) return <LoadingState testid="loading-state" message={t('loading_dashboard')} />;
   if (error) return <ErrorState testid="error-state" message={error.message} status={error.status} onRetry={() => load(range)} />;

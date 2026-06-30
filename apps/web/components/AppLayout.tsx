@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { clearAuth, getUser, type AuthUser } from '@/lib/auth';
+import { getMe } from '@/lib/api';
 import ThemeToggle from '@/components/ThemeToggle';
 import LanguageToggle from '@/components/LanguageToggle';
 import { useLanguage } from '@/hooks/useLanguage';
@@ -39,6 +40,7 @@ function navForRole(role: AuthUser['role']): NavDef[] {
     case 'EMPLOYEE':
     default:
       return [
+        { href: '/dashboard',  labelKey: 'nav_dashboard',  testid: 'nav-dashboard' },
         { href: '/attendance', labelKey: 'nav_attendance', testid: 'nav-attendance' },
         { href: '/leave',      labelKey: 'nav_leave',      testid: 'nav-leave' },
       ];
@@ -51,6 +53,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { t } = useLanguage();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
     setUser(getUser());
@@ -58,6 +61,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     window.addEventListener('hr-user-change', onUserChange);
     return () => window.removeEventListener('hr-user-change', onUserChange);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    getMe().then((me) => {
+      const full = [me.employee?.firstName, me.employee?.lastName].filter(Boolean).join(' ').trim();
+      setDisplayName(full || null);
+    }).catch(() => { /* fallback to username/email */ });
+  }, [user?.id]);
 
   const forced = user?.mustChangePassword === true;
 
@@ -130,14 +141,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
         </nav>
         <div className="border-t border-zinc-200 dark:border-zinc-700 p-4 space-y-3">
-          {user && (
-            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" title={user.email}>
-              {user.email}
-              <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 text-[10px] uppercase text-zinc-400 dark:text-zinc-400">
-                {user.role.replace('_', ' ')}
-              </span>
-            </p>
-          )}
+          {user && (() => {
+            const label = displayName ?? user.username ?? user.email;
+            return (
+              <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" title={label}>
+                {label}
+                <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 text-[10px] uppercase text-zinc-400 dark:text-zinc-400">
+                  {user.role.replace('_', ' ')}
+                </span>
+              </p>
+            );
+          })()}
           <div className="flex items-center gap-2 flex-wrap">
             <LanguageToggle />
             <ThemeToggle />

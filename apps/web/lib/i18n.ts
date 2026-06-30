@@ -90,6 +90,19 @@ const translations = {
     dash_pending_leave: 'Pending Leave',
     dash_pending_offsite: 'Pending Off-Site',
 
+    // Employee Self Dashboard
+    page_employee_dashboard: 'My Dashboard',
+    emp_dash_today_attendance: "Today's Attendance",
+    emp_dash_leave_balance: 'Leave Balance',
+    emp_dash_my_leave: 'My Leave Requests',
+    emp_dash_recent_attendance: 'Recent Attendance',
+    emp_dash_no_attendance: 'No attendance records yet.',
+    emp_dash_no_leave_balance: 'No leave balance found.',
+    emp_dash_no_leave: 'No leave requests yet.',
+    emp_dash_days_remaining: 'days remaining',
+    loading_emp_dashboard: 'Loading dashboard…',
+    error_emp_dashboard: 'Failed to load dashboard',
+
     // Employees
     page_employees: 'Employees',
     page_employees_team: 'Team Employees',
@@ -422,6 +435,19 @@ const translations = {
     dash_att_rate: 'อัตราเข้างานวันนี้',
     dash_pending_leave: 'การลารออนุมัติ',
     dash_pending_offsite: 'นอกสถานที่รออนุมัติ',
+
+    // Employee Self Dashboard
+    page_employee_dashboard: 'แดชบอร์ดของฉัน',
+    emp_dash_today_attendance: 'การลงเวลาวันนี้',
+    emp_dash_leave_balance: 'วันลาคงเหลือ',
+    emp_dash_my_leave: 'คำขอลาของฉัน',
+    emp_dash_recent_attendance: 'ประวัติการลงเวลา',
+    emp_dash_no_attendance: 'ยังไม่มีข้อมูลการลงเวลา',
+    emp_dash_no_leave_balance: 'ไม่พบข้อมูลวันลา',
+    emp_dash_no_leave: 'ยังไม่มีคำขอลา',
+    emp_dash_days_remaining: 'วันคงเหลือ',
+    loading_emp_dashboard: 'กำลังโหลด…',
+    error_emp_dashboard: 'โหลดข้อมูลไม่สำเร็จ',
 
     // Employees
     page_employees: 'พนักงาน',
