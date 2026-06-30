@@ -34,10 +34,12 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-024 Mobile Employee Self-Service v1.2.0 UI Refresh]] | Mobile Employee Self-Service v1.2.0 UI Refresh | Mobile | Home redesign with summary cards, screen refreshes, off-site request screen, Expo SDK upgrade, `react-native-maps` and `react-native-svg` added |
 | [[ADR-025 STEP Connect PWA Branding and Standalone Delivery]] | STEP Connect PWA Branding and Standalone Delivery | Mobile / PWA | STEP Connect as employee-facing mobile name; Web App Manifest with `display: standalone`, `scope: /`; versioned icon URLs for Cloudflare/iOS cache-busting |
 | [[ADR-026 Vacation Leave Entitlement and Adjustment Ledger]] | Vacation Leave Entitlement, Manual Setup, and Adjustment Ledger | Business Rules / Security | Tenure-tier entitlement policy (hireDate, calendar-based); dedicated setup endpoint with usedDays derivation; immutable adjustment ledger for post-setup corrections; VACATION PATCH blocked |
+| [[ADR-027 Mixed Attendance Checkout Exception Workflow]] | Mixed Attendance Checkout Exception Workflow | Business Rules / Security | Dedicated exception endpoint for ONSITE employees who leave company premises; backend-authoritative geofence inversion; reviewStatus lifecycle PENDING_REVIEW → APPROVED/REJECTED; no schema migration |
+| [[ADR-028 Fresh GPS Requirement for Attendance Actions]] | Fresh GPS Requirement for Attendance Actions | Mobile / Security | Bypass expo-location web (`maximumAge: Infinity` bug) on `Platform.OS==='web'` via direct browser API with `maximumAge: 0`; re-acquire GPS at submit time in all three attendance screens; accuracy ≤ 100 m required |
 
 ## ADR Policy
 
-ADRs in this project are written **after implementation**, not before. The current count is **26 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
+ADRs in this project are written **after implementation**, not before. The current count is **28 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
 
 ## Source Files
 
@@ -70,7 +72,9 @@ docs/adr/
 ├── ADR-023-department-manager-leave-approval-scope.md
 ├── ADR-024-mobile-employee-self-service-v1-2-0-ui-refresh.md
 ├── ADR-025-step-connect-pwa-branding-and-standalone-delivery.md
-└── ADR-026-vacation-leave-entitlement-adjustment-ledger.md
+├── ADR-026-vacation-leave-entitlement-adjustment-ledger.md
+├── ADR-027-mixed-attendance-checkout-exception-workflow.md
+└── ADR-028-fresh-gps-requirement-for-attendance-actions.md
 ```
 
 ## Related Notes

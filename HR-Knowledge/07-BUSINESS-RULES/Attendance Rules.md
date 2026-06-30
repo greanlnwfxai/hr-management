@@ -74,6 +74,23 @@ Off-site bypass applies to clock-in only. Clock-out always enforces the geofence
 
 See [[Off-site Work Mode]] for the full workflow.
 
+## Mixed Checkout Exception
+
+An ONSITE employee who leaves the company premises during the workday may submit a mixed checkout exception via `POST /attendance/offsite/mixed-checkout-exception`.
+
+Rules:
+- Employee must have a valid clock-in for today (`attendanceSource = COMPANY_GEOFENCE`) with no clock-out yet.
+- Employee must be **outside** the company geofence at time of submission. Backend enforces this — submission from inside geofence returns `422 OUTSIDE_GEOFENCE`.
+- GPS accuracy must be ≤ 100 m (backend DTO `@Max(100)` constraint; mobile also enforces this gate).
+- GPS is re-acquired fresh at the moment of submit (`maximumAge: 0`); stale GPS is not accepted.
+- Accepted submissions set `reviewStatus = PENDING_REVIEW`. HR or admin must review and approve or reject.
+- `attendanceSource` and `workMode` from the original check-in are preserved unchanged.
+- Employee cannot submit a second exception for the same attendance record (HTTP 409).
+
+Review status lifecycle: `PENDING_REVIEW → APPROVED | REJECTED`
+
+See [[Mixed Checkout Exception]] for the full workflow and Admin Web review UI.
+
 ## Clock-in / Clock-out Rules
 
 - An employee can only clock in **once per day** (unique constraint on `(employeeId, date)`)
@@ -84,12 +101,15 @@ See [[Off-site Work Mode]] for the full workflow.
 
 - [[ADR-010 Attendance Timezone]]
 - [[ADR-022 Off-site Work Request Workflow]]
+- [[ADR-027 Mixed Attendance Checkout Exception Workflow]]
+- [[ADR-028 Fresh GPS Requirement for Attendance Actions]]
 
 ## Related Notes
 
 - [[Attendance Module]]
 - [[Off-site Work Mode]]
+- [[Mixed Checkout Exception]]
 - [[Attendance Geofence]]
 - [[Dashboard Module]]
 
-#business-rules #attendance #timezone #off-site #rag-ready
+#business-rules #attendance #timezone #off-site #mixed-checkout #rag-ready

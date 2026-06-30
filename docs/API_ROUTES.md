@@ -123,6 +123,10 @@ Query params (GET /positions): `page`, `limit`, `search`, `departmentId`
 | GET    | /attendance/me                | ✅  | any                    | Own attendance history (paginated)       |
 | GET    | /attendance                   | ✅  | SUPER_ADMIN · HR_ADMIN | All attendance records (paginated)       |
 | GET    | /attendance/:id               | ✅  | any (owner or admin)   | Single attendance record                 |
+| POST   | /attendance/offsite/mixed-checkout-exception | ✅ | any | Mixed checkout exception — ONSITE check-in, off-site check-out |
+| GET    | /attendance/offsite-review    | ✅  | SUPER_ADMIN · HR_ADMIN | List pending off-site / mixed checkout records for HR review |
+| PATCH  | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN · HR_ADMIN | Approve pending record |
+| PATCH  | /attendance/offsite-review/:id/reject  | ✅ | SUPER_ADMIN · HR_ADMIN | Reject pending record (reason ≥ 3 chars required) |
 
 Query params (GET /attendance, GET /attendance/me): `page`, `limit`, `startDate`, `endDate`, `employeeId` (admin list only), `status`
 

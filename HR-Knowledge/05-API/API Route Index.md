@@ -71,6 +71,10 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 | GET | /attendance/me | ✅ | Any | Own history (paginated) |
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All records (paginated) |
 | GET | /attendance/:id | ✅ | Any (owner or admin) | Single record |
+| POST | /attendance/offsite/mixed-checkout-exception | ✅ | Any | Mixed checkout exception — ONSITE employee checks out from outside geofence |
+| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN | List pending off-site and mixed checkout records for review |
+| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve pending record |
+| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject pending record (reason ≥ 3 chars required) |
 
 ---
 
@@ -138,13 +142,14 @@ No `POST`, `PATCH`, or `DELETE` endpoints exist for audit logs.
 ## Enum Reference
 
 ```
-UserRole:         SUPER_ADMIN | HR_ADMIN | MANAGER | EMPLOYEE
-EmployeeStatus:   ACTIVE | INACTIVE | RESIGNED
-AttendanceStatus: PRESENT | LATE | ABSENT
-WorkMode:         ONSITE | OFFSITE
-LeaveType:        SICK | VACATION | PERSONAL | OTHER
-LeaveStatus:      PENDING | APPROVED | REJECTED
-OffSiteStatus:    PENDING | APPROVED | REJECTED
+UserRole:              SUPER_ADMIN | HR_ADMIN | MANAGER | EMPLOYEE
+EmployeeStatus:        ACTIVE | INACTIVE | RESIGNED
+AttendanceStatus:      PRESENT | LATE | ABSENT
+WorkMode:              ONSITE | OFFSITE
+AttendanceReviewStatus: PENDING_REVIEW | APPROVED | REJECTED
+LeaveType:             SICK | VACATION | PERSONAL | OTHER
+LeaveStatus:           PENDING | APPROVED | REJECTED
+OffSiteStatus:         PENDING | APPROVED | REJECTED
 ```
 
 ## Paginated Response Shape

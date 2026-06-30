@@ -19,6 +19,10 @@ Tracks daily employee attendance via clock-in and clock-out. Evaluates whether a
 | GET | /attendance/me | ✅ | Any | Own attendance history (paginated) |
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All attendance records (paginated) |
 | GET | /attendance/:id | ✅ | Any (owner or admin) | Single attendance record |
+| POST | /attendance/offsite/mixed-checkout-exception | ✅ | Any | Submit mixed checkout exception (ONSITE check-in + off-site check-out) |
+| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN | List pending off-site / mixed checkout records for review |
+| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve pending record |
+| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject pending record (reason required) |
 
 Note: geofence-config routes are declared before `/me` and `/:id` in the controller to avoid `ParseUUIDPipe` conflicts.
 
@@ -106,13 +110,16 @@ Summary:
 - [[ADR-006 RBAC]]
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
 - [[ADR-022 Off-site Work Request Workflow]]
+- [[ADR-027 Mixed Attendance Checkout Exception Workflow]]
+- [[ADR-028 Fresh GPS Requirement for Attendance Actions]]
 
 ## Related Notes
 
 - [[Attendance Rules]]
 - [[Attendance Geofence]]
 - [[Off-site Work Mode]]
+- [[Mixed Checkout Exception]]
 - [[Dashboard Module]]
 - [[API Route Index]]
 
-#domain #attendance #backend-v1 #timezone #geofence #off-site
+#domain #attendance #backend-v1 #timezone #geofence #off-site #mixed-checkout

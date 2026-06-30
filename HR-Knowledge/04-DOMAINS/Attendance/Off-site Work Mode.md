@@ -147,7 +147,7 @@ Employees submit off-site requests from the `offsite-request` screen. The `Geofe
 
 | Limitation | Notes |
 |---|---|
-| Clock-out geofence not bypassed | `clockOut()` validates geofence regardless of workMode — off-site employees must be within radius to clock out |
+| Clock-out geofence not bypassed for OFFSITE employees | `clockOut()` validates geofence regardless of workMode — **OFFSITE-mode** employees must be within radius to clock out. This limitation remains. For **ONSITE** employees who are outside the geofence at clock-out, the mixed checkout exception path is available. See [[Mixed Checkout Exception]]. |
 | List visibility org-wide for MANAGER | MANAGER sees all off-site requests; scoping is approve/reject only |
 | No notification on approval | Employee is not notified when their request is approved; they must check status manually |
 
@@ -157,6 +157,7 @@ Employees submit off-site requests from the `offsite-request` screen. The `Geofe
 
 - [[Attendance Module]]
 - [[Attendance Geofence]]
+- [[Mixed Checkout Exception]]
 - [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-023 Department Manager Leave Approval Scope]]
 - [[RBAC Rules]]

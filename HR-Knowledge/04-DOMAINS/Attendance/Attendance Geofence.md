@@ -42,7 +42,7 @@ Runs when `source === "mobile"` AND `workMode` is `ONSITE` (or absent) AND geofe
 1. **Missing location fields** → `422 "Location is required for mobile attendance."`
 2. **GPS accuracy too poor** (accuracy > `maxAccuracyMeters`) → `422 "GPS accuracy is too low. Please try again near the office."`
 3. **Company location not configured** (no coordinates in DB or env) → `422 "Attendance geofence is not configured."`
-4. **Outside radius** (distance > `radiusMeters`) → `422 "You are outside the allowed company area."`
+4. **Outside radius** (distance > `radiusMeters`) → `422 "You are outside the allowed company area."` with structured error body `{ message: "You are outside the allowed company area.", code: "OUTSIDE_GEOFENCE" }`. On mobile, the `OUTSIDE_GEOFENCE` code triggers the mixed checkout exception flow for ONSITE employees. See [[Mixed Checkout Exception]].
 5. **Pass** → proceed with normal clock-in/out business rules (LATE rule, duplicate check, etc.)
 
 ---
@@ -230,12 +230,15 @@ See `docs/SPEC_T064_FAILED_GEOFENCE_ATTEMPT_AUDIT.md`, `docs/CTO_SUMMARY_T065.md
 
 - [[Attendance Module]]
 - [[Off-site Work Mode]]
+- [[Mixed Checkout Exception]]
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
 - [[ADR-021 Failed Geofence Attempt Audit]]
 - [[ADR-022 Off-site Work Request Workflow]]
+- [[ADR-027 Mixed Attendance Checkout Exception Workflow]]
+- [[ADR-028 Fresh GPS Requirement for Attendance Actions]]
 - [[ADR-006 RBAC]]
 - [[ADR-010 Attendance Timezone]]
 - [[RBAC Rules]]
 - [[API Route Index]]
 
-#domain #attendance #geofence #mobile #privacy #admin
+#domain #attendance #geofence #mobile #privacy #admin #mixed-checkout
