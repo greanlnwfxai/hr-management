@@ -412,7 +412,7 @@ const IconRefresh = () => (
   </svg>
 );
 
-// ── Employee Self-Dashboard ────────────────────────────────────────────────────
+// ── Personal Summary (self-scoped: attendance/me, leave-balances/my, leave/me) ──
 
 type SelfData = {
   attendance: AttendanceRecord[];
@@ -420,15 +420,7 @@ type SelfData = {
   leave: LeaveRequest[];
 };
 
-function EmployeeSelfView({
-  data,
-  refreshing,
-  onRefresh,
-}: {
-  data: SelfData;
-  refreshing: boolean;
-  onRefresh: () => void;
-}) {
+function PersonalSummaryBody({ data }: { data: SelfData }) {
   const { t, lang } = useLanguage();
 
   const todayBangkok = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
@@ -443,21 +435,6 @@ function EmployeeSelfView({
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h1 data-testid="page-title-dashboard" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          {t('page_employee_dashboard')}
-        </h1>
-        <button
-          onClick={onRefresh}
-          disabled={refreshing}
-          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 transition-colors"
-        >
-          <span className={refreshing ? 'animate-spin' : ''}><IconRefresh /></span>
-          {t('dash_refresh')}
-        </button>
-      </div>
-
       {/* KPI Row */}
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <KpiCard
@@ -568,6 +545,82 @@ function EmployeeSelfView({
   );
 }
 
+// ── Employee Self-Dashboard (full page, EMPLOYEE role only) ────────────────────
+
+function EmployeeSelfView({
+  data,
+  refreshing,
+  onRefresh,
+}: {
+  data: SelfData;
+  refreshing: boolean;
+  onRefresh: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h1 data-testid="page-title-dashboard" className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          {t('page_employee_dashboard')}
+        </h1>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 transition-colors"
+        >
+          <span className={refreshing ? 'animate-spin' : ''}><IconRefresh /></span>
+          {t('dash_refresh')}
+        </button>
+      </div>
+      <PersonalSummaryBody data={data} />
+    </div>
+  );
+}
+
+// ── Manager Personal Summary (embedded section under the team dashboard) ───────
+
+function PersonalSummarySection({
+  data,
+  loading,
+  error,
+  refreshing,
+  onRefresh,
+  onRetry,
+}: {
+  data: SelfData | null;
+  loading: boolean;
+  error: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onRetry: () => void;
+}) {
+  const { t } = useLanguage();
+  return (
+    <div data-testid="section-my-summary" className="mt-6 border-t border-zinc-200 dark:border-zinc-700 pt-4">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 data-testid="section-my-summary-title" className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+          {t('page_my_summary')}
+        </h2>
+        <button
+          onClick={onRefresh}
+          disabled={refreshing || loading}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600 disabled:opacity-50 transition-colors"
+        >
+          <span className={refreshing ? 'animate-spin' : ''}><IconRefresh /></span>
+          {t('dash_refresh')}
+        </button>
+      </div>
+      {loading ? (
+        <LoadingState testid="loading-state-my-summary" message={t('loading_emp_dashboard')} />
+      ) : error ? (
+        <ErrorState testid="error-state-my-summary" message={error} onRetry={onRetry} />
+      ) : data ? (
+        <PersonalSummaryBody data={data} />
+      ) : null}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -583,9 +636,9 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<{ message: string; status?: number } | null>(null);
 
-  // Employee self-dashboard state
+  // Personal summary state — used by EMPLOYEE (full page) and MANAGER (embedded section)
   const [selfData, setSelfData] = useState<SelfData | null>(null);
-  const [selfLoading, setSelfLoading] = useState(isEmployee === true);
+  const [selfLoading, setSelfLoading] = useState(isEmployee || isManager);
   const [selfRefreshing, setSelfRefreshing] = useState(false);
   const [selfError, setSelfError] = useState<string | null>(null);
 
@@ -628,7 +681,7 @@ export default function DashboardPage() {
     }
   }, [t]);
 
-  useEffect(() => { if (isEmployee) loadSelf(); }, [isEmployee, loadSelf]);
+  useEffect(() => { if (isEmployee || isManager) loadSelf(); }, [isEmployee, isManager, loadSelf]);
   useEffect(() => { load(range); }, [range, load]);
 
   // Employee self-dashboard early-return
@@ -921,6 +974,17 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {isManager && (
+        <PersonalSummarySection
+          data={selfData}
+          loading={selfLoading}
+          error={selfError}
+          refreshing={selfRefreshing}
+          onRefresh={() => loadSelf(true)}
+          onRetry={() => loadSelf()}
+        />
+      )}
     </div>
   );
 }

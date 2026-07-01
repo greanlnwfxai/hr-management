@@ -90,8 +90,9 @@ const translations = {
     dash_pending_leave: 'Pending Leave',
     dash_pending_offsite: 'Pending Off-Site',
 
-    // Employee Self Dashboard
+    // Employee Self Dashboard / Manager Personal Summary
     page_employee_dashboard: 'My Dashboard',
+    page_my_summary: 'My Summary',
     emp_dash_today_attendance: "Today's Attendance",
     emp_dash_leave_balance: 'Leave Balance',
     emp_dash_my_leave: 'My Leave Requests',
@@ -436,8 +437,9 @@ const translations = {
     dash_pending_leave: 'การลารออนุมัติ',
     dash_pending_offsite: 'นอกสถานที่รออนุมัติ',
 
-    // Employee Self Dashboard
+    // Employee Self Dashboard / Manager Personal Summary
     page_employee_dashboard: 'แดชบอร์ดของฉัน',
+    page_my_summary: 'สรุปของฉัน',
     emp_dash_today_attendance: 'การลงเวลาวันนี้',
     emp_dash_leave_balance: 'วันลาคงเหลือ',
     emp_dash_my_leave: 'คำขอลาของฉัน',
