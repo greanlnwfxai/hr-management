@@ -61,9 +61,15 @@ test.describe('Navigation — admin role', () => {
     await expect(page.locator('[data-testid="page-title-employees"]')).toBeVisible();
   });
 
-  test('admin user email shown in sidebar', async ({ page }) => {
+  test('admin identity is shown in sidebar', async ({ page }) => {
     await page.goto('/dashboard');
     const sidebar = page.locator('aside');
-    await expect(sidebar.getByText('admin@hr.local')).toBeVisible();
+    await expect(sidebar.locator('[data-testid="sidebar-user-identity"]')).toBeVisible();
+    const label = sidebar.locator('[data-testid="sidebar-user-identity-label"]');
+    const text = (await label.textContent())?.trim() ?? '';
+    expect(text.length).toBeGreaterThan(0);
+    // Should not fall back to a raw system-generated id (e.g. a UUID/cuid) when a
+    // human-readable name, username, or email is available.
+    expect(text).not.toMatch(/^[0-9a-f-]{20,}$/i);
   });
 });

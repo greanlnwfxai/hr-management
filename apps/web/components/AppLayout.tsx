@@ -144,8 +144,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           {user && (() => {
             const label = displayName ?? user.username ?? user.email;
             return (
-              <p className="truncate text-xs text-zinc-500 dark:text-zinc-400" title={label}>
-                {label}
+              <p
+                data-testid="sidebar-user-identity"
+                className="truncate text-xs text-zinc-500 dark:text-zinc-400"
+                title={label}
+              >
+                <span data-testid="sidebar-user-identity-label">{label}</span>
                 <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-700 px-1 py-0.5 text-[10px] uppercase text-zinc-400 dark:text-zinc-400">
                   {user.role.replace('_', ' ')}
                 </span>
