@@ -65,11 +65,18 @@ Run these (in order) before declaring a step done:
 
 ```bash
 ./scripts/verify.sh         # API build + prisma validate + web build
-./scripts/docker-verify.sh  # full stack up + /health check
+./scripts/docker-verify.sh  # non-destructive: build/start + /health + web/mobile reachability check
 ./scripts/api-smoke-test.sh # login + GET /employees
 ```
 
 A step is **PASS** only if all three exit 0.
+
+`docker-verify.sh` is **non-destructive**: it never stops or removes containers,
+volumes, images, or networks, and it leaves the stack running when it finishes
+(pass or fail). It does not run `docker compose down`. Stopping or resetting
+containers is a manual decision made by the user only — Claude/Codex must never
+run `docker compose down` or any other teardown/cleanup command as part of
+verification.
 
 ## Docker Rules
 - The full stack runs via root `docker-compose.yml`: `web`, `api`, `db`.
@@ -157,4 +164,8 @@ Findings:    [docs/SECURITY_REVIEW_LOG.md](docs/SECURITY_REVIEW_LOG.md)
 - ✅ Ask the user before restarting Docker or running any destructive Docker command
 
 Allowed inspection commands (no approval needed):
-`docker ps`, `docker ps -a`, `docker compose ps`, `docker compose logs`, `docker volume ls`, `docker compose config`, health check curls
+`docker ps`, `docker ps -a`, `docker compose ps`, `docker compose logs`, `docker volume ls`, `docker compose config`, health check curls, `docker compose up -d --build` (as run by `scripts/docker-verify.sh`)
+
+`scripts/docker-verify.sh` (T-091) is verified non-destructive: it builds/starts
+the stack and checks health only, never tears it down. See
+[docs/CTO_SUMMARY_T091_DOCKER_VERIFY_NON_DESTRUCTIVE.md](docs/CTO_SUMMARY_T091_DOCKER_VERIFY_NON_DESTRUCTIVE.md).
