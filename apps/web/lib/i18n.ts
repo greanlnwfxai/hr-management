@@ -101,6 +101,8 @@ const translations = {
     emp_dash_no_leave_balance: 'No leave balance found.',
     emp_dash_no_leave: 'No leave requests yet.',
     emp_dash_days_remaining: 'days remaining',
+    emp_dash_check_in: 'In',
+    emp_dash_check_out: 'Out',
     loading_emp_dashboard: 'Loading dashboard…',
     error_emp_dashboard: 'Failed to load dashboard',
 
@@ -448,6 +450,8 @@ const translations = {
     emp_dash_no_leave_balance: 'ไม่พบข้อมูลวันลา',
     emp_dash_no_leave: 'ยังไม่มีคำขอลา',
     emp_dash_days_remaining: 'วันคงเหลือ',
+    emp_dash_check_in: 'เข้า',
+    emp_dash_check_out: 'ออก',
     loading_emp_dashboard: 'กำลังโหลด…',
     error_emp_dashboard: 'โหลดข้อมูลไม่สำเร็จ',
 

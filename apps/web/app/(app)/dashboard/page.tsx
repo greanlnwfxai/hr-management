@@ -22,6 +22,43 @@ function formatTimestamp(iso: string) {
   });
 }
 
+// ── Attendance business-date helpers ─────────────────────────────────────────
+// The API encodes `attendance.date` as a UTC-midnight timestamp representing the
+// Asia/Bangkok calendar day (see apps/api attendance.service.ts `todayBangkok()`),
+// e.g. "2026-07-01T00:00:00.000Z" means business date 2026-07-01 — it is not a
+// real midnight instant. Comparing that raw ISO string against a "YYYY-MM-DD"
+// today string never matches, which is why today's own record was never found.
+
+function normalizeAttendanceBusinessDate(raw: string): string {
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw; // already a plain business-date string
+  return raw.slice(0, 10); // ISO timestamp — the UTC calendar digits are the business date
+}
+
+function bangkokTodayKey(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
+}
+
+function isSameBangkokDate(raw: string, todayKey: string): boolean {
+  return normalizeAttendanceBusinessDate(raw) === todayKey;
+}
+
+function formatAttendanceDate(raw: string): string {
+  const key = normalizeAttendanceBusinessDate(raw);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+  if (!match) return raw;
+  const [, y, m, d] = match;
+  // Re-parse as UTC so the already-correct business-date digits aren't
+  // reinterpreted through the browser's local timezone.
+  const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  return date.toLocaleDateString('en-GB', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+function formatAttendanceTime(iso?: string): string | null {
+  if (!iso) return null;
+  return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+}
+
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     ACTIVE:   'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
@@ -423,8 +460,8 @@ type SelfData = {
 function PersonalSummaryBody({ data }: { data: SelfData }) {
   const { t, lang } = useLanguage();
 
-  const todayBangkok = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok' }).format(new Date());
-  const todayRecord = data.attendance.find((r) => r.date === todayBangkok);
+  const todayKey = bangkokTodayKey();
+  const todayRecord = data.attendance.find((r) => isSameBangkokDate(r.date, todayKey));
   const totalRemaining = data.balances.reduce((sum, b) => sum + b.remainingDays, 0);
   const pendingLeave = data.leave.filter((l) => l.status === 'PENDING').length;
 
@@ -432,6 +469,12 @@ function PersonalSummaryBody({ data }: { data: SelfData }) {
     ? 'green' : todayRecord?.status === 'LATE'
     ? 'amber' : todayRecord?.status === 'ABSENT'
     ? 'red' : 'zinc';
+
+  const todayCheckIn = formatAttendanceTime(todayRecord?.checkIn);
+  const todayCheckOut = formatAttendanceTime(todayRecord?.checkOut);
+  const todaySub = todayCheckIn
+    ? `${t('emp_dash_check_in')} ${todayCheckIn}${todayCheckOut ? ` · ${t('emp_dash_check_out')} ${todayCheckOut}` : ''}`
+    : undefined;
 
   return (
     <div>
@@ -441,6 +484,7 @@ function PersonalSummaryBody({ data }: { data: SelfData }) {
           testid="stat-today-att"
           label={t('emp_dash_today_attendance')}
           value={todayRecord ? todayRecord.status : '—'}
+          sub={todaySub}
           accent={todayAccent as 'zinc' | 'green' | 'amber' | 'red'}
           icon={<IconClock />}
         />
@@ -472,19 +516,23 @@ function PersonalSummaryBody({ data }: { data: SelfData }) {
             <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('emp_dash_no_attendance')}</p>
           ) : (
             <ul className="space-y-1.5">
-              {data.attendance.slice(0, 7).map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-zinc-600 dark:text-zinc-400">{a.date}</span>
-                  <div className="flex items-center gap-1">
-                    {a.checkIn && (
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
-                        {new Date(a.checkIn).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' })}
-                      </span>
-                    )}
-                    {statusBadge(a.status)}
-                  </div>
-                </li>
-              ))}
+              {data.attendance.slice(0, 7).map((a) => {
+                const checkIn = formatAttendanceTime(a.checkIn);
+                const checkOut = formatAttendanceTime(a.checkOut);
+                return (
+                  <li key={a.id} className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-zinc-600 dark:text-zinc-400">{formatAttendanceDate(a.date)}</span>
+                    <div className="flex items-center gap-1">
+                      {checkIn && (
+                        <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
+                          {checkIn}{checkOut ? ` – ${checkOut}` : ''}
+                        </span>
+                      )}
+                      {statusBadge(a.status)}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
