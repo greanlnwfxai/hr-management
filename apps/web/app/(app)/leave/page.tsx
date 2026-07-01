@@ -168,6 +168,27 @@ export default function LeavePage() {
   const [adjustments, setAdjustments] = useState<LeaveAdjustment[]>([]);
 
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employeesError, setEmployeesError] = useState(false);
+
+  const loadEmployees = useCallback(async () => {
+    setEmployeesError(false);
+    try {
+      // Backend caps `limit` at 100 per page (QueryEmployeeDto), so page through
+      // all results instead of requesting a single oversized page.
+      const first = await getEmployees({ limit: 100, status: 'ACTIVE' });
+      let all = first.data;
+      if (first.meta.totalPages > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: first.meta.totalPages - 1 }, (_, i) => getEmployees({ limit: 100, status: 'ACTIVE', page: i + 2 })),
+        );
+        all = all.concat(...rest.map((r) => r.data));
+      }
+      setEmployees(all);
+    } catch {
+      setEmployees([]);
+      setEmployeesError(true);
+    }
+  }, []);
 
   const loadBalAdmin = useCallback(async () => {
     if (!admin) return;
@@ -186,9 +207,9 @@ export default function LeavePage() {
   useEffect(() => {
     if (admin) {
       loadBalAdmin();
-      getEmployees({ limit: 200 }).then((d) => setEmployees(d.data)).catch(() => {});
+      loadEmployees();
     }
-  }, [admin, loadBalAdmin]);
+  }, [admin, loadBalAdmin, loadEmployees]);
 
   function openBalCreate() {
     setBalCreateForm({ ...EMPTY_BAL_CREATE, year: String(new Date().getFullYear()) });
@@ -510,7 +531,7 @@ export default function LeavePage() {
                 type="number"
                 value={balYearFilter}
                 onChange={(e) => { setBalYearFilter(e.target.value); setBalAdminPage(1); }}
-                placeholder="Year"
+                placeholder={t('leave_year_filter_placeholder')}
                 className="w-24 rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none"
               />
               <button
@@ -518,7 +539,7 @@ export default function LeavePage() {
                 onClick={openVacationSetup}
                 className="rounded-md bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
               >
-                Vacation Setup
+                {t('leave_vacation_setup_btn')}
               </button>
               <button
                 data-testid="btn-add-balance"
@@ -617,6 +638,12 @@ export default function LeavePage() {
                   <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} ({emp.employeeCode})</option>
                 ))}
               </select>
+              {employeesError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  {t('leave_employees_load_error')}{' '}
+                  <button type="button" onClick={loadEmployees} className="underline">{t('retry')}</button>
+                </p>
+              )}
             </Field>
             <Field label={t('leave_field_type')}>
               <select required value={balCreateForm.leaveType} onChange={(e) => setBalCreateForm({ ...balCreateForm, leaveType: e.target.value })} className={INPUT}>
@@ -666,14 +693,14 @@ export default function LeavePage() {
 
       {/* Vacation Balance Setup Modal */}
       {balModal === 'vacation-setup' && (
-        <Modal title="Vacation Balance Setup" onClose={() => setBalModal(null)}>
+        <Modal title={t('leave_vacation_setup_title')} onClose={() => setBalModal(null)}>
           {setupFormError && (
             <div className="mb-3 rounded border border-red-200 dark:border-red-800/50 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-600 dark:text-red-400">
               {setupFormError}
             </div>
           )}
           <form onSubmit={handleVacationSetup} className="space-y-4">
-            <Field label="Employee *">
+            <Field label={`${t('leave_vacation_setup_field_employee')} *`}>
               <select
                 required
                 value={setupEmployeeId}
@@ -684,16 +711,22 @@ export default function LeavePage() {
                 }}
                 className={INPUT}
               >
-                <option value="">Select employee…</option>
+                <option value="">{t('leave_select_employee')}</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.firstName} {emp.lastName} ({emp.employeeCode})
                   </option>
                 ))}
               </select>
+              {employeesError && (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                  {t('leave_employees_load_error')}{' '}
+                  <button type="button" onClick={loadEmployees} className="underline">{t('retry')}</button>
+                </p>
+              )}
             </Field>
 
-            <Field label="Year *">
+            <Field label={`${t('leave_vacation_setup_field_year')} *`}>
               <input
                 type="number"
                 required
@@ -712,27 +745,27 @@ export default function LeavePage() {
             {/* Suggestion panel */}
             {setupSuggestLoading && (
               <div className="rounded border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
-                Calculating entitlement…
+                {t('leave_vacation_setup_calculating')}
               </div>
             )}
 
             {setupSuggest && !setupSuggestLoading && (
               <div className={`rounded border px-3 py-2.5 text-xs space-y-1 ${setupSuggest.isEligible ? 'border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300' : 'border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300'}`}>
-                <div className="font-medium">{setupSuggest.tierLabel} · {setupSuggest.completedYears} year(s) of service</div>
-                <div>Hire date: {setupSuggest.hireDate}</div>
+                <div className="font-medium">{setupSuggest.tierLabel} · {setupSuggest.completedYears} {t('leave_vacation_setup_years_of_service')}</div>
+                <div>{t('leave_vacation_setup_hire_date')}: {setupSuggest.hireDate}</div>
                 {setupSuggest.isEligible
-                  ? <div>Policy entitlement: <span className="font-semibold">{setupSuggest.suggestedEntitledDays} days</span></div>
-                  : <div className="font-semibold">Not eligible — less than 1 year of service. Cannot set up vacation balance.</div>
+                  ? <div>{t('leave_vacation_setup_policy_entitlement')}: <span className="font-semibold">{setupSuggest.suggestedEntitledDays} {t('leave_vacation_setup_days_unit')}</span></div>
+                  : <div className="font-semibold">{t('leave_vacation_setup_not_eligible')}</div>
                 }
                 {setupSuggest.hasExistingBalance && (
                   <div className="mt-1 font-semibold text-red-700 dark:text-red-400">
-                    Warning: A VACATION balance already exists for this employee in {setupYear}. Submitting will return a 409 conflict.
+                    {t('leave_vacation_setup_existing_warning')} {setupYear}. {t('leave_vacation_setup_conflict_note')}
                   </div>
                 )}
               </div>
             )}
 
-            <Field label="Entitled Days *">
+            <Field label={`${t('leave_vacation_setup_field_entitled')} *`}>
               <input
                 type="number"
                 required
@@ -745,12 +778,12 @@ export default function LeavePage() {
               />
               {setupSuggest?.isEligible && setupEntitledDays !== '' && Number(setupEntitledDays) !== setupSuggest.suggestedEntitledDays && (
                 <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  Override: policy suggests {setupSuggest.suggestedEntitledDays} days — this will be recorded as an override.
+                  {t('leave_vacation_setup_override_note')} {setupSuggest.suggestedEntitledDays} {t('leave_vacation_setup_override_note_suffix')}
                 </p>
               )}
             </Field>
 
-            <Field label="Remaining Days *">
+            <Field label={`${t('leave_vacation_setup_field_remaining')} *`}>
               <input
                 type="number"
                 required
@@ -766,35 +799,35 @@ export default function LeavePage() {
             {/* Live usedDays preview */}
             {setupEntitledDays !== '' && setupRemainingDays !== '' && !isNaN(Number(setupEntitledDays)) && !isNaN(Number(setupRemainingDays)) && (
               <div className="rounded border border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-300 space-y-0.5">
-                <div>Entitled: <span className="font-medium">{setupEntitledDays} days</span></div>
-                <div>Remaining: <span className="font-medium">{setupRemainingDays} days</span></div>
-                <div>Used (derived): <span className={`font-medium ${Number(setupEntitledDays) - Number(setupRemainingDays) < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
-                  {Number(setupEntitledDays) - Number(setupRemainingDays)} days
+                <div>{t('leave_vacation_setup_preview_entitled')}: <span className="font-medium">{setupEntitledDays} {t('leave_vacation_setup_days_unit')}</span></div>
+                <div>{t('leave_vacation_setup_preview_remaining')}: <span className="font-medium">{setupRemainingDays} {t('leave_vacation_setup_days_unit')}</span></div>
+                <div>{t('leave_vacation_setup_preview_used')}: <span className={`font-medium ${Number(setupEntitledDays) - Number(setupRemainingDays) < 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                  {Number(setupEntitledDays) - Number(setupRemainingDays)} {t('leave_vacation_setup_days_unit')}
                 </span></div>
               </div>
             )}
 
-            <Field label="Setup Note (optional)">
+            <Field label={t('leave_vacation_setup_field_note')}>
               <input
                 type="text"
                 value={setupNote}
                 onChange={(e) => setSetupNote(e.target.value)}
                 className={INPUT}
                 maxLength={500}
-                placeholder="e.g. Employee transferred from branch; 2 days already used."
+                placeholder={t('leave_vacation_setup_note_placeholder')}
               />
             </Field>
 
             <div className="flex justify-end gap-3 pt-1">
               <button type="button" onClick={() => setBalModal(null)} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 type="submit"
                 disabled={setupSubmitting || (setupSuggest !== null && !setupSuggest.isEligible)}
                 className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
               >
-                {setupSubmitting ? 'Setting up…' : 'Set Up Balance'}
+                {setupSubmitting ? t('leave_vacation_setup_submitting') : t('leave_vacation_setup_submit')}
               </button>
             </div>
           </form>
