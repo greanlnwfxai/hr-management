@@ -639,7 +639,7 @@ export default function LeavePage() {
                 ))}
               </select>
               {employeesError && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                <p data-testid="employees-load-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {t('leave_employees_load_error')}{' '}
                   <button type="button" onClick={loadEmployees} className="underline">{t('retry')}</button>
                 </p>
@@ -719,7 +719,7 @@ export default function LeavePage() {
                 ))}
               </select>
               {employeesError && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                <p data-testid="employees-load-error" className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {t('leave_employees_load_error')}{' '}
                   <button type="button" onClick={loadEmployees} className="underline">{t('retry')}</button>
                 </p>

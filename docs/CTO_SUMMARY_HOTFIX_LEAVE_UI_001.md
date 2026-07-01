@@ -4,7 +4,7 @@
 HOTFIX-LEAVE-UI-001 — Fix Leave Employee Dropdown and Thai Localization
 
 ## Status
-PASS
+PASS (original fix) → CI red after push → **PASS again** after test-stabilization follow-up (see "CI Follow-Up" section below)
 
 ## Root Cause
 `apps/web/app/(app)/leave/page.tsx` loaded the employee list for the two admin leave modals with:
@@ -99,10 +99,87 @@ Low
 ## Decision
 PASS
 
-## Next Step
-Tag this commit as `v1.2.64-leave-employee-dropdown-thai-localization` after user review. Consider a follow-up ticket for the Adjust Vacation Balance modal's localization.
+---
 
-## Recommended Commit Message
+## CI Follow-Up (post-push failure)
+
+After this fix was committed and pushed, **GitHub CI failed**: `HR Management CI` run `28506921235`, job `E2E — Playwright Critical Flows` (job ID `84497629790`). Two tests failed:
+
+- `e2e/leave-balance-modals.spec.ts › Vacation Balance Setup modal employee dropdown has options`
+- `e2e/leave-balance-modals.spec.ts › Add Balance modal employee dropdown has options`
+
+Both failed with `expect(received).toBeGreaterThan(1) — Received: 1` (i.e. only the placeholder option was present) after a 10s poll timeout. No tag/deploy was performed — correctly held per instruction.
+
+### CI Failure Root Cause
+
+Pulled the actual failed run via `gh run view` / `gh api .../artifacts` and inspected the Playwright `error-context.md` page snapshot for the failure. The snapshot showed:
+- The employee `<select>` had exactly one option: the placeholder `เลือกพนักงาน` — no error message next to it.
+- The page also showed `ไม่พบคำขอลา` ("no leave requests found") and `ไม่พบข้อมูลวันลาสำหรับปีนี้` ("no leave balance data for this year").
+
+This confirms the CI database was **empty of employees, departments, and positions** — not a fetch error. The CI E2E job seeds via `apps/api/prisma/seed.ts`, which only creates the `admin@hr.local` SUPER_ADMIN user:
+
+```ts
+await prisma.user.upsert({ where: { email }, ... create: { email, username: "admin", password, role: "SUPER_ADMIN" } });
+```
+
+No `Employee`, `Department`, or `Position` rows are ever seeded in CI. My local machine's Docker DB has 66+ real employees (a persistent dev database), so the same test passed locally — the app code was correct in both places; the test's *assumption* that at least one active employee already exists was only true locally, not in CI's fresh, minimally-seeded database.
+
+Ruled out from the task's list of potential causes:
+- **Status filter too strict / API shape mismatch (causes 2–3):** Verified `Employee.status` in `schema.prisma` is `EmployeeStatus @default(ACTIVE)` — non-nullable, always present. `EMPLOYEE_SELECT` in `employees.service.ts` always includes `status`. The `status: 'ACTIVE'` query param is honored correctly by the backend and is not the cause; no client-side status re-filtering exists to loosen.
+- **Test opens modal before load completes (cause 4):** The `employees` state is reactive — even if the modal opens before the fetch resolves, the `<select>` re-renders when `setEmployees(...)` runs. The 10s poll gives ample margin. Not the cause.
+- **Wrong selector / wrong modal (cause 5):** `form select` correctly resolved to the intended `<select>` in both the CI snapshot and local runs.
+- **Test user lacks SUPER_ADMIN/HR_ADMIN (cause 6):** CI seeds the same `admin@hr.local` / `SUPER_ADMIN` account used by `getCachedAdminToken()`; the page snapshot shows the full admin sidebar and `จัดการวันลา` (Leave Balance Admin) section rendering — role was correct.
+- **Inline load-error surfaced in CI (cause 7):** Confirmed absent from the page snapshot — no error paragraph rendered, consistent with a successful `200 OK` empty-array response, not a fetch failure.
+
+### Fix Applied
+
+**Test-side (primary fix):** `apps/web/e2e/leave-balance-modals.spec.ts` now has a `beforeAll` step, `ensureAtLeastOneActiveEmployee(token)`, that:
+1. Calls `GET /employees?status=ACTIVE&limit=1` with the cached admin token.
+2. If `meta.total === 0` (true in CI, false against any real/populated DB), creates one Department ("E2E Fixture Department"), one Position ("E2E Fixture Position"), and one Employee ("E2E-FIXTURE-001") via the existing admin API — the same endpoints and DTOs already used by the app, no new backend code.
+3. Treats `409 Conflict` on each create call as "already exists" and looks the record up instead of failing, so re-running the suite against a DB that already has the fixture (e.g. a second CI attempt without a fresh Postgres) is safe and idempotent.
+
+This makes the test self-sufficient in any environment instead of depending on incidental seed data — it is a no-op against an already-populated database (confirmed locally: the check short-circuits and skips creation entirely) and creates the minimum fixture in a fresh one (verified via direct `curl` dry-run of the exact create/409/idempotent-lookup sequence against the local API, then cleaned up — see Verification).
+
+**App-side (diagnostics, requirement 6):** Added `data-testid="employees-load-error"` to the inline error message in `apps/web/app/(app)/leave/page.tsx` (both modals), and both "dropdown has options" tests now explicitly assert this error is **not visible** before polling the option count — so a future failure will clearly distinguish "fetch actually failed" from "genuinely no options yet" instead of only showing a generic timeout.
+
+**Requirements 4–5 (status filtering safety):** Re-confirmed — see "ruled out" above — that `status` is a guaranteed non-null field per the Prisma schema contract, so no defensive "treat undefined status as active" client-side logic was needed; the existing server-side `status: 'ACTIVE'` filter is correct as-is and was not loosened or changed.
+
+No application RBAC logic was touched in this follow-up — `admin = isAdmin(user)` gating is unchanged, still verified EMPLOYEE-hidden / MANAGER-unchanged (same as the original fix).
+
+### Files Changed (this follow-up)
+
+| File | Change |
+|------|--------|
+| `apps/web/e2e/leave-balance-modals.spec.ts` | Added `ensureAtLeastOneActiveEmployee()` fixture helper (Department + Position + Employee, idempotent via 409 lookup) run in `beforeAll`; both dropdown-option tests now also assert `[data-testid="employees-load-error"]` is not visible before polling option count. |
+| `apps/web/app/(app)/leave/page.tsx` | Added `data-testid="employees-load-error"` to the existing inline error message (both modals) — diagnostics only, no behavior change. |
+| `docs/CTO_SUMMARY_HOTFIX_LEAVE_UI_001.md` | This section added. |
+
+### Verification Rerun Results
+
+| Check | Result |
+|---|---|
+| `gh run view` / `gh api .../artifacts` on the failed CI run | Root cause confirmed directly from CI's own page snapshot (see above) — not inferred |
+| Direct `curl` dry-run of the fixture-creation sequence (department → position → employee) against local API | PASS — create succeeds; re-running each call returns `409 Conflict` as expected, confirming the idempotent-lookup branch is reachable and correct. Fixture rows cleaned up afterward (employee soft-deleted to `INACTIVE` — no hard-delete endpoint exists; department/position have no orphan-delete path once an employee ever referenced them, so those two rows remain as harmless, clearly-named residual test data in the local dev DB, matching other pre-existing test artifacts already there, e.g. `TEST-PROV-001`) |
+| `git diff --check` | PASS |
+| `next build` (web) | PASS — no type errors |
+| `./scripts/verify.sh` | PASS |
+| `./scripts/api-smoke-test.sh` | PASS |
+| `npx playwright test e2e/leave-balance-modals.spec.ts` | PASS — 5/5 (previously-failing dropdown tests now pass; against the local DB the fixture check short-circuits as a no-op since real employees already exist) |
+| `npm run test:e2e` (full suite, exactly as CI's `Run Playwright E2E tests` step) | PASS — 79 passed, 2 skipped (pre-existing, unrelated — same 2 skips appear in the CI run's own log) |
+
+No git operations were performed (no add/commit/push/tag/merge). `docker-verify.sh` was not run (still contains `docker compose down`). Used `docker compose up -d --build web` with a temporary local `NEXT_PUBLIC_API_URL` override for verification, then rebuilt back to the original `.env`-configured state afterward.
+
+### Should this be followed by a new commit?
+
+**Yes.** The already-pushed commit's CI is red; a new commit containing `apps/web/e2e/leave-balance-modals.spec.ts` and the `data-testid="employees-load-error"` addition in `apps/web/app/(app)/leave/page.tsx` is needed to turn CI green. Do not tag or deploy the current red commit; tag only after the follow-up commit's CI passes.
+
+## Decision (CI Follow-Up)
+PASS
+
+## Next Step
+Commit and push the follow-up changes, confirm CI goes green on `HR Management CI`, **then** tag `v1.2.64-leave-employee-dropdown-thai-localization`. Consider a follow-up ticket for the Adjust Vacation Balance modal's localization (unchanged from the original fix).
+
+## Recommended Commit Message (original fix, already pushed)
 ```
 fix(web): restore leave employee dropdown and Thai labels
 
@@ -122,4 +199,26 @@ fix(web): restore leave employee dropdown and Thai labels
 - Add Balance modal was already localized; only needed the data fix
 - No backend/RBAC/schema changes; added e2e coverage for both
   dropdowns having options and for Thai/English label correctness
+```
+
+## Recommended Commit Message (this follow-up, not yet committed)
+```
+fix(test): stabilize leave employee dropdown e2e
+
+- CI failed on leave-balance-modals.spec.ts: the "dropdown has
+  options" tests assumed at least one active employee already
+  exists, which is true on local dev DBs but not in CI — the CI
+  seed (prisma/seed.ts) only creates the admin user, with zero
+  employees/departments/positions
+- Confirmed via the actual failed CI run's Playwright page
+  snapshot: no employee-load error was shown, just a genuinely
+  empty roster — ruled out a fetch/RBAC/status-filter regression
+- Added ensureAtLeastOneActiveEmployee() to the spec's beforeAll:
+  creates one department/position/employee via the existing admin
+  API only if none exist yet; idempotent via 409-conflict lookup;
+  no-op against any already-populated database
+- Added data-testid="employees-load-error" and an explicit
+  not-visible assertion so a real fetch failure is distinguishable
+  from "no data yet" in future CI runs
+- No app RBAC/backend/schema changes
 ```
