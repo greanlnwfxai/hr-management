@@ -6,12 +6,18 @@ const prisma = new PrismaClient();
 
 async function main() {
   const email = "admin@hr.local";
-  const password = await bcrypt.hash("admin1234", 10);
 
-  await prisma.user.upsert({
-    where: { email },
-    update: { username: "admin", password, mustChangePassword: false },
-    create: {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    // Never touch password/mustChangePassword on an existing account — re-running
+    // the seed must not revert a rotated admin password back to the default.
+    console.log(`Seed complete: admin@hr.local already exists, credentials unchanged`);
+    return;
+  }
+
+  const password = await bcrypt.hash("admin1234", 10);
+  await prisma.user.create({
+    data: {
       email,
       username: "admin",
       password,
@@ -19,7 +25,7 @@ async function main() {
     },
   });
 
-  console.log(`Seed complete: admin@hr.local / username: admin`);
+  console.log(`Seed complete: admin@hr.local / username: admin (default seed password — rotate before production use)`);
 }
 
 main()
