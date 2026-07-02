@@ -81,6 +81,24 @@ test.describe('Attendance', () => {
     await expect(page.locator('[data-testid="section-all-records"]')).toBeVisible({ timeout: 15000 });
   });
 
+  test('web attendance page never shows clock-in/out action buttons', async ({ page }) => {
+    await page.goto('/attendance');
+    await expect(page.locator('[data-testid="loading-my-att"]')).not.toBeVisible({ timeout: 15000 });
+    // Clock-in/out must never be actionable from Web/Admin — mobile-only policy
+    await expect(page.locator('[data-testid="btn-clock-in"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="btn-clock-out"]')).toHaveCount(0);
+  });
+
+  test('web attendance page shows STEP Connect Mobile-only notice', async ({ page }) => {
+    await page.goto('/attendance');
+    await expect(page.locator('[data-testid="loading-my-att"]')).not.toBeVisible({ timeout: 15000 });
+    // Notice only renders when an employee profile exists (not for the no-profile admin case)
+    const hasNoProfile = await page.locator('[data-testid="no-profile-info"]').first().isVisible().catch(() => false);
+    if (!hasNoProfile) {
+      await expect(page.locator('[data-testid="mobile-only-notice"]')).toBeVisible();
+    }
+  });
+
   test('Bangkok time clock is displayed', async ({ page }) => {
     await page.goto('/attendance');
     // Static timezone label — won't change with language

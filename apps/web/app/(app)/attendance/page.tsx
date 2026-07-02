@@ -3,14 +3,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  clockIn, clockOut, getMyAttendance, getAttendance,
+  getMyAttendance, getAttendance,
   type AttendanceRecord, type PaginatedResponse, ApiError,
 } from '@/lib/api';
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
-import Toast, { type ToastData } from '@/components/Toast';
 import { useLanguage } from '@/hooks/useLanguage';
 
 function statusBadge(status: string) {
@@ -42,12 +41,9 @@ export default function AttendancePage() {
   const user = getUser();
   const admin = isAdmin(user);
 
-  const [toast, setToast] = useState<ToastData | null>(null);
-
   const [noEmployeeProfile, setNoEmployeeProfile] = useState(false);
 
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(null);
-  const [clockLoading, setClockLoading] = useState(false);
 
   const [myResult, setMyResult] = useState<PaginatedResponse<AttendanceRecord> | null>(null);
   const [myLoading, setMyLoading] = useState(true);
@@ -129,54 +125,11 @@ export default function AttendancePage() {
   useEffect(() => { loadMyAttendance(); }, [loadMyAttendance]);
   useEffect(() => { loadAllAttendance(); }, [loadAllAttendance]);
 
-  async function handleClockIn() {
-    setClockLoading(true);
-    try {
-      const rec = await clockIn();
-      setTodayRecord(rec);
-      setToast({ message: `Clocked in at ${formatTime(rec.checkIn)} — Status: ${rec.status}`, type: 'success' });
-      loadMyAttendance();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setToast({ message: err.status === 409 ? 'Already clocked in for today.' : err.message, type: 'error' });
-      } else {
-        setToast({ message: 'Clock in failed.', type: 'error' });
-      }
-    } finally {
-      setClockLoading(false);
-    }
-  }
-
-  async function handleClockOut() {
-    setClockLoading(true);
-    try {
-      const rec = await clockOut();
-      setTodayRecord(rec);
-      setToast({ message: `Clocked out at ${formatTime(rec.checkOut)}`, type: 'success' });
-      loadMyAttendance();
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.status === 409) setToast({ message: 'Already clocked out for today.', type: 'error' });
-        else if (err.status === 404) setToast({ message: 'No clock-in found for today. Please clock in first.', type: 'error' });
-        else setToast({ message: err.message, type: 'error' });
-      } else {
-        setToast({ message: 'Clock out failed.', type: 'error' });
-      }
-    } finally {
-      setClockLoading(false);
-    }
-  }
-
   function clearMyFilters() { setMyStartDate(''); setMyEndDate(''); setMyPage(1); }
   function clearAllFilters() { setAllStatus(''); setAllStartDate(''); setAllEndDate(''); setAllPage(1); }
 
-  const hasClockedIn = !!todayRecord?.checkIn;
-  const hasClockedOut = !!todayRecord?.checkOut;
-
   return (
     <div>
-      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
-
       <div className="mb-6 flex items-center justify-between">
         <h1 data-testid="page-title-attendance" className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           {t('page_attendance')}
@@ -216,23 +169,9 @@ export default function AttendancePage() {
               <p className="mb-4 text-sm text-zinc-400 dark:text-zinc-500">{t('att_no_record')}</p>
             )}
 
-            <div className="flex gap-3">
-              <button
-                data-testid="btn-clock-in"
-                onClick={handleClockIn}
-                disabled={clockLoading || hasClockedIn}
-                className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-              >
-                {clockLoading && !hasClockedIn ? t('att_clocking_in') : t('att_clock_in')}
-              </button>
-              <button
-                data-testid="btn-clock-out"
-                onClick={handleClockOut}
-                disabled={clockLoading || !hasClockedIn || hasClockedOut}
-                className="rounded-md bg-zinc-700 dark:bg-zinc-600 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-600 dark:hover:bg-zinc-500 disabled:opacity-50"
-              >
-                {clockLoading && hasClockedIn && !hasClockedOut ? t('att_clocking_out') : t('att_clock_out')}
-              </button>
+            <div data-testid="mobile-only-notice" className="rounded-md border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 px-4 py-3">
+              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">{t('att_mobile_only_notice_title')}</p>
+              <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">{t('att_mobile_only_notice_gps')}</p>
             </div>
           </>
         )}
