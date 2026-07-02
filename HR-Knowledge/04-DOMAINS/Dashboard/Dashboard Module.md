@@ -14,7 +14,45 @@ Provides a single read-only aggregated HR snapshot for administrators and manage
 |---|---|---|---|---|
 | GET | /dashboard | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Aggregated HR snapshot |
 
-EMPLOYEE role → 403 Forbidden.
+EMPLOYEE role → 403 Forbidden. This guard is **unchanged** as of v1.2.61–v1.2.63
+— EMPLOYEE's self-dashboard (below) is built entirely from other, already-open
+self-scoped endpoints and never calls this one.
+
+## Web Dashboard Scope by Role (v1.2.61 – v1.2.63)
+
+The web `/dashboard` page (`apps/web/app/(app)/dashboard/page.tsx`) renders
+different content per role. This is a **frontend-only** distinction — no new
+backend endpoint was added, and the `GET /dashboard` RBAC guard above is
+untouched. See [[ADR-032 Manager Employee Dashboard Scope and Personal Summary]].
+
+| Role | View | Data source |
+|---|---|---|
+| SUPER_ADMIN / HR_ADMIN | Global aggregated dashboard (this endpoint's full response: KPIs, charts, recent activity) | `GET /dashboard` |
+| MANAGER | Team Overview (same `GET /dashboard` call, backend-scoped to managed department) **plus** an embedded "My Summary" section with the manager's own attendance/leave/balance | `GET /dashboard` (team) + `/attendance/me`, `/leave-balances/my`, `/leave/me` (self) |
+| EMPLOYEE | Self-only dashboard — today's attendance, leave balance, pending leave, recent records. No team or global data. **Never calls `GET /dashboard`.** No access to the global Employees list either. | `/attendance/me`, `/leave-balances/my`, `/leave/me` only |
+
+MANAGER and EMPLOYEE's personal-summary views share one component
+(`PersonalSummaryBody`), fed by the same three self-scoped endpoints — there is
+exactly one code path that fetches self-data for either role, which is the
+architectural reason EMPLOYEE cannot leak global data: it simply never calls
+the guarded endpoint, rather than relying on an additional runtime check.
+
+### Personal Attendance Date Normalization (v1.2.63 fix)
+
+`GET /attendance/me` returns `date` as a full ISO timestamp encoding a Bangkok
+business date (see [[Attendance Module]] / `todayBangkok()`), e.g.
+`"2026-07-01T00:00:00.000Z"` for business date `2026-07-01` — it is not a real
+midnight instant. The web personal-summary component previously compared this
+raw ISO string against a plain `YYYY-MM-DD` "today" string, which never
+matched, so today's own attendance record was never detected as "today" even
+though it appeared correctly in the recent-attendance list.
+
+Fixed by normalizing both sides to the business-date digits before comparing
+(`normalizeAttendanceBusinessDate` / `isSameBangkokDate` in
+`dashboard/page.tsx`). Recent-attendance list dates now render as `DD/MM/YYYY`
+(locale `en-GB`, not `th-TH` — `th-TH` renders a numeric year in the Buddhist
+Era, e.g. `2569` instead of `2026`) instead of the raw ISO string. This applies
+identically to both MANAGER's "My Summary" and EMPLOYEE's self-dashboard.
 
 ## Response Shape
 
@@ -94,6 +132,7 @@ private todayBangkok(): Date {
 
 - [[ADR-010 Attendance Timezone]]
 - [[ADR-006 RBAC]]
+- [[ADR-032 Manager Employee Dashboard Scope and Personal Summary]]
 
 ## Related Notes
 

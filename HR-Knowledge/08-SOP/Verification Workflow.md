@@ -26,19 +26,21 @@ Use the **smallest relevant verification set** for the task.
 
 ## Script 2: docker-verify.sh
 
-**What it does:**
-1. Validates the Dockerized stack flow for runtime verification
-2. Rebuilds and starts services as defined by the script
-3. Waits for health checks
-4. Confirms expected healthy service state
+**What it does (confirmed non-destructive as of `v1.2.65` — see [[ADR-030 Non-destructive Docker Verification]]):**
+1. Self-check guard: greps its own source for forbidden Docker commands and refuses to run if found
+2. `docker compose config` — validates the compose file
+3. `docker compose up -d --build` — builds and starts/updates services (never tears down first)
+4. Polls `GET /health` (API), then web (`:3002`) and mobile (`:3004`) reachability
+5. Prints `docker compose ps`, and on failure, `docker compose logs --tail=100` for the failing service
+6. Leaves all containers running on both pass and fail — never stops/removes containers, volumes, images, or networks
 
-**When to run:** Only when the task explicitly requires Docker/runtime verification and the task rules allow it.
+**When to run:** Any time Docker/runtime verification is useful for the task. It no longer requires special approval before running — it is a normal, always-safe verification step.
 
-**PASS criteria:** All containers healthy. `GET /health` returns `{"status":"ok"}`.
+**PASS criteria:** All containers healthy. `GET /health` returns `{"status":"ok"}`. Web and mobile reachable.
 
 **What it catches:** Docker build failures, Prisma generate issues, container startup failures, environment variable problems.
 
-**Safety note:** Some repository/task rules forbid destructive Docker commands such as `docker compose down`. Follow the active task brief and root workflow guidance before running any Docker verification.
+**Safety note:** `docker-verify.sh` itself never runs `docker compose down` or any other teardown/cleanup command. Stopping or resetting containers remains a separate, manual, user-approved action — do not run `docker compose down` yourself as part of verification.
 
 ---
 
@@ -97,6 +99,7 @@ If any script fails:
 ## Related ADRs
 
 - [[ADR-009 Development Harness]]
+- [[ADR-030 Non-destructive Docker Verification]]
 
 ## Related Notes
 

@@ -88,6 +88,30 @@ Tenure tiers and full workflow documented in [[Vacation Leave Policy]].
 
 Audit event: `LEAVE_BALANCE_VACATION_SETUP`
 
+## Web Admin UI — Employee Selection in Balance Modals (v1.2.64)
+
+The **Vacation Balance Setup** modal and the **Add Balance** modal (both
+admin-only, gated client-side by `isAdmin()` and server-side by
+`@Roles(SUPER_ADMIN, HR_ADMIN)` on the underlying endpoints) populate their
+employee `<select>` from `GET /employees`, not from this module's own
+endpoints. Fixed in `v1.2.64-leave-employee-dropdown-thai-localization`
+(HOTFIX-LEAVE-UI-001):
+
+- **Root cause:** the web page requested `GET /employees?limit=200`, but the
+  backend's `QueryEmployeeDto` caps `limit` at `@Max(100)`, so the request
+  returned `400 Bad Request`. The error was swallowed by an empty `.catch()`,
+  leaving both dropdowns showing only the placeholder with zero options.
+- **Fix:** replaced the single oversized call with a paginated loader
+  (`limit: 100`, the backend max) that fetches all pages in parallel when
+  `meta.totalPages > 1`, filtered to `status: 'ACTIVE'`. Fetch failures now
+  surface an inline error with a **Retry** button instead of failing silently.
+- **Vacation Balance Setup modal** was also fully localized to Thai/English at
+  the same time — every field, the eligibility/suggestion panel, the override
+  warning, and the entitled/remaining/used preview now go through `t()`.
+- **RBAC unchanged:** these modals remain visible only to SUPER_ADMIN/HR_ADMIN;
+  MANAGER and EMPLOYEE never see them, and no backend endpoint or permission
+  changed.
+
 ## Known Limitations
 
 - `totalDays` (DB) vs `entitledDays` (API) naming inconsistency — column rename planned for v1.1

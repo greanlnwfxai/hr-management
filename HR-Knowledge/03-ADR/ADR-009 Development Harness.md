@@ -23,7 +23,7 @@ Adopt a **human-controlled AI collaboration workflow**: Claude/Codex handle scop
 | `CLAUDE.md` | Claude workflow guidance |
 | `AGENTS.md` | Codex / agent workflow guidance |
 | `scripts/verify.sh` | API build + prisma validate + web build |
-| `scripts/docker-verify.sh` | Historical Docker gate; only run when allowed by the active task |
+| `scripts/docker-verify.sh` | Docker runtime gate; confirmed non-destructive as of `v1.2.65` (see [[ADR-030 Non-destructive Docker Verification]]) — safe to run as a normal verification step |
 | `scripts/api-smoke-test.sh` | Runtime API gate (12 checks) |
 | `docs/CTO_SUMMARY_TEMPLATE.md` | Standardised output format per completed step |
 
@@ -51,6 +51,7 @@ Use the smallest relevant verification set for the task. Docker/runtime verifica
 
 - [[Development Workflow]]
 - [[Verification Workflow]]
+- [[ADR-030 Non-destructive Docker Verification]]
 - [[ADR Index]]
 
 #adr #process #workflow

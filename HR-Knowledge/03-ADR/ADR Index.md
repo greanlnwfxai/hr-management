@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the HR Management System.
 
-This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.2.0-employee-self-service-offsite`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
+This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.2.67-rotate-default-super-admin-password`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
 
 ## Index
 
@@ -36,10 +36,14 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-026 Vacation Leave Entitlement and Adjustment Ledger]] | Vacation Leave Entitlement, Manual Setup, and Adjustment Ledger | Business Rules / Security | Tenure-tier entitlement policy (hireDate, calendar-based); dedicated setup endpoint with usedDays derivation; immutable adjustment ledger for post-setup corrections; VACATION PATCH blocked |
 | [[ADR-027 Mixed Attendance Checkout Exception Workflow]] | Mixed Attendance Checkout Exception Workflow | Business Rules / Security | Dedicated exception endpoint for ONSITE employees who leave company premises; backend-authoritative geofence inversion; reviewStatus lifecycle PENDING_REVIEW → APPROVED/REJECTED; no schema migration |
 | [[ADR-028 Fresh GPS Requirement for Attendance Actions]] | Fresh GPS Requirement for Attendance Actions | Mobile / Security | Bypass expo-location web (`maximumAge: Infinity` bug) on `Platform.OS==='web'` via direct browser API with `maximumAge: 0`; re-acquire GPS at submit time in all three attendance screens; accuracy ≤ 100 m required |
+| [[ADR-029 Web vs Mobile Attendance Clock Policy]] | Web vs. Mobile Attendance Clock Policy | Attendance / Security | Web `/attendance` clock-in/out disabled; STEP Connect Mobile/PWA is the only supported clock channel; backend endpoints and geofence enforcement unchanged; follow-up is SEC-ATT-001 anti-spoofing |
+| [[ADR-030 Non-destructive Docker Verification]] | Non-Destructive Docker Verification | Process / Infrastructure | `docker-verify.sh` no longer runs `docker compose down`; build/start + health-check only, containers left running; self-check guard prevents regression; corrects stale ADR-003 teardown caveat |
+| [[ADR-031 SUPER_ADMIN Password Rotation and Seed Hardening]] | SUPER_ADMIN Password Rotation and Seed Hardening | Security / Identity | Production admin password rotated via self-service UI; `seed.ts` no longer overwrites an existing admin's password/`mustChangePassword` on re-run; seed safety hardening, not a runtime auth change |
+| [[ADR-032 Manager Employee Dashboard Scope and Personal Summary]] | Manager/Employee Dashboard Scope and Personal Summary | Dashboard / RBAC | EMPLOYEE self-only dashboard; MANAGER team dashboard + embedded "My Summary"; both via existing self-scoped endpoints; `GET /dashboard` guard unchanged; includes v1.2.63 attendance-date-normalization fix |
 
 ## ADR Policy
 
-ADRs in this project are written **after implementation**, not before. The current count is **28 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
+ADRs in this project are written **after implementation**, not before. The current count is **32 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
 
 ## Source Files
 
@@ -74,7 +78,11 @@ docs/adr/
 ├── ADR-025-step-connect-pwa-branding-and-standalone-delivery.md
 ├── ADR-026-vacation-leave-entitlement-adjustment-ledger.md
 ├── ADR-027-mixed-attendance-checkout-exception-workflow.md
-└── ADR-028-fresh-gps-requirement-for-attendance-actions.md
+├── ADR-028-fresh-gps-requirement-for-attendance-actions.md
+├── ADR-029-web-vs-mobile-attendance-clock-policy.md
+├── ADR-030-non-destructive-docker-verification.md
+├── ADR-031-super-admin-password-rotation-and-seed-hardening.md
+└── ADR-032-manager-employee-dashboard-scope-and-personal-summary.md
 ```
 
 ## Related Notes

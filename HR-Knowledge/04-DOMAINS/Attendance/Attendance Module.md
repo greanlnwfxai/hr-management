@@ -26,6 +26,28 @@ Tracks daily employee attendance via clock-in and clock-out. Evaluates whether a
 
 Note: geofence-config routes are declared before `/me` and `/:id` in the controller to avoid `ParseUUIDPipe` conflicts.
 
+## Web vs. Mobile Clock Channel (v1.2.66)
+
+As of `v1.2.66-disable-web-clock-actions`, the Web/Admin `/attendance` page no
+longer offers clock-in/out actions. **STEP Connect Mobile/PWA is the only
+supported channel for clock-in/out.** This is a **frontend-only UX policy
+change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
+
+- `POST /attendance/clock-in` / `POST /attendance/clock-out` are **unchanged**
+  and remain open to any authenticated role at the API level (mobile calls them
+  directly) — the RBAC matrix in [[RBAC Rules]] is not affected
+- Web `/attendance` is now **view/review/history only**: today's attendance
+  summary (read-only), own history with date filters, and (for admins) the
+  global attendance list and off-site review — all unchanged
+- The removed web clock buttons are replaced by a bilingual informational panel
+  directing users to STEP Connect Mobile
+- Rationale: the web buttons had no GPS capture and no geofence check, unlike
+  the mobile path, so they were a location-spoofing gap ("clock in from home")
+- Backend geofence enforcement (below) and mobile clock-in/out are unaffected
+- Follow-up: **SEC-ATT-001 Cross-Platform Attendance Anti-Spoofing** — this
+  hotfix removes the UI affordance but does not add backend-side platform
+  enforcement (e.g. rejecting non-mobile-sourced clock calls outright)
+
 ## Query Parameters (GET /attendance, GET /attendance/me)
 
 `page` · `limit` · `startDate` · `endDate` · `status` · `employeeId` (admin list only)
@@ -103,6 +125,7 @@ Summary:
 - No automatic absent-marking job (future scheduled task)
 - No overtime or shift scheduling
 - Geofence: single office only; GPS spoofing is not preventable at the software layer
+- Web clock-in/out is disabled (v1.2.66), but the backend does not yet reject a non-mobile client that spoofs `source: "mobile"` — closing this gap is the scope of the upcoming SEC-ATT-001 anti-spoofing work
 
 ## Related ADRs
 
@@ -112,6 +135,7 @@ Summary:
 - [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-027 Mixed Attendance Checkout Exception Workflow]]
 - [[ADR-028 Fresh GPS Requirement for Attendance Actions]]
+- [[ADR-029 Web vs Mobile Attendance Clock Policy]]
 
 ## Related Notes
 

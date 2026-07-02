@@ -80,6 +80,7 @@ After receiving a PASS CTO Summary:
 - Do not run destructive Docker cleanup commands
 - Limited inspection commands are acceptable when truly needed
 - Some task briefs may allow `docker compose up -d --build`, but that does not override the ban on destructive teardown
+- `scripts/docker-verify.sh` is confirmed non-destructive as of `v1.2.65` (see [[ADR-030 Non-destructive Docker Verification]]) — it never runs `docker compose down` internally and can be run as a normal verification step
 
 ## Naming Conventions
 

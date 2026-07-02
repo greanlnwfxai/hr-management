@@ -7,7 +7,7 @@
 | `SUPER_ADMIN` | Full system access — all operations across all modules |
 | `HR_ADMIN` | Manage employees, leave, attendance, balances; approve and reject leave |
 | `MANAGER` | Operational visibility plus department-scoped leave and off-site request approval/rejection; still cannot manage employee master data |
-| `EMPLOYEE` | Self-service: clock in/out, view own attendance, submit and view own leave requests |
+| `EMPLOYEE` | Self-service: clock in/out (mobile only as of v1.2.66 — see note below), view own attendance, submit and view own leave requests; has a self-only dashboard (v1.2.61) but no access to `GET /dashboard` or the global Employees list |
 
 ## Full RBAC Matrix
 
@@ -46,6 +46,25 @@
 | GET /dashboard | ✅ | ✅ | ✅ | ❌ |
 | GET /audit-logs | ✅ | ✅ | ❌ | ❌ |
 | GET /audit-logs/:id | ✅ | ✅ | ❌ | ❌ |
+
+## Web Clock-In/Out Removal Is a UX Policy, Not an RBAC Change (v1.2.66)
+
+The RBAC matrix row `POST /attendance/clock-in|out` above is **unchanged**:
+these endpoints remain open to any authenticated role at the API level. As of
+`v1.2.66`, the Web/Admin `/attendance` page no longer renders clock-in/out
+buttons — this is a frontend-only removal of a UI affordance, not a backend
+permission change. STEP Connect Mobile continues to call the same endpoints
+unchanged. See [[ADR-029 Web vs Mobile Attendance Clock Policy]] and
+[[Attendance Module]].
+
+## Employee/Manager Dashboard Scope Is a UX Policy, Not an RBAC Change (v1.2.61–v1.2.63)
+
+The RBAC matrix row `GET /dashboard` above is also **unchanged** — EMPLOYEE
+still cannot call it, and MANAGER's call is still scoped exactly as before.
+EMPLOYEE's self-dashboard and MANAGER's "My Summary" section are both built
+from the already-open `/attendance/me`, `/leave-balances/my`, and `/leave/me`
+endpoints, not from a new or widened `GET /dashboard` permission. See
+[[ADR-032 Manager Employee Dashboard Scope and Personal Summary]].
 
 ## Ownership Enforcement
 
@@ -109,6 +128,8 @@ A MANAGER with no managed department (not set as `Department.managerId` on any d
 - [[ADR-020 Attendance Geofence and Admin Configuration]]
 - [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-023 Department Manager Leave Approval Scope]]
+- [[ADR-029 Web vs Mobile Attendance Clock Policy]]
+- [[ADR-032 Manager Employee Dashboard Scope and Personal Summary]]
 
 ## Related Notes
 

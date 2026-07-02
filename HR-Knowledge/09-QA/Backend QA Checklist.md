@@ -120,7 +120,7 @@ Historical backend v1 QA snapshot:
 - [x] `AttendanceController` — `updateGeofenceConfig` delegates to service with audit context
 - [x] security-review.sh PASS for T-060
 - [x] verify.sh PASS (336 tests, 20 suites) for T-060
-- [ ] docker-verify.sh — NOT RUN per Docker safety rule (requires `docker compose down` internally)
+- [ ] docker-verify.sh — NOT RUN per Docker safety rule (requires `docker compose down` internally) — *historical, pre-v1.2.65; the script no longer runs `docker compose down`, see [[ADR-030 Non-destructive Docker Verification]]*
 
 ## 14. Known Limitations
 

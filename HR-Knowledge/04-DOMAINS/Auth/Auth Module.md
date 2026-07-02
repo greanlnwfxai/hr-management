@@ -53,6 +53,27 @@ Provides JWT-based authentication for the HR Management API. All other modules d
 - Role changes take effect on next login (JWT carries the role at login time)
 - No server-side session; logout is client-side (discard the token)
 
+## Default Admin Seed Account and Password Rotation (v1.2.67)
+
+`apps/api/prisma/seed.ts` seeds a default `admin@hr.local` / `admin` SUPER_ADMIN
+account for fresh databases (local/dev/CI). As of
+`v1.2.67-rotate-default-super-admin-password` (HOTFIX-SEC-002, ADR-031):
+
+- The **production** `admin@hr.local` password was rotated via the existing
+  self-service Profile → Change Password flow (`POST /auth/change-password`).
+  The default seed password no longer works in production.
+- The seed script now checks whether `admin@hr.local` already exists **before**
+  writing anything. If it exists, the seed makes **no changes** to `password`
+  or `mustChangePassword` and exits — re-running the seed (fresh deploy, CI
+  reset, local `npm run seed`) can no longer silently revert a rotated
+  password back to the default. Only a genuinely fresh database (no existing
+  `admin@hr.local`) gets the default seeded account, unchanged from prior
+  behavior.
+- This is a **seed safety hardening**, not a change to `AuthService`, JWT
+  issuance, or password validation — all login/token logic above is unaffected.
+- The default seed password remains valid and documented for local/dev/CI use
+  only (see `CLAUDE.md`); it is not a production credential as of this release.
+
 ## Known Limitations
 
 - No token revocation list
@@ -64,6 +85,7 @@ Provides JWT-based authentication for the HR Management API. All other modules d
 
 - [[ADR-005 JWT Authentication]]
 - [[ADR-006 RBAC]]
+- [[ADR-031 SUPER_ADMIN Password Rotation and Seed Hardening]]
 
 ## Related Notes
 

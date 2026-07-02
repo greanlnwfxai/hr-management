@@ -17,6 +17,8 @@ Adopt local security scripts, CI enforcement, Dependabot, accepted-risk tracking
 - accepted risks tracked in `.security-accepted-risks` and `docs/SECURITY_REVIEW_LOG.md`
 - full security review is monthly, not required for every task
 - auth/password/token/RBAC/dependency/security work still requires focused security checks
+- v1.2.67: production `SUPER_ADMIN` default password rotated + seed hardened
+  against reverting a rotated password on re-run — see [[ADR-031 SUPER_ADMIN Password Rotation and Seed Hardening]]
 
 ## Source
 

@@ -1,10 +1,14 @@
 # Current Status
 
-Last updated: 2026-06-28
+Last updated: 2026-07-02
 
-## Current Product State — v1.2.35 ✅
+## Current Product State — v1.2.67 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.35-vacation-entitlement-manual-setup` (latest commit `e2872b6`), it includes:
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.67-rotate-default-super-admin-password`, it includes everything from `v1.2.35` (below) plus the v1.2.61–v1.2.67 release set documented in **Release Timeline: v1.2.61 – v1.2.67** further down this page — employee self-dashboard, manager personal summary, web clock-in/out disabled (mobile-only policy), leave employee dropdown/localization fixes, non-destructive Docker verification, and production `SUPER_ADMIN` password rotation with seed hardening.
+
+> Note: the section below (originally written at `v1.2.35`) has not been fully backfilled for every release between `v1.2.36` and `v1.2.60` — for that range, treat [[ADR Index]] and individual `docs/CTO_SUMMARY_*.md` files as authoritative. This page is current and accurate for `v1.2.61` through `v1.2.67`.
+
+Through `v1.2.35-vacation-entitlement-manual-setup` (commit `e2872b6`), the platform includes:
 
 - Stable NestJS API with username/email login
 - Web admin: profile/password change, employee account management, audit log review, off-site request management, department manager assignment, vacation balance setup
@@ -20,7 +24,7 @@ The platform is now beyond the original backend v1.0-only foundation. Through `v
 
 ## ADR Pack
 
-26 Architecture Decision Records. See [[ADR Index]].
+32 Architecture Decision Records. See [[ADR Index]].
 
 ADR-018 (specification-only audit log state) is superseded by ADR-019 (Audit Trail and Admin Audit Log Review).
 ADR-020 added: Attendance Geofence and Admin Configuration.
@@ -30,6 +34,12 @@ ADR-023 added: Department Manager Leave Approval Scope.
 ADR-024 added: Mobile Employee Self-Service v1.2.0 UI Refresh.
 ADR-025 added: STEP Connect PWA Branding and Standalone Delivery.
 ADR-026 added: Vacation Leave Entitlement, Manual Setup, and Adjustment Ledger.
+ADR-027 added: Mixed Attendance Checkout Exception Workflow.
+ADR-028 added: Fresh GPS Requirement for Attendance Actions.
+ADR-029 added: Web vs. Mobile Attendance Clock Policy.
+ADR-030 added: Non-Destructive Docker Verification.
+ADR-031 added: SUPER_ADMIN Password Rotation and Seed Hardening.
+ADR-032 added: Manager/Employee Dashboard Scope and Personal Summary.
 
 ## Major Delivered Areas
 
@@ -44,7 +54,23 @@ ADR-026 added: Vacation Leave Entitlement, Manual Setup, and Adjustment Ledger.
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 | Vacation Leave Entitlement | Adjustment ledger, VACATION PATCH block, policy-aware setup endpoint, Admin Web UI modal | REQ-001A through REQ-001D | ✅ Done |
 
-Current documented API surface: **53 endpoints including `GET /health`** (v1.2.35 added 4 vacation/adjustment endpoints).
+Current documented API surface: **53 endpoints including `GET /health`** (v1.2.35 added 4 vacation/adjustment endpoints; no endpoints added or removed through v1.2.67 — all v1.2.61–v1.2.67 work below is frontend/harness/seed-safety only).
+
+## Release Timeline: v1.2.61 – v1.2.67
+
+Frontend UX/RBAC polish, one localization/pagination fix, one harness safety fix, and one production security hardening — no backend endpoint or schema changes in this range.
+
+| Version | Tag | Task | Scope |
+|---|---|---|---|
+| v1.2.61 | `v1.2.61-employee-self-dashboard-profile-polish` | HOTFIX-REQ002G-4 | EMPLOYEE self-dashboard (was redirected to `/profile`); sidebar display name now uses real employee name from `GET /auth/me` (fallback: full name → username → email); EMPLOYEE nav gains Dashboard/Attendance/Leave/Profile; EMPLOYEE still never calls `GET /dashboard` and has no access to the global Employees list |
+| v1.2.62 | `v1.2.62-manager-personal-dashboard-summary` | HOTFIX-REQ002G-5 | MANAGER dashboard gains an embedded "My Summary" section below the existing department-scoped Team Overview, using self-scoped endpoints (`/attendance/me`, `/leave-balances/my`, `/leave/me`); shared `PersonalSummaryBody` component introduced |
+| v1.2.63 | `v1.2.63-personal-attendance-summary-date-fix` | HOTFIX-REQ002G-6 | Fixed today-attendance detection: `attendance.date` arrives as a full ISO timestamp encoding a Bangkok business date, but was compared against a plain `YYYY-MM-DD` string; added normalization helpers; recent-attendance dates now render `DD/MM/YYYY` instead of raw ISO. Applies to both MANAGER "My Summary" and EMPLOYEE self-dashboard |
+| v1.2.64 | `v1.2.64-leave-employee-dropdown-thai-localization` | HOTFIX-LEAVE-UI-001 | Fixed `GET /employees?limit=200` silently failing backend's `@Max(100)` cap (error was swallowed by an empty `.catch`), which left the Vacation Balance Setup and Add Balance employee dropdowns empty; replaced with a paginated loader (`limit: 100`, `status: 'ACTIVE'`) with inline error/retry; fully localized the Vacation Balance Setup modal to Thai/English; added Playwright coverage. Admin-only leave setup RBAC unchanged |
+| v1.2.65 | `v1.2.65-docker-verify-non-destructive` | T-091 | Removed `docker compose down` from `scripts/docker-verify.sh` — script is now build/start + health/reachability checks only, leaves containers running on pass or fail; added a self-check guard against forbidden commands being reintroduced; see ADR-030 |
+| v1.2.66 | `v1.2.66-disable-web-clock-actions` | HOTFIX-ATTENDANCE-UI-001 | Removed clock-in/out buttons from the Web/Admin `/attendance` page (replaced with a bilingual "use STEP Connect Mobile" notice); Web `/attendance` is now view/review/history only; backend clock endpoints unchanged (still used by mobile); mobile geofence flow unchanged; see ADR-029 |
+| v1.2.67 | `v1.2.67-rotate-default-super-admin-password` | HOTFIX-SEC-002 | Production `SUPER_ADMIN` password rotated via the existing self-service Profile → Change Password UI (data-only; no credential seen/stored/logged by Claude/Codex); `apps/api/prisma/seed.ts` hardened so re-running the seed never overwrites an existing admin's password/`mustChangePassword`; see ADR-031 |
+
+See [[Attendance Module]], [[Dashboard Module]], [[Leave Balance Module]], [[RBAC Rules]], and [[ADR Index]] for the full domain/architecture detail behind each release.
 
 ## Vacation Leave Entitlement Release Summary
 
@@ -145,7 +171,7 @@ See [[Attendance Geofence]] for full architecture details.
 
 ## Next Recommended Task
 
-**HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused). Further feature development or STEP Connect enhancements also possible.
+**SEC-ATT-001** — Cross-Platform Attendance Anti-Spoofing Spec, following on from the v1.2.66 web clock-in/out disablement (ADR-029). **HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused), remain queued if reprioritized.
 
 ## Security / Process Notes
 
@@ -154,7 +180,8 @@ See [[Attendance Geofence]] for full architecture details.
 - `./scripts/secret-scan.sh` is available locally and enforced in CI through `Security — Audit & Secret Scan`.
 - User handles `git add`, `git commit`, `git push`, and tagging manually.
 - Agent tools must not run destructive Docker commands like `docker compose down`.
-- Do NOT run `./scripts/docker-verify.sh` unless explicitly approved; it internally invokes `docker compose down`.
+- `./scripts/docker-verify.sh` is confirmed **non-destructive as of v1.2.65** (see ADR-030): it no longer runs `docker compose down`, only builds/starts the stack and checks health, and leaves containers running. It can be run as a normal verification step; it no longer requires special approval before running. Stopping/resetting containers remains a separate, manual, user-approved action.
+- Production `SUPER_ADMIN` password was rotated as of v1.2.67 (ADR-031, HOTFIX-SEC-002); `admin1234` is the dev/CI/local seed default only and no longer works against production.
 
 ## Related Notes
 

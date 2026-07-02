@@ -38,7 +38,9 @@ The API Dockerfile runs `npx prisma generate` in the **builder** stage and copie
 A named volume (`postgres_data`) persists the PostgreSQL data directory across normal local runtime use.
 
 ### Verification scripts
-- `./scripts/docker-verify.sh` — historical full-stack runtime verification script.
+- `./scripts/docker-verify.sh` — full-stack runtime verification script. As of
+  `v1.2.65` it is confirmed non-destructive (build/start + health checks only,
+  no `docker compose down`) — see ADR-030.
 - `./scripts/api-smoke-test.sh` — authenticates as admin and calls all module list endpoints to confirm runtime correctness.
 
 ### Current workflow safety overlay
@@ -70,6 +72,11 @@ For Claude/Codex/agent workflow:
 | Docker Compose with `start:dev` API | Hides compile errors; doesn't match production runtime |
 | Kubernetes (local via minikube/kind) | Excessive complexity for a local development stack at this scale |
 | GitHub Codespaces / Dev Containers | Valid future option; deferred until team grows |
+
+## Related ADRs
+
+- ADR-030 — Non-Destructive Docker Verification (corrects the destructive-
+  teardown caveat in this ADR's original verification-script guidance)
 
 ## Follow-up Tasks
 - Add a `docker-compose.override.yml` for development mode (hot-reload API via volume mount) without altering the production-equivalent base file.

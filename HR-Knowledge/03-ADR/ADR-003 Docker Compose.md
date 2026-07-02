@@ -36,13 +36,16 @@ Allowed Docker interaction should stay limited to non-destructive inspection or 
 ## Verification
 
 ```bash
-./scripts/docker-verify.sh   # historical backend v1 verification script
+./scripts/docker-verify.sh   # build/start + health checks — non-destructive as of v1.2.65
 ./scripts/api-smoke-test.sh  # login + all module list endpoints
 ```
 
-Safety note:
-- Because `docker-verify.sh` may perform teardown operations, do not treat it as an always-safe default in agent workflow.
-- Run it only when the active task rules allow it.
+Safety note (updated — see [[ADR-030 Non-destructive Docker Verification]]):
+- As of `v1.2.65`, `docker-verify.sh` no longer runs `docker compose down`. It
+  only validates config, builds/starts the stack, polls health/reachability,
+  and leaves containers running on both pass and fail.
+- It can be treated as an always-safe default verification step. Stopping or
+  resetting containers remains a separate, manual, user-approved action.
 
 ## Source
 
@@ -52,6 +55,7 @@ Safety note:
 
 - [[Verification Workflow]]
 - [[System Architecture]]
+- [[ADR-030 Non-destructive Docker Verification]]
 - [[ADR Index]]
 
 #adr #infrastructure #docker
