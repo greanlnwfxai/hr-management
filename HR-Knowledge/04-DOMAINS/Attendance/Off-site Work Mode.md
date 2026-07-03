@@ -161,5 +161,6 @@ Employees submit off-site requests from the `offsite-request` screen. The `Geofe
 - [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-023 Department Manager Leave Approval Scope]]
 - [[RBAC Rules]]
+- [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md) — production migration-drift recovery for the extended attendance fields (`attendanceSource`, review fields) this mode depends on
 
 #domain #attendance #off-site #mobile #geofence #v1-2-0

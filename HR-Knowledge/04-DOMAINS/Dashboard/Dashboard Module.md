@@ -54,6 +54,57 @@ Fixed by normalizing both sides to the business-date digits before comparing
 Era, e.g. `2569` instead of `2026`) instead of the raw ISO string. This applies
 identically to both MANAGER's "My Summary" and EMPLOYEE's self-dashboard.
 
+### Personal Summary Thai Localization and Pending KPI Rename (v1.2.70 / T-094)
+
+`PersonalSummaryBody`'s attendance and leave-request status badges now use
+locale-aware labels instead of the raw enum string, via the previously-unused
+`attendanceStatusLabel()` / `leaveStatusLabel()` helpers in `apps/web/lib/i18n.ts`:
+
+| Field | Value | TH | EN |
+|---|---|---|---|
+| Attendance | `PRESENT` | มาทำงาน | Present |
+| Attendance | `LATE` | สาย | Late |
+| Attendance | `ABSENT` | ขาดงาน | Absent |
+| Leave | `PENDING` | รออนุมัติ | Pending |
+| Leave | `APPROVED` | อนุมัติแล้ว | Approved |
+| Leave | `REJECTED` | ปฏิเสธ | Rejected |
+
+The `statusBadge(status, label?)` helper gained an optional `label` param —
+when omitted (every team-dashboard call site), rendering is unchanged. Only
+the two personal-summary call sites (attendance history, leave requests) pass
+a translated label, so this is scoped to the personal-summary section only.
+
+The personal-summary pending-requests KPI was renamed to a dedicated key
+(`emp_dash_pending_leave`, TH `คำขอรออนุมัติ` / EN `Pending Requests`) rather
+than reusing the shared `dash_pending_leave` key, which remains unchanged for
+the team-wide dashboard's org-level "Pending Leave" KPI.
+
+### Leave Balance Ring UI (v1.2.70–v1.2.71 / T-094, T-095)
+
+The leave-balance card in `PersonalSummaryBody` replaced its horizontal
+progress bar with `LeaveBalanceRing`, a hand-rolled inline SVG
+(`stroke-dasharray`/`stroke-dashoffset`) ring — no chart library was added.
+Each leave type (SICK/VACATION/PERSONAL/OTHER) renders its own ring showing
+`remaining / total`, with color shifting blue → amber → red as remaining
+percentage drops (≤50% / ≤20%). Used days are also shown as explicit text
+(`emp_dash_leave_used`) for accessibility, not implied by the ring alone.
+
+T-095 enlarged the ring (`size` 64→96, `strokeWidth` 7→10; empty-state ring
+56→80) and widened the list-item column (80px→112px) after the initial T-094
+size read as too minor for the card's primary visualization.
+
+### Leave Date Formatting (v1.2.71 / T-095)
+
+"My Leave Requests" previously rendered `LeaveRequest.startDate`/`endDate` as
+raw ISO timestamps. `formatLeaveDateRange()` now reuses the existing
+timezone-safe `formatAttendanceDate()` helper (extracts calendar-date digits
+directly from the ISO string, formats `en-GB` → `DD/MM/YYYY`) to collapse
+same-day requests to a single date and render multi-day requests as
+`DD/MM/YYYY – DD/MM/YYYY`. Output is identical for TH and EN locales.
+
+These three changes (T-094, T-095) are frontend-only: no backend, schema, or
+RBAC changes; the team dashboard's own widgets are untouched.
+
 ## Response Shape
 
 ```json

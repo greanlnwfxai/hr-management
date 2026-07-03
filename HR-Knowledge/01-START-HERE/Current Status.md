@@ -1,12 +1,22 @@
 # Current Status
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
-## Current Product State — v1.2.67 ✅
+## Current Product State — v1.2.71 ✅
 
-The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.67-rotate-default-super-admin-password`, it includes everything from `v1.2.35` (below) plus the v1.2.61–v1.2.67 release set documented in **Release Timeline: v1.2.61 – v1.2.67** further down this page — employee self-dashboard, manager personal summary, web clock-in/out disabled (mobile-only policy), leave employee dropdown/localization fixes, non-destructive Docker verification, and production `SUPER_ADMIN` password rotation with seed hardening.
+The platform is now beyond the original backend v1.0-only foundation. Through `v1.2.71-personal-summary-ring-date-polish`, it includes everything from `v1.2.35` (below) plus the v1.2.61–v1.2.71 release set documented in **Release Timeline: v1.2.61 – v1.2.71** further down this page — employee self-dashboard, manager personal summary, web clock-in/out disabled (mobile-only policy), leave employee dropdown/localization fixes, non-destructive Docker verification, production `SUPER_ADMIN` password rotation with seed hardening, legacy credential-example sanitization, and personal-summary Thai localization + leave balance ring UI polish.
 
-> Note: the section below (originally written at `v1.2.35`) has not been fully backfilled for every release between `v1.2.36` and `v1.2.60` — for that range, treat [[ADR Index]] and individual `docs/CTO_SUMMARY_*.md` files as authoritative. This page is current and accurate for `v1.2.61` through `v1.2.67`.
+> Note: the section below (originally written at `v1.2.35`) has not been fully backfilled for every release between `v1.2.36` and `v1.2.60` — for that range, treat [[ADR Index]] and individual `docs/CTO_SUMMARY_*.md` files as authoritative. This page is current and accurate for `v1.2.61` through `v1.2.71`.
+
+> **Production migration-drift recovery (out-of-band, prior to this sync):** the
+> Manager Dashboard's "My Summary" (v1.2.62/ADR-032) briefly returned an
+> Internal Server Error in production due to a pending `leave_adjustments`
+> migration never having been deployed (Prisma `P2021`), plus a second
+> migration whose target schema objects already existed in production ahead of
+> being recorded as applied. Both were resolved without data loss or schema
+> change beyond the originally-intended migration; see
+> [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md)
+> for the full incident record and the reusable recovery procedure.
 
 Through `v1.2.35-vacation-entitlement-manual-setup` (commit `e2872b6`), the platform includes:
 
@@ -54,11 +64,11 @@ ADR-032 added: Manager/Employee Dashboard Scope and Personal Summary.
 | Attendance Geofence Pack | Backend geofence engine, mobile GPS wiring, gap closure, DB-backed admin config UI | T-046, T-047, T-059, T-060 | ✅ Done |
 | Vacation Leave Entitlement | Adjustment ledger, VACATION PATCH block, policy-aware setup endpoint, Admin Web UI modal | REQ-001A through REQ-001D | ✅ Done |
 
-Current documented API surface: **53 endpoints including `GET /health`** (v1.2.35 added 4 vacation/adjustment endpoints; no endpoints added or removed through v1.2.67 — all v1.2.61–v1.2.67 work below is frontend/harness/seed-safety only).
+Current documented API surface: **53 endpoints including `GET /health`** (v1.2.35 added 4 vacation/adjustment endpoints; no endpoints added or removed through v1.2.71 — all v1.2.61–v1.2.71 work below is frontend/harness/seed-safety/docs only).
 
-## Release Timeline: v1.2.61 – v1.2.67
+## Release Timeline: v1.2.61 – v1.2.71
 
-Frontend UX/RBAC polish, one localization/pagination fix, one harness safety fix, and one production security hardening — no backend endpoint or schema changes in this range.
+Frontend UX/RBAC polish, one localization/pagination fix, one harness safety fix, one production security hardening, two knowledge/docs syncs, and one round of Thai localization + leave balance ring UI polish — no backend endpoint or schema changes in this range.
 
 | Version | Tag | Task | Scope |
 |---|---|---|---|
@@ -69,8 +79,16 @@ Frontend UX/RBAC polish, one localization/pagination fix, one harness safety fix
 | v1.2.65 | `v1.2.65-docker-verify-non-destructive` | T-091 | Removed `docker compose down` from `scripts/docker-verify.sh` — script is now build/start + health/reachability checks only, leaves containers running on pass or fail; added a self-check guard against forbidden commands being reintroduced; see ADR-030 |
 | v1.2.66 | `v1.2.66-disable-web-clock-actions` | HOTFIX-ATTENDANCE-UI-001 | Removed clock-in/out buttons from the Web/Admin `/attendance` page (replaced with a bilingual "use STEP Connect Mobile" notice); Web `/attendance` is now view/review/history only; backend clock endpoints unchanged (still used by mobile); mobile geofence flow unchanged; see ADR-029 |
 | v1.2.67 | `v1.2.67-rotate-default-super-admin-password` | HOTFIX-SEC-002 | Production `SUPER_ADMIN` password rotated via the existing self-service Profile → Change Password UI (data-only; no credential seen/stored/logged by Claude/Codex); `apps/api/prisma/seed.ts` hardened so re-running the seed never overwrites an existing admin's password/`mustChangePassword`; see ADR-031 |
+| v1.2.68 | `v1.2.68-knowledge-adr-sync-through-v1.2.67` | T-092 | HR-Knowledge/ADR sync through v1.2.67: ADR-029–032 added, release timeline backfilled, stale `docker-verify.sh` teardown claims corrected — docs-only |
+| v1.2.69 | `v1.2.69-sanitize-legacy-default-credential-docs` | T-093 | Replaced literal dev/CI seed-password examples and unsafe `jq .accessToken`-printing commands across `docs/` and `HR-Knowledge/` with placeholders and in-memory-only token capture — docs-only, no new secrets introduced |
+| v1.2.70 | `v1.2.70-personal-summary-thai-status-ring-ui` | T-094 | Personal-summary (Manager "My Summary" / Employee self-dashboard) attendance and leave-request status labels localized to Thai; pending-requests KPI renamed (`emp_dash_pending_leave`); leave-balance progress bar replaced with a hand-rolled SVG `LeaveBalanceRing` (no chart library added) |
+| v1.2.71 | `v1.2.71-personal-summary-ring-date-polish` | T-095 | `LeaveBalanceRing` enlarged (64→96, empty-state 56→80) and list column widened (80px→112px); "My Leave Requests" raw ISO dates replaced with `formatLeaveDateRange()` (reuses the timezone-safe `formatAttendanceDate()` helper) — same-day requests show one date, ranges show a clean `DD/MM/YYYY – DD/MM/YYYY` |
 
-See [[Attendance Module]], [[Dashboard Module]], [[Leave Balance Module]], [[RBAC Rules]], and [[ADR Index]] for the full domain/architecture detail behind each release.
+See [[Attendance Module]], [[Dashboard Module]], [[Leave Balance Module]], [[RBAC Rules]], and [[ADR Index]] for the full domain/architecture detail behind each release. See
+[docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md)
+for the out-of-band production migration-drift recovery noted above, and
+[docs/SEC_ATT_ROADMAP.md](../../docs/SEC_ATT_ROADMAP.md) for the SEC-ATT-001
+through SEC-ATT-007 sequencing referenced under Next Recommended Task below.
 
 ## Vacation Leave Entitlement Release Summary
 
@@ -171,7 +189,7 @@ See [[Attendance Geofence]] for full architecture details.
 
 ## Next Recommended Task
 
-**SEC-ATT-001** — Cross-Platform Attendance Anti-Spoofing Spec, following on from the v1.2.66 web clock-in/out disablement (ADR-029). **HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused), remain queued if reprioritized.
+**SEC-ATT-001** — Cross-Platform Attendance Anti-Spoofing Spec, following on from the v1.2.66 web clock-in/out disablement (ADR-029). See [docs/SEC_ATT_ROADMAP.md](../../docs/SEC_ATT_ROADMAP.md) for the full SEC-ATT-001 through SEC-ATT-007 sequencing and the architecture note on why strong device-integrity checks (SEC-ATT-005/006) require a native app/wrapper while backend hardening (SEC-ATT-002–004, 007) does not. **HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused), remain queued if reprioritized.
 
 ## Security / Process Notes
 
@@ -182,6 +200,8 @@ See [[Attendance Geofence]] for full architecture details.
 - Agent tools must not run destructive Docker commands like `docker compose down`.
 - `./scripts/docker-verify.sh` is confirmed **non-destructive as of v1.2.65** (see ADR-030): it no longer runs `docker compose down`, only builds/starts the stack and checks health, and leaves containers running. It can be run as a normal verification step; it no longer requires special approval before running. Stopping/resetting containers remains a separate, manual, user-approved action.
 - Production `SUPER_ADMIN` password was rotated as of v1.2.67 (ADR-031, HOTFIX-SEC-002); `admin1234` is the dev/CI/local seed default only and no longer works against production.
+- Legacy docs with literal dev/CI seed-password examples and unsafe token-printing commands were sanitized to placeholders as of v1.2.69 (T-093); use placeholders in all new documentation.
+- A production migration-drift incident (missing `leave_adjustments` table; a second migration whose enum already existed in production) was recovered without data loss — see [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md) for the incident record and the reusable recovery procedure for future drift.
 
 ## Related Notes
 
@@ -196,5 +216,8 @@ See [[Attendance Geofence]] for full architecture details.
 - [[API Route Index]]
 - [[RBAC Rules]]
 - [[Production Geofence Readiness]]
+- [[Dashboard Module]]
+- [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md)
+- [docs/SEC_ATT_ROADMAP.md](../../docs/SEC_ATT_ROADMAP.md)
 
 #hr-management #status #v1-2-35

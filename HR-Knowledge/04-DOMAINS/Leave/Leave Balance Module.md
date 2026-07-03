@@ -132,5 +132,6 @@ endpoints. Fixed in `v1.2.64-leave-employee-dropdown-thai-localization`
 - [[Leave Request Module]]
 - [[Leave Rules]]
 - [[API Route Index]]
+- [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md) — production migration-drift recovery for the `leave_adjustments` table (P2021, since resolved)
 
 #domain #leave #backend-v1 #business-rules

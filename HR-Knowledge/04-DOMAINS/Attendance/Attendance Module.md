@@ -46,7 +46,9 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
 - Backend geofence enforcement (below) and mobile clock-in/out are unaffected
 - Follow-up: **SEC-ATT-001 Cross-Platform Attendance Anti-Spoofing** — this
   hotfix removes the UI affordance but does not add backend-side platform
-  enforcement (e.g. rejecting non-mobile-sourced clock calls outright)
+  enforcement (e.g. rejecting non-mobile-sourced clock calls outright); see
+  the full SEC-ATT-001 through SEC-ATT-007 sequencing in
+  [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md)
 
 ## Query Parameters (GET /attendance, GET /attendance/me)
 
@@ -145,5 +147,7 @@ Summary:
 - [[Mixed Checkout Exception]]
 - [[Dashboard Module]]
 - [[API Route Index]]
+- [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md) — production migration-drift recovery for the `AttendanceSource`/off-site attendance fields migration; schema unaffected
+- [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) — SEC-ATT-001 through SEC-ATT-007 sequencing
 
 #domain #attendance #backend-v1 #timezone #geofence #off-site #mixed-checkout
