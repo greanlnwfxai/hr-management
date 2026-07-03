@@ -54,6 +54,12 @@ function formatAttendanceDate(raw: string): string {
   return date.toLocaleDateString('en-GB', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
 }
 
+function formatLeaveDateRange(startDate: string, endDate: string): string {
+  const start = formatAttendanceDate(startDate);
+  const end = formatAttendanceDate(endDate);
+  return start === end ? start : `${start} – ${end}`;
+}
+
 function formatAttendanceTime(iso?: string): string | null {
   if (!iso) return null;
   return new Date(iso).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
@@ -127,7 +133,7 @@ function KpiCard({
 // ── Leave Balance Ring ───────────────────────────────────────────────────────
 
 function LeaveBalanceRing({
-  remaining, total, size = 64, strokeWidth = 7,
+  remaining, total, size = 96, strokeWidth = 10,
 }: {
   remaining: number;
   total: number;
@@ -159,8 +165,8 @@ function LeaveBalanceRing({
         )}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-sm font-bold leading-none text-zinc-900 dark:text-zinc-50 tabular-nums">{remaining}</span>
-        <span className="mt-0.5 text-[9px] leading-none text-zinc-400 dark:text-zinc-500 tabular-nums">/ {total}</span>
+        <span className="text-xl font-bold leading-none text-zinc-900 dark:text-zinc-50 tabular-nums">{remaining}</span>
+        <span className="mt-1 text-[11px] leading-none text-zinc-400 dark:text-zinc-500 tabular-nums">/ {total}</span>
       </div>
     </div>
   );
@@ -585,16 +591,16 @@ function PersonalSummaryBody({ data }: { data: SelfData }) {
             {t('emp_dash_leave_balance')}
           </h2>
           {data.balances.length === 0 ? (
-            <div data-testid="leave-balance-empty" className="flex flex-col items-center gap-2 py-2 text-center">
-              <LeaveBalanceRing remaining={0} total={0} size={56} strokeWidth={6} />
+            <div data-testid="leave-balance-empty" className="flex flex-col items-center gap-2 py-3 text-center">
+              <LeaveBalanceRing remaining={0} total={0} size={80} strokeWidth={8} />
               <p className="text-xs text-zinc-400 dark:text-zinc-500">{t('emp_dash_no_leave_balance')}</p>
             </div>
           ) : (
-            <ul className="flex flex-wrap justify-around gap-x-2 gap-y-3">
+            <ul className="flex flex-wrap justify-around gap-x-3 gap-y-4 py-1">
               {data.balances.map((b) => {
                 const total = b.effectiveTotalDays ?? b.totalDays;
                 return (
-                  <li key={b.id} className="flex flex-col items-center gap-1.5" style={{ width: 80 }}>
+                  <li key={b.id} className="flex flex-col items-center gap-2" style={{ width: 112 }}>
                     <LeaveBalanceRing remaining={b.remainingDays} total={total} />
                     <span className="text-[11px] text-zinc-700 dark:text-zinc-300 text-center leading-tight">
                       {leaveTypeLabel(b.leaveType, lang)}
@@ -622,7 +628,7 @@ function PersonalSummaryBody({ data }: { data: SelfData }) {
                 <li key={l.id} className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs text-zinc-700 dark:text-zinc-300 truncate">{leaveTypeLabel(l.leaveType, lang)}</p>
-                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{l.startDate} – {l.endDate}</p>
+                    <p className="text-[10px] text-zinc-400 dark:text-zinc-500">{formatLeaveDateRange(l.startDate, l.endDate)}</p>
                   </div>
                   {statusBadge(l.status, leaveStatusLabel(l.status, lang))}
                 </li>
