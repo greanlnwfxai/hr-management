@@ -103,6 +103,8 @@ const translations = {
     emp_dash_days_remaining: 'days remaining',
     emp_dash_check_in: 'In',
     emp_dash_check_out: 'Out',
+    emp_dash_pending_leave: 'Pending Requests',
+    emp_dash_leave_used: 'used',
     loading_emp_dashboard: 'Loading dashboard…',
     error_emp_dashboard: 'Failed to load dashboard',
 
@@ -475,6 +477,8 @@ const translations = {
     emp_dash_days_remaining: 'วันคงเหลือ',
     emp_dash_check_in: 'เข้า',
     emp_dash_check_out: 'ออก',
+    emp_dash_pending_leave: 'คำขอรออนุมัติ',
+    emp_dash_leave_used: 'ใช้ไปแล้ว',
     loading_emp_dashboard: 'กำลังโหลด…',
     error_emp_dashboard: 'โหลดข้อมูลไม่สำเร็จ',
 
@@ -769,7 +773,7 @@ export function leaveTypeLabel(type: string, lang: Language): string {
 export function attendanceStatusLabel(status: string, lang: Language): string {
   const map: Record<Language, Record<string, string>> = {
     en: { PRESENT: 'Present', LATE: 'Late', ABSENT: 'Absent' },
-    th: { PRESENT: 'ตรงเวลา', LATE: 'สาย', ABSENT: 'ขาดงาน' },
+    th: { PRESENT: 'มาทำงาน', LATE: 'สาย', ABSENT: 'ขาดงาน' },
   };
   return map[lang][status] ?? status;
 }
@@ -777,7 +781,7 @@ export function attendanceStatusLabel(status: string, lang: Language): string {
 export function leaveStatusLabel(status: string, lang: Language): string {
   const map: Record<Language, Record<string, string>> = {
     en: { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected' },
-    th: { PENDING: 'รอดำเนินการ', APPROVED: 'อนุมัติ', REJECTED: 'ปฏิเสธ' },
+    th: { PENDING: 'รออนุมัติ', APPROVED: 'อนุมัติแล้ว', REJECTED: 'ปฏิเสธ' },
   };
   return map[lang][status] ?? status;
 }
