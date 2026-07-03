@@ -22,9 +22,9 @@ Resolution logic:
 
 Both formats remain valid for backward compatibility:
 ```json
-{ "login": "admin", "password": "admin1234" }
-{ "login": "admin@hr.local", "password": "admin1234" }
-{ "email": "admin@hr.local", "password": "admin1234" }
+{ "login": "<username>", "password": "<current-password>" }
+{ "login": "<admin-email>", "password": "<current-password>" }
+{ "email": "<admin-email>", "password": "<current-password>" }
 ```
 
 The response includes `username` in the user object and JWT payload.
@@ -134,9 +134,9 @@ Tokens now include:
 
 | Username | Email | Password | Role |
 |----------|-------|----------|------|
-| admin | admin@hr.local | admin1234 | SUPER_ADMIN |
+| admin | admin@hr.local | dev/CI seed default — see `apps/api/prisma/seed.ts` | SUPER_ADMIN |
 
-The seed is idempotent: it upserts the admin user and ensures `username: 'admin'` is set.
+The seed is idempotent: it upserts the admin user and ensures `username: 'admin'` is set. The dev/CI seed default password is never used in production — the production `SUPER_ADMIN` password was rotated (ADR-031) and the seed script no longer overwrites an existing password on re-run.
 
 ---
 

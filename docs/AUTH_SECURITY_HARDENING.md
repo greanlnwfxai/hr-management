@@ -169,16 +169,18 @@ Expected: `content-security-policy`, `x-content-type-options`, `x-frame-options`
 # 3. API smoke test
 ./scripts/api-smoke-test.sh
 
-# 4. Normal login
-curl -s -X POST http://localhost:4002/auth/login \
+# 4. Normal login (capture token in memory only — never print/log it)
+TOKEN=$(curl -s -X POST http://localhost:4002/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@hr.local","password":"admin1234"}' | jq .accessToken
+  -d '{"email":"<admin-email>","password":"<current-password>"}' | jq -r '.accessToken')
+[ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] && echo "Login OK"
+unset TOKEN
 
 # 5. Trigger rate limit (6 rapid login attempts — 6th should be 429)
 for i in {1..6}; do
   STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:4002/auth/login \
     -H 'Content-Type: application/json' \
-    -d '{"email":"admin@hr.local","password":"admin1234"}')
+    -d '{"email":"<admin-email>","password":"<current-password>"}')
   echo "Attempt $i: HTTP $STATUS"
 done
 

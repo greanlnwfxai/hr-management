@@ -125,7 +125,7 @@ All geofence rejection messages are 422 (`UnprocessableEntityException`). The mo
 **GPS permission + clock flow** requires a running device/browser session and was not exercised in this session (no interactive Expo server was left running). Procedure for human verification:
 1. `docker compose up -d` — start backend stack.
 2. `cd apps/mobile && npm run web` — start Expo in browser.
-3. Login with `admin@hr.local` / `admin1234`.
+3. Login with the seeded dev admin account (`<admin-email>` / `<admin-password>` — see `apps/api/prisma/seed.ts`).
 4. Open Attendance screen.
 5. Grant location permission (browser prompt on web).
 6. Tap **ลงเวลาเข้า** — observe loading states (กำลังตรวจสอบตำแหน่ง → กำลังลงเวลาเข้า).

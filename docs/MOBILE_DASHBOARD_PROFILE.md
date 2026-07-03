@@ -100,7 +100,7 @@ falls back to the `user` object cached in AuthContext from login.
    npm run web
    ```
 3. Open `http://localhost:8081` in a browser.
-4. Log in with `admin@hr.local` / `admin1234`.
+4. Log in with the seeded dev admin account (`<admin-email>` / `<admin-password>` — see `apps/api/prisma/seed.ts`).
 5. Confirm redirect to the Home/Dashboard screen.
 6. Confirm dashboard summary cards load with real numbers.
 7. Confirm profile card shows email and role.

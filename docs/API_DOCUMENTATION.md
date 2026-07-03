@@ -36,22 +36,24 @@ POST /auth/login
 Content-Type: application/json
 
 {
-  "email": "admin@hr.local",
-  "password": "admin1234"
+  "email": "<admin-email>",
+  "password": "<current-password>"
 }
 ```
 
 Response:
 ```json
 {
-  "accessToken": "eyJ...",
+  "accessToken": "<JWT>",
   "user": {
     "id": "uuid",
-    "email": "admin@hr.local",
+    "email": "<admin-email>",
     "role": "SUPER_ADMIN"
   }
 }
 ```
+
+> Never print, store, or commit passwords/tokens. Keep tokens in memory only and unset them after use.
 
 ### Using Bearer Token in Swagger UI
 

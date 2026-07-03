@@ -115,7 +115,7 @@ npm run web
 
 # 3. Open http://localhost:8081
 
-# 4. Login: admin@hr.local / admin1234
+# 4. Login: seeded dev admin account (<admin-email> / <admin-password> — see apps/api/prisma/seed.ts)
 
 # 5. Confirm /home loads with dashboard data
 

@@ -65,7 +65,7 @@ Use the **smallest relevant verification set** for the task.
 
 **When to run:** After runtime verification when API behavior needs confirmation.
 
-**PASS criteria:** All 12 checks pass. Default admin: `admin@hr.local` / `admin1234`.
+**PASS criteria:** All 12 checks pass. Uses the dev/CI seed admin (`admin@hr.local` / dev seed default — see `apps/api/prisma/seed.ts`); never use against production.
 
 **What it catches:** Runtime API failures, RBAC misconfigurations, module registration errors, missing routes.
 

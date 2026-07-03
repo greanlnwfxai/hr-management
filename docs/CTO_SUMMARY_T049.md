@@ -117,7 +117,7 @@ Manual interactive verification is not available in this automated environment (
 
 **Recommended manual verification steps (to be performed by user):**
 1. `docker compose up -d` then `cd apps/mobile && npm run web` (http://localhost:3004)
-2. Login with `admin@hr.local` / `admin1234` (SUPER_ADMIN)
+2. Login with the seeded dev admin account (`<admin-email>` / `<admin-password>` — see `apps/api/prisma/seed.ts`) (SUPER_ADMIN)
 3. Verify: role badge "ผู้ดูแลระบบสูงสุด", org summary visible, attendance/leave cards clickable, manager/HR sections shown, disabled cards not clickable
 4. Tap "ออกจากระบบ" → redirects to login
 

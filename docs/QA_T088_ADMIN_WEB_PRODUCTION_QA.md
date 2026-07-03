@@ -47,7 +47,7 @@ git status --short
 
 **Production target:** `http://172.16.2.31:3002` — confirm with system admin before running prod tests. Substitute for localhost in all curl checks above.
 
-**Default admin credentials (rotate before production):** `admin@hr.local` / `admin1234` (or username `admin`).
+**Admin account:** `admin@hr.local` (or username `admin`). Dev/CI/local seed uses the default seed password (`apps/api/prisma/seed.ts`) — never use the seed default against production. The production `SUPER_ADMIN` password was rotated as of v1.2.67 (ADR-031); use `<current-password>` obtained via the existing self-service change-password flow.
 
 - [ ] `docker compose ps` — all services healthy `(RO)`
 - [ ] API health check returns 200 `(RO)`

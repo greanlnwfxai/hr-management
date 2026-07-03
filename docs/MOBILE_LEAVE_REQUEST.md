@@ -132,7 +132,7 @@ Error messages are shown in Thai inline below each field.
    cd apps/mobile && npm run web
    ```
 3. Open `http://localhost:3004`
-4. Login with `admin@hr.local` / `admin1234`
+4. Login with the seeded dev admin account (`<admin-email>` / `<admin-password>` — see `apps/api/prisma/seed.ts`)
 5. On Home screen → tap **คำขอลางาน** card
 6. Confirm Leave screen opens
 7. **Leave Balance section**: verify balance rows appear or "ไม่พบข้อมูลสิทธิ์การลา" empty state

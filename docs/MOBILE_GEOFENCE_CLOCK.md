@@ -105,7 +105,7 @@ Duplicate submit protection: buttons are disabled while any clock action is in `
    ATTENDANCE_GPS_MAX_ACCURACY_METERS=100
    ```
 3. Start mobile: `cd apps/mobile && npm run web` (or `npm run start` for native).
-4. Log in as `admin@hr.local` / `admin1234`.
+4. Log in with the seeded dev admin account (`<admin-email>` / `<admin-password>` — see `apps/api/prisma/seed.ts` for local/dev-only credentials).
 5. Open the **Attendance** screen.
 6. Grant location permission when prompted.
 7. Tap **ลงเวลาเข้า**. Confirm loading state and result.

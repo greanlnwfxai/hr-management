@@ -221,10 +221,14 @@ Expected response:
 # Health endpoint
 curl -sf https://hr.example.com/api/health && echo "API OK"
 
-# Login
-curl -s -X POST https://hr.example.com/api/auth/login \
+# Login (capture token in memory only — never print/log it)
+TOKEN=$(curl -s -X POST https://hr.example.com/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@hr.local","password":"admin1234"}' | jq .accessToken
+  -d '{"email":"<admin-email>","password":"<current-password>"}' | jq -r '.accessToken')
+
+# Use the token, then discard it
+curl -s https://hr.example.com/api/employees -H "Authorization: Bearer $TOKEN" >/dev/null && echo "Auth OK"
+unset TOKEN
 
 # Confirm TLS and security headers
 curl -sI https://hr.example.com/api/health | grep -iE "(strict-transport|x-frame|x-content)"

@@ -202,10 +202,12 @@ curl http://localhost:4002/health
 # Confirm frontend loads
 curl -I http://localhost:3002
 
-# Confirm login works
-curl -s -X POST http://localhost:4002/auth/login \
+# Confirm login works (capture token in memory only — never print/log it)
+TOKEN=$(curl -s -X POST http://localhost:4002/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"admin@hr.local","password":"admin1234"}' | jq .accessToken
+  -d '{"email":"<admin-email>","password":"<current-password>"}' | jq -r '.accessToken')
+[ -n "$TOKEN" ] && [ "$TOKEN" != "null" ] && echo "Login OK"
+unset TOKEN
 ```
 
 ---

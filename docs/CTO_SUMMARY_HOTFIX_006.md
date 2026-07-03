@@ -141,6 +141,8 @@ TOKEN=$(curl -s -X POST https://<your-api>/auth/login \
 
 curl -s https://<your-api>/attendance/geofence-location \
   -H "Authorization: Bearer $TOKEN" | jq .
+
+unset TOKEN
 ```
 
 Expected response (when `COMPANY_LATITUDE`/`COMPANY_LONGITUDE` are set):

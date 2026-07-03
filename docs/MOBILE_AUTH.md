@@ -28,14 +28,14 @@ Screens consume useAuth()
 POST /auth/login
 Content-Type: application/json
 
-{ "email": "admin@hr.local", "password": "admin1234" }
+{ "email": "<admin-email>", "password": "<current-password>" }
 ```
 
 Response:
 ```json
 {
   "accessToken": "<JWT>",
-  "user": { "id": "...", "email": "admin@hr.local", "role": "SUPER_ADMIN" }
+  "user": { "id": "...", "email": "<admin-email>", "role": "SUPER_ADMIN" }
 }
 ```
 
@@ -67,12 +67,7 @@ No network call is made on startup. If the stored token is expired, the next aut
 
 ## Demo Credentials (local seed)
 
-```
-Email:    admin@hr.local
-Password: admin1234
-```
-
-The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** button that pre-fills these values.
+The login screen has a **"ใช้บัญชีทดสอบ (Demo)"** button that pre-fills the local dev/CI seed admin account (`admin@hr.local` / dev seed default — see `apps/api/prisma/seed.ts`). This is a local/dev/CI-only fixture; never used against production, where the `SUPER_ADMIN` password was rotated (ADR-031).
 
 ## API Base URL
 
