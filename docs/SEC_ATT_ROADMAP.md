@@ -12,16 +12,20 @@
 > actually shipped, [CTO_SUMMARY_SEC_ATT_003.md](CTO_SUMMARY_SEC_ATT_003.md)
 > for what SEC-ATT-003 actually shipped, and
 > [CTO_SUMMARY_SEC_ATT_004.md](CTO_SUMMARY_SEC_ATT_004.md) for what SEC-ATT-004
-> actually shipped. SEC-ATT-005 (Android Play Integrity) has now been
-> **feasibility-assessed** in
+> actually shipped. SEC-ATT-005 (Android Play Integrity) and
+> SEC-ATT-006 (iOS App Attest / DeviceCheck) have both now been
+> **feasibility-assessed** —
 > [SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md](SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md)
-> (with [CTO_SUMMARY_SEC_ATT_005A.md](CTO_SUMMARY_SEC_ATT_005A.md)), which
-> **recommends DEFER** — Play Integrity is categorically unavailable on the
-> current PWA and cannot proceed until a native Android build strategy is
-> approved (still open, §15 Open Question #3 in the spec). The next
-> **backend-executable** work is therefore SEC-ATT-006A (iOS feasibility) and
-> SEC-ATT-007 (risk scoring + review queue) planning — neither is blocked on the
-> native-build decision. Do not block the PWA attendance flow on Play Integrity.
+> (with [CTO_SUMMARY_SEC_ATT_005A.md](CTO_SUMMARY_SEC_ATT_005A.md)) and
+> [SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md](SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md)
+> (with [CTO_SUMMARY_SEC_ATT_006A.md](CTO_SUMMARY_SEC_ATT_006A.md)) — and **both
+> recommend DEFER**: Play Integrity and App Attest/DeviceCheck are categorically
+> unavailable on the current PWA and cannot proceed until a native build strategy
+> is approved (still open, §15 Open Question #3 in the spec — a single decision
+> spanning both platforms). With both 005 and 006 implementations deferred, the
+> next **backend-executable** work is therefore SEC-ATT-007 (risk scoring +
+> review queue) planning — not blocked on the native-build decision. Do not block
+> the PWA attendance flow on Play Integrity or App Attest/DeviceCheck.
 
 ## Background
 
@@ -56,7 +60,8 @@ SEC-ATT-007 are the planned steps to close that gap.
 | SEC-ATT-004 ✅ | Server nonce / replay protection — prevent a captured clock-in/out request from being replayed | No |
 | SEC-ATT-005A | Android Play Integrity **feasibility & architecture decision** — options matrix, conceptual backend/native prerequisites, phased rollout; recommends DEFER (spec/decision only, no build) | No (feasibility only) |
 | SEC-ATT-005 | Android Play Integrity — device/app attestation for Android | Yes (DEFERRED — see SEC-ATT-005A) |
-| SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes |
+| SEC-ATT-006A | iOS App Attest / DeviceCheck **feasibility & architecture decision** — options matrix, conceptual (stateful) backend/native prerequisites, phased rollout; recommends DEFER (spec/decision only, no build) | No (feasibility only) |
+| SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes (DEFERRED — see SEC-ATT-006A) |
 | SEC-ATT-007 | Attendance risk scoring + review queue — aggregate signals from 002–006 into a risk score with a human review workflow, reusing the existing `AttendanceReviewStatus` lifecycle from the mixed-checkout-exception workflow ([[Mixed Checkout Exception]], ADR-027) | No (consumes signals from prior items) |
 
 ## Sequencing Rationale
@@ -64,7 +69,9 @@ SEC-ATT-007 are the planned steps to close that gap.
 Items 002–004 and 007 are backend-only and can proceed against the current
 PWA/mobile-web client. Items 005–006 require a native app or native wrapper
 and are blocked on that decision being made separately; they are ordered last
-so backend hardening isn't blocked waiting on a mobile platform decision.
+so backend hardening isn't blocked waiting on a mobile platform decision. Their
+feasibility precursors (SEC-ATT-005A, SEC-ATT-006A) are complete and both
+recommend DEFER, so the next executable item is SEC-ATT-007.
 
 ## Related Notes
 

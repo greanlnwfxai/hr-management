@@ -63,7 +63,13 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
   for the **SEC-ATT-005A** Android Play Integrity feasibility &
   architecture decision — which **recommends DEFER** (Play Integrity is
   categorically unavailable on the current PWA; requires an approved native
-  Android build, spec §15 Open Question #3), and
+  Android build, spec §15 Open Question #3),
+  [docs/SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md](../../../docs/SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md)
+  (with [docs/CTO_SUMMARY_SEC_ATT_006A.md](../../../docs/CTO_SUMMARY_SEC_ATT_006A.md))
+  for the **SEC-ATT-006A** iOS App Attest / DeviceCheck feasibility &
+  architecture decision — which **also recommends DEFER** (App Attest/DeviceCheck
+  are native iOS framework APIs with no WebKit entry point; require an approved
+  native iOS build, the same shared native-build decision), and
   [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
   SEC-ATT-001 through SEC-ATT-007 sequencing
 
@@ -213,6 +219,7 @@ All rejections return one generic message ("Your attendance session has expired.
 - `mixedCheckoutException` is not covered by SEC-ATT-004 nonce enforcement — a captured mixed-checkout-exception request remains replayable; spec §8 names it as a distinct nonce scope but it was out of this task's scope
 - No scheduled cleanup of expired/consumed `AttendanceNonce` rows — the table grows unboundedly until a future janitor task is added
 - **Device/app integrity (Play Integrity) is unavailable on the current PWA** — SEC-ATT-005A assessed it and **recommends DEFER**: Play Integrity is a native Android API bound to a signed, Play-registered package with no browser entry point, so it cannot run on the PWA-only STEP Connect surface and reports `deviceIntegritySignal: UNAVAILABLE`. Implementation (SEC-ATT-005) is blocked until a native Android build strategy is approved (spec §15 Open Question #3). Mock-GPS / rooted-device / emulator threats therefore remain heuristic-only on the PWA. See [docs/SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md](../../../docs/SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md)
+- **Device/app integrity (iOS App Attest / DeviceCheck) is likewise unavailable on the current PWA** — SEC-ATT-006A assessed it and **recommends DEFER**: App Attest (`DCAppAttestService`) and DeviceCheck (`DCDevice`) are native iOS framework APIs bound to an Apple app identity + Secure Enclave with no WebKit entry point, so they cannot run on the PWA-only STEP Connect surface and report `deviceIntegritySignal: UNAVAILABLE`. App Attest is the app/device-integrity attestation (with a stateful, per-key monotonic assertion counter the backend must persist to verify — unlike Android's stateless Play Integrity); DeviceCheck is a secondary per-device abuse-bit store, not an integrity attestation. Implementation (SEC-ATT-006) is blocked until a native iOS build strategy is approved — the **same shared native-build decision** as SEC-ATT-005 (spec §15 Open Question #3). See [docs/SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md](../../../docs/SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md)
 
 ## Related ADRs
 
