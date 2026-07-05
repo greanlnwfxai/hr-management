@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
 import { AttendanceNonceService } from './attendance-nonce.service';
+import { AttendanceRiskReviewService } from './attendance-risk-review.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
 import { AttendanceNonceAction, AttendanceSource, AttendanceReviewStatus, WorkMode } from '../common/enums';
 import { ClockInDto } from './dto/clock-in.dto';
@@ -46,6 +47,7 @@ describe('AttendanceService', () => {
   let geofenceService: jest.Mocked<GeofenceService>;
   let attendanceNonceService: jest.Mocked<AttendanceNonceService>;
   let mockAuditLog: { record: jest.Mock };
+  let mockRiskReviewService: jest.Mocked<AttendanceRiskReviewService>;
 
   const userId = 'user-uuid-1';
   const employeeId = 'emp-uuid-1';
@@ -101,6 +103,19 @@ describe('AttendanceService', () => {
       consumeNonce: jest.fn().mockResolvedValue({ ok: true }),
     } as unknown as jest.Mocked<AttendanceNonceService>;
 
+    // SEC-ATT-007A: best-effort by convention — defaults to a resolved no-op
+    // so pre-existing tests (which don't assert on risk-review recording)
+    // are unaffected. Tests that specifically exercise risk-review recording
+    // assert on this mock directly.
+    mockRiskReviewService = {
+      recordReview: jest.fn().mockResolvedValue(undefined),
+      scoreRisk: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+      review: jest.fn(),
+      setStatus: jest.fn(),
+    } as unknown as jest.Mocked<AttendanceRiskReviewService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
@@ -109,6 +124,7 @@ describe('AttendanceService', () => {
         { provide: GeofenceService, useValue: geofenceService },
         { provide: GeofenceConfigService, useValue: geofenceConfig },
         { provide: AttendanceNonceService, useValue: attendanceNonceService },
+        { provide: AttendanceRiskReviewService, useValue: mockRiskReviewService },
       ],
     }).compile();
 
@@ -3617,6 +3633,190 @@ describe('AttendanceService', () => {
       await service.mixedCheckoutException(userId, validDto as any);
 
       expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── SEC-ATT-007A: risk-review recording ─────────────────────────────────────
+
+  describe('SEC-ATT-007A: risk-review recording', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const baseMobileDto = {
+      source: 'mobile' as const,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      accuracy: 25,
+    };
+
+    beforeEach(() => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('records a LOW-risk FLAGGED review when the nonce is missing (soft-enforced, rollout compatibility)', async () => {
+      await service.clockIn(userId, {}, ctx);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employeeId,
+          userId,
+          action: AttendanceNonceAction.CLOCK_IN,
+          result: 'FLAGGED',
+          reasonCodes: ['NONCE_MISSING_ALLOWED'],
+        }),
+      );
+    });
+
+    it('records a MEDIUM-risk FLAGGED review when capturedAt is missing (soft-enforced)', async () => {
+      await service.clockIn(userId, baseMobileDto, ctx);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employeeId,
+          action: AttendanceNonceAction.CLOCK_IN,
+          result: 'FLAGGED',
+          reasonCodes: ['MISSING_CAPTURED_AT'],
+        }),
+      );
+    });
+
+    it('records a HIGH-risk REJECTED review when capturedAt is stale', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employeeId,
+          action: AttendanceNonceAction.CLOCK_IN,
+          result: 'REJECTED',
+          reasonCodes: ['STALE_LOCATION'],
+        }),
+      );
+    });
+
+    it('records a HIGH-risk REJECTED review when capturedAt is in the future', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:35:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'REJECTED', reasonCodes: ['FUTURE_LOCATION'] }),
+      );
+    });
+
+    it('records a CRITICAL-risk REJECTED review when isMockLocation is true', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, capturedAt: new Date().toISOString(), isMockLocation: true },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'REJECTED', reasonCodes: ['MOCK_LOCATION_DETECTED'] }),
+      );
+    });
+
+    it.each([
+      ['NONCE_INVALID'],
+      ['NONCE_EXPIRED'],
+      ['NONCE_REUSED'],
+      ['NONCE_ACTION_MISMATCH'],
+      ['NONCE_USER_MISMATCH'],
+    ] as const)('records a REJECTED review with reason %s for a rejected nonce', async (reason) => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason });
+
+      await expect(
+        service.clockIn(userId, { nonce: 'bad-nonce' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employeeId,
+          action: AttendanceNonceAction.CLOCK_IN,
+          result: 'REJECTED',
+          reasonCodes: [reason],
+        }),
+      );
+    });
+
+    it('records a HIGH-risk REJECTED review for an OUTSIDE_RADIUS geofence rejection', async () => {
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockIn(userId, baseMobileDto, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockRiskReviewService.recordReview).toHaveBeenCalledWith(
+        expect.objectContaining({ result: 'REJECTED', reasonCodes: ['GEOFENCE_REJECTED'] }),
+      );
+    });
+
+    it('passes only sanitizer-safe metadata — never a raw nonce field — to recordReview()', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason: 'NONCE_INVALID' });
+
+      await expect(
+        service.clockIn(userId, { nonce: 'super-secret-raw-nonce-value' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const call = mockRiskReviewService.recordReview.mock.calls.find(
+        (c) => c[0].reasonCodes?.[0] === 'NONCE_INVALID',
+      );
+      expect(call).toBeDefined();
+      expect(JSON.stringify(call![0])).not.toContain('super-secret-raw-nonce-value');
+    });
+
+    it('passes only sanitizer-safe metadata — never raw GPS coordinates — to recordReview()', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, latitude: 13.7563, longitude: 100.5018, capturedAt: '2026-06-13T01:30:00.000Z' },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const call = mockRiskReviewService.recordReview.mock.calls.find(
+        (c) => c[0].reasonCodes?.[0] === 'STALE_LOCATION',
+      );
+      expect(call).toBeDefined();
+      expect(JSON.stringify(call![0])).not.toContain('13.7563');
+      expect(JSON.stringify(call![0])).not.toContain('100.5018');
+    });
+
+    it('a fully clean clock-in never calls recordReview at all (no noise on the happy path)', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: true });
+
+      await service.clockIn(
+        userId,
+        { ...baseMobileDto, capturedAt: new Date().toISOString(), nonce: 'valid-nonce' },
+        ctx,
+      );
+
+      expect(mockRiskReviewService.recordReview).not.toHaveBeenCalled();
+    });
+
+    it('a risk-review write failure never blocks or fails the clock-in (best-effort)', async () => {
+      mockRiskReviewService.recordReview.mockRejectedValueOnce(new Error('db down'));
+
+      await expect(service.clockIn(userId, {}, ctx)).resolves.toBeDefined();
     });
   });
 });

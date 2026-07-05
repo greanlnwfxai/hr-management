@@ -76,6 +76,33 @@ enum AttendanceNonceAction {
   OFFSITE_CLOCK_OUT
 }
 
+// SEC-ATT-007A: risk severity assigned to a recorded AttendanceRiskReview.
+enum AttendanceRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// SEC-ATT-007A: HR/Admin review workflow state for a risk review row.
+enum AttendanceRiskReviewStatus {
+  PENDING
+  REVIEWED
+  APPROVED
+  REJECTED
+  IGNORED
+}
+
+// SEC-ATT-007A: what happened to the underlying attendance attempt. ACCEPTED
+// is a valid value but is never written by the automatic scoring hooks (a
+// fully clean attempt has nothing to review) — reserved for a possible future
+// manual-flag path.
+enum AttendanceRiskResult {
+  ACCEPTED
+  REJECTED
+  FLAGGED
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,6 +194,8 @@ model Employee {
   offSiteRequests         OffSiteRequest[] @relation("EmployeeOffSiteRequests")
   approvedOffSiteRequests OffSiteRequest[] @relation("EmployeeApprovedOffSite")
   reviewedAttendances     Attendance[]     @relation("AttendanceReviewer")
+  riskReviews             AttendanceRiskReview[]
+  reviewedRiskReviews     AttendanceRiskReview[] @relation("AttendanceRiskReviewer")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -217,6 +246,8 @@ model Attendance {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  riskReviews AttendanceRiskReview[]
 
   @@unique([employeeId, date])
   @@index([date])
@@ -339,6 +370,48 @@ model AttendanceNonce {
   @@index([userId])
   @@index([expiresAt])
   @@map("attendance_nonces")
+}
+
+// SEC-ATT-007A: privacy-safe risk/review-queue foundation. Never stores raw
+// GPS coordinates, raw nonce values, tokens, or native-attestation
+// assertions/tokens — only categorical reason codes, a derived risk level, and
+// already-sanitized metadata (run through the same sanitizeMetadata() used by
+// AuditLog). attendanceId is nullable and, in practice, null for every row
+// created by the automatic scoring hooks: payload/nonce checks run before the
+// attendance record is created or fetched (see attendance.service.ts), so
+// there is nothing to link to yet at record-time. employeeId/userId are
+// populated whenever available, so a row is still traceable even without an
+// attendanceId.
+model AttendanceRiskReview {
+  id           String                     @id @default(uuid())
+  employeeId   String?
+  employee     Employee?                  @relation(fields: [employeeId], references: [id])
+  attendanceId String?
+  attendance   Attendance?                @relation(fields: [attendanceId], references: [id])
+  userId       String?
+  action       AttendanceNonceAction
+  result       AttendanceRiskResult
+  riskLevel    AttendanceRiskLevel
+  reasonCodes  String[]
+  status       AttendanceRiskReviewStatus @default(PENDING)
+  source       String?
+  platform     String?
+  metadataJson Json?
+
+  reviewedById String?
+  reviewedBy   Employee? @relation("AttendanceRiskReviewer", fields: [reviewedById], references: [id])
+  reviewedAt   DateTime?
+  reviewNote   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([attendanceId])
+  @@index([status])
+  @@index([riskLevel])
+  @@index([createdAt])
+  @@map("attendance_risk_reviews")
 }
 
 model AuditLog {

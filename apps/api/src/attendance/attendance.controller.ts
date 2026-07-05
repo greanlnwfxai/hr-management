@@ -26,6 +26,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
+import { AttendanceRiskReviewService } from './attendance-risk-review.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { IssueAttendanceNonceDto } from './dto/issue-attendance-nonce.dto';
@@ -37,6 +38,10 @@ import { QueryAttendanceDto } from './dto/query-attendance.dto';
 import { ApproveOffsiteDto } from './dto/approve-offsite.dto';
 import { RejectOffsiteDto } from './dto/reject-offsite.dto';
 import { QueryOffsiteReviewDto } from './dto/query-offsite-review.dto';
+import { QueryRiskReviewDto } from './dto/query-risk-review.dto';
+import { ReviewRiskReviewDto } from './dto/review-risk-review.dto';
+import { RiskReviewNoteDto } from './dto/risk-review-note.dto';
+import { AttendanceRiskReviewStatus } from '../common/enums';
 
 @ApiTags('Attendance')
 @ApiBearerAuth()
@@ -44,7 +49,10 @@ import { QueryOffsiteReviewDto } from './dto/query-offsite-review.dto';
 @Controller('attendance')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
-  constructor(private attendance: AttendanceService) {}
+  constructor(
+    private attendance: AttendanceService,
+    private riskReview: AttendanceRiskReviewService,
+  ) {}
 
   @Post('nonce')
   @ApiOperation({ summary: 'Issue a short-lived, single-use replay-protection nonce for a clock action (SEC-ATT-004)' })
@@ -253,6 +261,71 @@ export class AttendanceController {
       ipAddress: req?.ip ?? null,
       userAgent: (req?.headers?.['user-agent'] as string) ?? null,
     });
+  }
+
+  @Get('risk-reviews')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'List attendance risk-review queue rows (SEC-ATT-007A; SUPER_ADMIN, HR_ADMIN)' })
+  @ApiResponse({ status: 200, description: 'Paginated risk-review list' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  findRiskReviews(@Query() query: QueryRiskReviewDto) {
+    return this.riskReview.findAll(query);
+  }
+
+  @Get('risk-reviews/:id')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Get a single attendance risk-review row by ID (SEC-ATT-007A; SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Risk review UUID' })
+  @ApiResponse({ status: 200, description: 'Risk review row' })
+  @ApiResponse({ status: 404, description: 'Risk review row not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  findRiskReview(@Param('id', ParseUUIDPipe) id: string) {
+    return this.riskReview.findOne(id);
+  }
+
+  @Patch('risk-reviews/:id/review')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Update review status/note on a risk-review row — administrative status tracking only (SEC-ATT-007A; SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Risk review UUID' })
+  @ApiResponse({ status: 200, description: 'Risk review row updated' })
+  @ApiResponse({ status: 404, description: 'Risk review row not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  reviewRiskReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReviewRiskReviewDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.riskReview.review(id, dto, user.id);
+  }
+
+  @Patch('risk-reviews/:id/approve')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Mark a risk-review row APPROVED — administrative status tracking only (SEC-ATT-007A; SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Risk review UUID' })
+  @ApiResponse({ status: 200, description: 'Risk review row approved' })
+  @ApiResponse({ status: 404, description: 'Risk review row not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  approveRiskReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RiskReviewNoteDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.riskReview.setStatus(id, AttendanceRiskReviewStatus.APPROVED, dto.reviewNote, user.id);
+  }
+
+  @Patch('risk-reviews/:id/reject')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN)
+  @ApiOperation({ summary: 'Mark a risk-review row REJECTED — administrative status tracking only (SEC-ATT-007A; SUPER_ADMIN, HR_ADMIN)' })
+  @ApiParam({ name: 'id', description: 'Risk review UUID' })
+  @ApiResponse({ status: 200, description: 'Risk review row rejected' })
+  @ApiResponse({ status: 404, description: 'Risk review row not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient role' })
+  rejectRiskReview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RiskReviewNoteDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.riskReview.setStatus(id, AttendanceRiskReviewStatus.REJECTED, dto.reviewNote, user.id);
   }
 
   @Get(':id')

@@ -4,12 +4,19 @@ import { AuthModule } from '../auth/auth.module';
 import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 import { AttendanceNonceService } from './attendance-nonce.service';
+import { AttendanceRiskReviewService } from './attendance-risk-review.service';
 import { GeofenceConfigService } from './geofence-config.service';
 import { GeofenceService } from './geofence.service';
 
 @Module({
   imports: [AuditLogModule, AuthModule],
   controllers: [AttendanceController],
-  providers: [AttendanceService, GeofenceService, GeofenceConfigService, AttendanceNonceService],
+  providers: [
+    AttendanceService,
+    GeofenceService,
+    GeofenceConfigService,
+    AttendanceNonceService,
+    AttendanceRiskReviewService,
+  ],
 })
 export class AttendanceModule {}

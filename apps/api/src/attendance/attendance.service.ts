@@ -17,6 +17,8 @@ import type {
 import {
   AttendanceNonceAction,
   AttendanceReviewStatus,
+  AttendanceRiskReasonCode,
+  AttendanceRiskResult,
   AttendanceSource,
   AttendanceStatus,
   OffSiteStatus,
@@ -27,6 +29,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceNonceService, type NonceConsumeResult } from './attendance-nonce.service';
+import { AttendanceRiskReviewService, type RecordRiskReviewArgs } from './attendance-risk-review.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { MixedCheckoutExceptionDto } from './dto/mixed-checkout-exception.dto';
@@ -155,6 +158,7 @@ export class AttendanceService {
     private geofenceService: GeofenceService,
     private geofenceConfig: GeofenceConfigService,
     private attendanceNonce: AttendanceNonceService,
+    private riskReview: AttendanceRiskReviewService,
   ) {}
 
   // SEC-ATT-004: issue a short-lived, single-use replay-protection nonce for
@@ -168,7 +172,7 @@ export class AttendanceService {
     const employeeId = await this.requireEmployeeId(userId);
     // Runs before the workMode branch so OFFSITE payloads can't dodge it either —
     // workMode is as self-reported/forgeable as source.
-    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', ctx);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', AttendanceNonceAction.CLOCK_IN, employeeId, ctx);
     const date = this.todayUtc();
     const now = new Date();
 
@@ -193,7 +197,7 @@ export class AttendanceService {
       }
       offSiteRequestId = approved.id;
     } else {
-      await this.validateGeofence(dto, 'CLOCK_IN', ctx);
+      await this.validateGeofence(dto, 'CLOCK_IN', AttendanceNonceAction.CLOCK_IN, employeeId, ctx);
     }
 
     const existing = await this.prisma.attendance.findUnique({
@@ -204,7 +208,7 @@ export class AttendanceService {
     // SEC-ATT-004: consumed last, right before the write, so a nonce is only
     // burned once every other validation (payload integrity, geofence, dup-day)
     // has already passed.
-    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_IN, 'CLOCK_IN', userId, ctx);
+    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_IN, 'CLOCK_IN', userId, employeeId, ctx);
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
     const workMode = dto.workMode ?? WorkMode.ONSITE;
@@ -256,7 +260,7 @@ export class AttendanceService {
     // it impossible to check attendanceSource. Off-site records must not fail company
     // geofence validation on clock-out.
     const employeeId = await this.requireEmployeeId(userId);
-    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', ctx);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', AttendanceNonceAction.CLOCK_OUT, employeeId, ctx);
     const date = this.todayUtc();
 
     const record = await this.prisma.attendance.findUnique({
@@ -269,11 +273,11 @@ export class AttendanceService {
     // Off-site records bypass company radius — their location was captured at clock-in.
     const src = (record as any).attendanceSource ?? AttendanceSource.COMPANY_GEOFENCE;
     if (src === AttendanceSource.COMPANY_GEOFENCE) {
-      await this.validateGeofence(dto, 'CLOCK_OUT', ctx);
+      await this.validateGeofence(dto, 'CLOCK_OUT', AttendanceNonceAction.CLOCK_OUT, employeeId, ctx);
     }
 
     // SEC-ATT-004: consumed last, right before the write.
-    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_OUT, 'CLOCK_OUT', userId, ctx);
+    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_OUT, 'CLOCK_OUT', userId, employeeId, ctx);
 
     const result = await this.prisma.attendance.update({
       where: { id: record.id },
@@ -313,7 +317,7 @@ export class AttendanceService {
 
   async clockInOffsite(userId: string, dto: OffsiteClockInDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
-    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', ctx);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', AttendanceNonceAction.OFFSITE_CLOCK_IN, employeeId, ctx);
     const date = this.todayBangkok();
     const now = new Date();
 
@@ -353,7 +357,7 @@ export class AttendanceService {
     }
 
     // SEC-ATT-004: consumed last, right before the write.
-    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_IN, 'CLOCK_IN', userId, ctx);
+    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_IN, 'CLOCK_IN', userId, employeeId, ctx);
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 
@@ -416,7 +420,7 @@ export class AttendanceService {
 
   async clockOutOffsite(userId: string, dto: OffsiteClockOutDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
-    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', ctx);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', AttendanceNonceAction.OFFSITE_CLOCK_OUT, employeeId, ctx);
     const date = this.todayBangkok();
 
     const record = await this.prisma.attendance.findUnique({
@@ -444,7 +448,7 @@ export class AttendanceService {
     }
 
     // SEC-ATT-004: consumed last, right before the write.
-    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_OUT, 'CLOCK_OUT', userId, ctx);
+    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_OUT, 'CLOCK_OUT', userId, employeeId, ctx);
 
     const result = await this.prisma.attendance.update({
       where: { id: record.id },
@@ -1033,6 +1037,8 @@ export class AttendanceService {
       accuracy?: number;
     },
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
+    nonceAction: AttendanceNonceAction,
+    employeeId: string,
     ctx?: AttendanceAuditContext,
   ): Promise<void> {
     const config = await this.geofenceConfig.getEffectiveConfig();
@@ -1056,6 +1062,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'INVALID_CAPTURED_AT',
         source: requestSource,
         hasCoordinates: hasCoordinatesForAudit,
@@ -1078,6 +1086,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         source: requestSource,
         reason: requestSource ? 'MISSING_CAPTURED_AT' : 'MISSING_SOURCE_CAPTURED_AT',
         configSource: config.source,
@@ -1089,6 +1099,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'FUTURE_LOCATION',
         source: requestSource,
         hasCoordinates: hasCoordinatesForAudit,
@@ -1105,6 +1117,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'STALE_LOCATION',
         source: requestSource,
         hasCoordinates: hasCoordinatesForAudit,
@@ -1124,6 +1138,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'MOCK_LOCATION_DETECTED',
         source: requestSource,
         hasCoordinates: hasCoordinatesForAudit,
@@ -1161,6 +1177,7 @@ export class AttendanceService {
     nonceAction: AttendanceNonceAction,
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
     userId: string,
+    employeeId: string,
     ctx?: AttendanceAuditContext,
   ): Promise<void> {
     if (!dto.nonce) {
@@ -1169,6 +1186,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         nonceAction,
+        employeeId,
         source: dto.source ?? null,
       });
       return;
@@ -1186,6 +1204,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         nonceAction,
+        employeeId,
         source: dto.source ?? null,
         reason: result.reason,
       });
@@ -1203,6 +1222,7 @@ export class AttendanceService {
     actorRole: string | null;
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
     nonceAction: AttendanceNonceAction;
+    employeeId: string;
     source: string | null;
   }): Promise<void> {
     await this.recordBestEffort({
@@ -1221,6 +1241,19 @@ export class AttendanceService {
         result: 'ALLOWED',
       },
     });
+
+    // SEC-ATT-007A: accepted-but-flagged — the request still succeeds
+    // (soft-enforced, mirrors SEC-ATT-004 rollout compatibility), but is
+    // recorded for HR/Admin review visibility.
+    await this.recordRiskReviewBestEffort({
+      employeeId: args.employeeId,
+      userId: args.actorUserId,
+      action: args.nonceAction,
+      result: AttendanceRiskResult.FLAGGED,
+      reasonCodes: [AttendanceRiskReasonCode.NONCE_MISSING_ALLOWED],
+      source: args.source,
+      metadata: { attemptType: args.attemptType, nonceAction: args.nonceAction, source: args.source },
+    });
   }
 
   private async recordNonceRejectedAuditBestEffort(args: {
@@ -1228,6 +1261,7 @@ export class AttendanceService {
     actorRole: string | null;
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
     nonceAction: AttendanceNonceAction;
+    employeeId: string;
     source: string | null;
     reason:
       | 'NONCE_INVALID'
@@ -1252,6 +1286,16 @@ export class AttendanceService {
         result: 'REJECTED',
       },
     });
+
+    await this.recordRiskReviewBestEffort({
+      employeeId: args.employeeId,
+      userId: args.actorUserId,
+      action: args.nonceAction,
+      result: AttendanceRiskResult.REJECTED,
+      reasonCodes: [AttendanceRiskReasonCode[args.reason]],
+      source: args.source,
+      metadata: { attemptType: args.attemptType, nonceAction: args.nonceAction, source: args.source },
+    });
   }
 
   // Company-radius geofence validation — only applied when source='mobile' and
@@ -1265,6 +1309,8 @@ export class AttendanceService {
   private async validateGeofence(
     dto: ClockInDto | ClockOutDto,
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
+    nonceAction: AttendanceNonceAction,
+    employeeId: string,
     ctx?: AttendanceAuditContext,
   ): Promise<void> {
     if (dto.source !== 'mobile') return;
@@ -1278,6 +1324,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'MISSING_LOCATION',
         source: 'mobile',
         hasCoordinates: false,
@@ -1296,6 +1344,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'POOR_ACCURACY',
         source: 'mobile',
         hasCoordinates: true,
@@ -1314,6 +1364,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'GEOFENCE_NOT_CONFIGURED',
         source: 'mobile',
         hasCoordinates: true,
@@ -1340,6 +1392,8 @@ export class AttendanceService {
         actorUserId: ctx?.actorUserId ?? null,
         actorRole: ctx?.actorRole ?? null,
         attemptType,
+        nonceAction,
+        employeeId,
         reason: 'OUTSIDE_RADIUS',
         source: 'mobile',
         hasCoordinates: true,
@@ -1355,10 +1409,37 @@ export class AttendanceService {
     }
   }
 
+  // SEC-ATT-007A: internal geofence/payload-integrity reason -> canonical,
+  // privacy-safe AttendanceRiskReasonCode. MISSING_LOCATION and OUTSIDE_RADIUS
+  // both represent a hard geofence rejection; GEOFENCE_NOT_CONFIGURED is an
+  // admin-config edge case rather than a suspicious client action.
+  private static readonly GEOFENCE_REASON_TO_RISK_CODE: Record<
+    | 'MISSING_LOCATION'
+    | 'POOR_ACCURACY'
+    | 'GEOFENCE_NOT_CONFIGURED'
+    | 'OUTSIDE_RADIUS'
+    | 'INVALID_CAPTURED_AT'
+    | 'STALE_LOCATION'
+    | 'FUTURE_LOCATION'
+    | 'MOCK_LOCATION_DETECTED',
+    AttendanceRiskReasonCode
+  > = {
+    MISSING_LOCATION: AttendanceRiskReasonCode.GEOFENCE_REJECTED,
+    POOR_ACCURACY: AttendanceRiskReasonCode.LOW_LOCATION_ACCURACY,
+    GEOFENCE_NOT_CONFIGURED: AttendanceRiskReasonCode.GEOFENCE_EDGE_CASE,
+    OUTSIDE_RADIUS: AttendanceRiskReasonCode.GEOFENCE_REJECTED,
+    INVALID_CAPTURED_AT: AttendanceRiskReasonCode.INVALID_CAPTURED_AT,
+    STALE_LOCATION: AttendanceRiskReasonCode.STALE_LOCATION,
+    FUTURE_LOCATION: AttendanceRiskReasonCode.FUTURE_LOCATION,
+    MOCK_LOCATION_DETECTED: AttendanceRiskReasonCode.MOCK_LOCATION_DETECTED,
+  };
+
   private async recordGeofenceRejectedAuditBestEffort(args: {
     actorUserId: string | null;
     actorRole: string | null;
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    nonceAction: AttendanceNonceAction;
+    employeeId: string;
     reason:
       | 'MISSING_LOCATION'
       | 'POOR_ACCURACY'
@@ -1395,6 +1476,22 @@ export class AttendanceService {
         result: 'REJECTED',
       },
     });
+
+    await this.recordRiskReviewBestEffort({
+      employeeId: args.employeeId,
+      userId: args.actorUserId,
+      action: args.nonceAction,
+      result: AttendanceRiskResult.REJECTED,
+      reasonCodes: [AttendanceService.GEOFENCE_REASON_TO_RISK_CODE[args.reason]],
+      source: args.source,
+      metadata: {
+        attemptType: args.attemptType,
+        source: args.source,
+        hasCoordinates: args.hasCoordinates,
+        hasAccuracy: args.hasAccuracy,
+        accuracyBucket: args.accuracyBucket,
+      },
+    });
   }
 
   // SEC-ATT-003 (patched): soft-enforcement signal for a missing `capturedAt`, on any
@@ -1408,6 +1505,8 @@ export class AttendanceService {
     actorUserId: string | null;
     actorRole: string | null;
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    nonceAction: AttendanceNonceAction;
+    employeeId: string;
     source: string | null;
     reason: 'MISSING_CAPTURED_AT' | 'MISSING_SOURCE_CAPTURED_AT';
     configSource: 'db' | 'env';
@@ -1427,6 +1526,16 @@ export class AttendanceService {
         configSource: args.configSource,
         result: 'ALLOWED',
       },
+    });
+
+    await this.recordRiskReviewBestEffort({
+      employeeId: args.employeeId,
+      userId: args.actorUserId,
+      action: args.nonceAction,
+      result: AttendanceRiskResult.FLAGGED,
+      reasonCodes: [AttendanceRiskReasonCode[args.reason]],
+      source: args.source,
+      metadata: { attemptType: args.attemptType, source: args.source, configSource: args.configSource },
     });
   }
 
@@ -1524,5 +1633,11 @@ export class AttendanceService {
 
   private async recordBestEffort(event: AuditLogEvent): Promise<void> {
     try { await this.auditLog.record(event); } catch { /* best-effort */ }
+  }
+
+  // SEC-ATT-007A: best-effort by convention (mirrors recordBestEffort above) —
+  // a risk-review write failure must never block or fail a clock-in/out.
+  private async recordRiskReviewBestEffort(args: RecordRiskReviewArgs): Promise<void> {
+    try { await this.riskReview.recordReview(args); } catch { /* best-effort */ }
   }
 }

@@ -22,10 +22,17 @@
 > recommend DEFER**: Play Integrity and App Attest/DeviceCheck are categorically
 > unavailable on the current PWA and cannot proceed until a native build strategy
 > is approved (still open, §15 Open Question #3 in the spec — a single decision
-> spanning both platforms). With both 005 and 006 implementations deferred, the
-> next **backend-executable** work is therefore SEC-ATT-007 (risk scoring +
-> review queue) planning — not blocked on the native-build decision. Do not block
-> the PWA attendance flow on Play Integrity or App Attest/DeviceCheck.
+> spanning both platforms). With both 005 and 006 implementations deferred,
+> **SEC-ATT-007A (attendance risk scoring + review queue backend foundation)
+> is now complete** — see
+> [CTO_SUMMARY_SEC_ATT_007A.md](CTO_SUMMARY_SEC_ATT_007A.md). It records a
+> privacy-safe `AttendanceRiskReview` row (categorical reason codes + derived
+> risk level only — never raw GPS/nonce/tokens) whenever an existing
+> SEC-ATT-002/003/004 check flags or rejects a clock-in/out, and exposes
+> SUPER_ADMIN/HR_ADMIN-only review-queue APIs. The next item is
+> **SEC-ATT-007B** (Admin Web UI for the review queue) — not blocked on the
+> native-build decision. Do not block the PWA attendance flow on Play
+> Integrity, App Attest/DeviceCheck, or risk scoring.
 
 ## Background
 
@@ -62,16 +69,18 @@ SEC-ATT-007 are the planned steps to close that gap.
 | SEC-ATT-005 | Android Play Integrity — device/app attestation for Android | Yes (DEFERRED — see SEC-ATT-005A) |
 | SEC-ATT-006A | iOS App Attest / DeviceCheck **feasibility & architecture decision** — options matrix, conceptual (stateful) backend/native prerequisites, phased rollout; recommends DEFER (spec/decision only, no build) | No (feasibility only) |
 | SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes (DEFERRED — see SEC-ATT-006A) |
-| SEC-ATT-007 | Attendance risk scoring + review queue — aggregate signals from 002–006 into a risk score with a human review workflow, reusing the existing `AttendanceReviewStatus` lifecycle from the mixed-checkout-exception workflow ([[Mixed Checkout Exception]], ADR-027) | No (consumes signals from prior items) |
+| SEC-ATT-007A ✅ | Attendance risk scoring + review queue **backend foundation** — new `AttendanceRiskReview` table; scores sanitized reason codes from the existing SEC-ATT-002/003/004 checks into LOW/MEDIUM/HIGH/CRITICAL; SUPER_ADMIN/HR_ADMIN-only list/read/review APIs. No Admin Web UI. See [CTO_SUMMARY_SEC_ATT_007A.md](CTO_SUMMARY_SEC_ATT_007A.md). | No |
+| SEC-ATT-007B | Admin Web UI for the risk-review queue (consumes SEC-ATT-007A's APIs) | No |
 
 ## Sequencing Rationale
 
-Items 002–004 and 007 are backend-only and can proceed against the current
-PWA/mobile-web client. Items 005–006 require a native app or native wrapper
-and are blocked on that decision being made separately; they are ordered last
-so backend hardening isn't blocked waiting on a mobile platform decision. Their
-feasibility precursors (SEC-ATT-005A, SEC-ATT-006A) are complete and both
-recommend DEFER, so the next executable item is SEC-ATT-007.
+Items 002–004 and 007A/007B are backend/web-only and can proceed against the
+current PWA/mobile-web client. Items 005–006 require a native app or native
+wrapper and are blocked on that decision being made separately; they are
+ordered last so backend hardening isn't blocked waiting on a mobile platform
+decision. Their feasibility precursors (SEC-ATT-005A, SEC-ATT-006A) are
+complete and both recommend DEFER; SEC-ATT-007A (backend foundation) is now
+also complete, so the next executable item is SEC-ATT-007B (Admin Web UI).
 
 ## Related Notes
 

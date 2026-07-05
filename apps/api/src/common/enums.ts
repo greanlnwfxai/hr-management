@@ -66,3 +66,58 @@ export enum AttendanceNonceAction {
   OFFSITE_CLOCK_IN  = 'OFFSITE_CLOCK_IN',
   OFFSITE_CLOCK_OUT = 'OFFSITE_CLOCK_OUT',
 }
+
+// SEC-ATT-007A: risk severity assigned to a recorded AttendanceRiskReview row.
+export enum AttendanceRiskLevel {
+  LOW      = 'LOW',
+  MEDIUM   = 'MEDIUM',
+  HIGH     = 'HIGH',
+  CRITICAL = 'CRITICAL',
+}
+
+// SEC-ATT-007A: HR/Admin review workflow state for a risk review row.
+export enum AttendanceRiskReviewStatus {
+  PENDING  = 'PENDING',
+  REVIEWED = 'REVIEWED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  IGNORED  = 'IGNORED',
+}
+
+// SEC-ATT-007A: what happened to the underlying attendance attempt. ACCEPTED
+// is a valid value but is never written by the automatic scoring hooks in
+// attendance.service.ts (a fully clean attempt has nothing to review) —
+// reserved for a possible future manual-flag path.
+export enum AttendanceRiskResult {
+  ACCEPTED = 'ACCEPTED',
+  REJECTED = 'REJECTED',
+  FLAGGED  = 'FLAGGED',
+}
+
+// SEC-ATT-007A: sanitized reason codes recorded on an AttendanceRiskReview row.
+// These are categorical signals already computed by the SEC-ATT-002/003/004
+// payload/geofence/nonce checks — never raw GPS, raw nonce, or raw
+// attestation/token values. DEVICE_INTEGRITY_UNAVAILABLE and
+// NATIVE_ATTESTATION_UNAVAILABLE are reserved for a future native-build signal
+// (SEC-ATT-005/006, both DEFERRED) and are not emitted by any current hook —
+// see attendance-risk-review.service.ts.
+export enum AttendanceRiskReasonCode {
+  MISSING_CAPTURED_AT           = 'MISSING_CAPTURED_AT',
+  MISSING_SOURCE_CAPTURED_AT    = 'MISSING_SOURCE_CAPTURED_AT',
+  INVALID_CAPTURED_AT           = 'INVALID_CAPTURED_AT',
+  STALE_LOCATION                = 'STALE_LOCATION',
+  FUTURE_LOCATION               = 'FUTURE_LOCATION',
+  LOW_LOCATION_ACCURACY         = 'LOW_LOCATION_ACCURACY',
+  MOCK_LOCATION_DETECTED        = 'MOCK_LOCATION_DETECTED',
+  SIMULATED_LOCATION_DETECTED   = 'SIMULATED_LOCATION_DETECTED',
+  GEOFENCE_REJECTED             = 'GEOFENCE_REJECTED',
+  GEOFENCE_EDGE_CASE            = 'GEOFENCE_EDGE_CASE',
+  NONCE_MISSING_ALLOWED         = 'NONCE_MISSING_ALLOWED',
+  NONCE_INVALID                 = 'NONCE_INVALID',
+  NONCE_EXPIRED                 = 'NONCE_EXPIRED',
+  NONCE_REUSED                  = 'NONCE_REUSED',
+  NONCE_ACTION_MISMATCH         = 'NONCE_ACTION_MISMATCH',
+  NONCE_USER_MISMATCH           = 'NONCE_USER_MISMATCH',
+  DEVICE_INTEGRITY_UNAVAILABLE  = 'DEVICE_INTEGRITY_UNAVAILABLE',
+  NATIVE_ATTESTATION_UNAVAILABLE = 'NATIVE_ATTESTATION_UNAVAILABLE',
+}
