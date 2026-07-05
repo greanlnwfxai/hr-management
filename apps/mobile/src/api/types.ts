@@ -168,6 +168,7 @@ export interface MobileLocationPayload {
   capturedAt?: string;
   timezoneOffsetMinutes?: number;
   platform?: 'ios' | 'android' | 'web';
+  nonce?: string;
 }
 
 export interface ClockActionResult {
@@ -176,6 +177,16 @@ export interface ClockActionResult {
   checkIn: string | null;
   checkOut: string | null;
   status: AttendanceStatus;
+}
+
+// ─── SEC-ATT-004: Replay-protection nonce ──────────────────────────────────────
+
+export type AttendanceNonceAction = 'CLOCK_IN' | 'CLOCK_OUT' | 'OFFSITE_CLOCK_IN' | 'OFFSITE_CLOCK_OUT';
+
+export interface AttendanceNonceResponse {
+  nonce: string;
+  expiresAt: string;
+  action: AttendanceNonceAction;
 }
 
 // ─── Leave ────────────────────────────────────────────────────────────────────
@@ -260,6 +271,7 @@ export interface OffsiteClockInPayload {
   capturedAt?: string;
   timezoneOffsetMinutes?: number;
   platform?: 'ios' | 'android' | 'web';
+  nonce?: string;
 }
 
 export interface OffsiteClockOutPayload {
@@ -270,6 +282,7 @@ export interface OffsiteClockOutPayload {
   capturedAt?: string;
   timezoneOffsetMinutes?: number;
   platform?: 'ios' | 'android' | 'web';
+  nonce?: string;
 }
 
 export interface MixedCheckoutExceptionPayload {

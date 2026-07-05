@@ -68,6 +68,14 @@ enum AttendanceReviewStatus {
   MISSING_CHECKOUT
 }
 
+// SEC-ATT-004: distinct nonce scopes per attendance action/endpoint.
+enum AttendanceNonceAction {
+  CLOCK_IN
+  CLOCK_OUT
+  OFFSITE_CLOCK_IN
+  OFFSITE_CLOCK_OUT
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Models
 // ─────────────────────────────────────────────────────────────────────────────
@@ -312,6 +320,25 @@ model GeofenceConfig {
   updatedAt         DateTime @updatedAt
 
   @@map("geofence_config")
+}
+
+// SEC-ATT-004: server-issued, single-use replay-protection nonce. Only a SHA-256
+// hash of the nonce is stored (tokenHash) — the raw value is returned to the
+// client once at issuance and never persisted. consumedAt is set atomically on
+// first successful use; a non-null consumedAt makes the row permanently unusable.
+model AttendanceNonce {
+  id         String                @id @default(uuid())
+  tokenHash  String                @unique
+  userId     String
+  employeeId String?
+  action     AttendanceNonceAction
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime              @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("attendance_nonces")
 }
 
 model AuditLog {

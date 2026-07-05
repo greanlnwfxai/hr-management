@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { clockInOffsite, clockOutOffsite } from '../api/client';
+import { clockInOffsite, clockOutOffsite, issueAttendanceNonce } from '../api/client';
 import { SessionExpiredError } from '../api/types';
 import type { AttendanceRecord } from '../api/types';
 import { useAuth } from '../auth/useAuth';
@@ -73,6 +73,20 @@ export function useOffsiteAttendance(
     if (!mountedRef.current) return null;
     setClockInState('submitting');
 
+    // SEC-ATT-004: fetch the replay-protection nonce as late as possible (after
+    // location is already acquired). Best-effort — falls back to submitting
+    // without one on issuance failure (server-side soft-enforced today).
+    let nonce: string | undefined;
+    try {
+      const nonceResponse = await issueAttendanceNonce(token, 'OFFSITE_CLOCK_IN');
+      nonce = nonceResponse.nonce;
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        void handleSessionExpired();
+        return null;
+      }
+    }
+
     try {
       const record = await clockInOffsite(token, {
         ...location,
@@ -80,6 +94,7 @@ export function useOffsiteAttendance(
         reason,
         timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
         ...(note ? { note } : {}),
+        ...(nonce ? { nonce } : {}),
       });
       if (!mountedRef.current) return null;
       setClockActionMessage('ลงเวลาเข้า (นอกสถานที่) สำเร็จ');
@@ -123,11 +138,24 @@ export function useOffsiteAttendance(
     if (!mountedRef.current) return null;
     setClockOutState('submitting');
 
+    // SEC-ATT-004: same late-fetch, best-effort pattern as off-site clock-in.
+    let nonce: string | undefined;
+    try {
+      const nonceResponse = await issueAttendanceNonce(token, 'OFFSITE_CLOCK_OUT');
+      nonce = nonceResponse.nonce;
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        void handleSessionExpired();
+        return null;
+      }
+    }
+
     try {
       const record = await clockOutOffsite(token, {
         ...location,
         timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
         ...(note ? { note } : {}),
+        ...(nonce ? { nonce } : {}),
       });
       if (!mountedRef.current) return null;
       setClockActionMessage('ลงเวลาออก (นอกสถานที่) สำเร็จ');
@@ -165,6 +193,9 @@ export function useOffsiteAttendance(
 }
 
 function translateOffsiteError(msg: string): string {
+  if (msg.includes('attendance session has expired')) {
+    return 'คำขอลงเวลาหมดอายุ กรุณาลองใหม่อีกครั้ง';
+  }
   if (msg.includes('GPS accuracy is too low') || msg.includes('accuracy')) {
     return 'ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่';
   }

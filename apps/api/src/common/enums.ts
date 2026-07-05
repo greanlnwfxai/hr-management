@@ -58,3 +58,11 @@ export enum AttendanceReviewStatus {
   REJECTED         = 'REJECTED',
   MISSING_CHECKOUT = 'MISSING_CHECKOUT',
 }
+
+// SEC-ATT-004: distinct nonce scopes, one per attendance action/endpoint.
+export enum AttendanceNonceAction {
+  CLOCK_IN          = 'CLOCK_IN',
+  CLOCK_OUT         = 'CLOCK_OUT',
+  OFFSITE_CLOCK_IN  = 'OFFSITE_CLOCK_IN',
+  OFFSITE_CLOCK_OUT = 'OFFSITE_CLOCK_OUT',
+}

@@ -48,14 +48,16 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
   hotfix removes the UI affordance but does not add backend-side platform
   enforcement (e.g. rejecting non-mobile-sourced clock calls outright — still
   true after SEC-ATT-003, see §15 Open Question #1 in the spec).
-  SEC-ATT-001 through **SEC-ATT-003** are now
+  SEC-ATT-001 through **SEC-ATT-004** are now
   complete — see
   [docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](../../../docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
   for the threat model and design reference,
   [docs/CTO_SUMMARY_SEC_ATT_002.md](../../../docs/CTO_SUMMARY_SEC_ATT_002.md)
   for what SEC-ATT-002 shipped,
   [docs/CTO_SUMMARY_SEC_ATT_003.md](../../../docs/CTO_SUMMARY_SEC_ATT_003.md)
-  for what SEC-ATT-003 shipped, and
+  for what SEC-ATT-003 shipped,
+  [docs/CTO_SUMMARY_SEC_ATT_004.md](../../../docs/CTO_SUMMARY_SEC_ATT_004.md)
+  for what SEC-ATT-004 shipped, and
   [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
   SEC-ATT-001 through SEC-ATT-007 sequencing
 
@@ -137,7 +139,7 @@ Summary:
 - `capturedAt` (ISO-8601) — when the client captured the GPS fix
 - `timezoneOffsetMinutes` — client's local UTC offset
 - `platform` (`ios`/`android`/`web`) — client runtime
-- `nonce` — reserved for SEC-ATT-004 replay protection; accepted but not yet validated or enforced
+- `nonce` — SEC-ATT-004 replay-protection nonce; validated and enforced (see below)
 
 All four are optional/additive for backward compatibility with mobile app builds that predate this field set. `platform`/`timezoneOffsetMinutes`/`hasNonce` (never the raw nonce) are logged as-is on the existing attendance audit events. None of these fields are persisted to the `Attendance` table — they are transient, request-scoped signals only, consistent with the existing "GPS is discarded" convention.
 
@@ -167,6 +169,31 @@ Thresholds reuse the SEC-ATT-002 `gpsAgeBucket` constants unchanged (`GPS_AGE_AC
 
 **Still open, not resolved by SEC-ATT-003:** whether the **company-radius** check itself should also apply to non-mobile-sourced calls — SEC-ATT-001 §15 Open Question #1 — remains unresolved. This is narrower than it used to be: a request that omits `source` can no longer skip the payload-integrity checks (fixed above), only radius enforcement. Travel-speed/implausible-movement heuristics (spec §6) are also not implemented — those are probabilistic signals reserved for the SEC-ATT-007 risk-scoring queue, not a hard-reject task.
 
+### SEC-ATT-004: Server Nonce / Replay Protection
+
+Mobile/PWA fetches a short-lived, single-use nonce from `POST /attendance/nonce` (body: `{ action }`, one of `CLOCK_IN` / `CLOCK_OUT` / `OFFSITE_CLOCK_IN` / `OFFSITE_CLOCK_OUT`) immediately before submitting the matching clock request, then echoes it back in the existing `nonce` field reserved by SEC-ATT-002. The response contains only `{ nonce, expiresAt, action }` — no internal hash values.
+
+**Storage:** a new additive `AttendanceNonce` table (`attendance_nonces`) stores only a SHA-256 hash of the nonce (`tokenHash`, unique), never the raw value — the raw nonce is returned to the client once at issuance and never persisted or logged. Bound to `userId` (the actual security key), `employeeId` (best-effort, "if available"), `action`, and a 300s `expiresAt`. Postgres was chosen over the provisioned-but-unused Redis (see `CLAUDE.md` ports table) for consistency with the rest of the system's all-Postgres persistence and because the spec (§8) leaves the storage choice to this task.
+
+**Atomic single-use consumption:** `AttendanceNonceService.consumeNonce()` performs a single conditional `updateMany({ tokenHash, userId, action, consumedAt: null, expiresAt: { gt: now } } → { consumedAt: now })`. Only one concurrent caller can flip `consumedAt` from null — this atomic update, not the diagnostic lookup that follows it on failure, is the actual replay-protection gate. The nonce is consumed **last**, immediately before the DB write, after every other check (payload integrity, geofence, dup-day) has already passed — so a nonce is only burned by a request that would otherwise have succeeded.
+
+**Enforcement (rollout decision, explicit user sign-off):** a **missing** nonce is soft-enforced — the request still succeeds, audited as `ATTENDANCE_NONCE_MISSING` / `ALLOWED` — because `POST /attendance/nonce` is new in this task and no previously-shipped mobile/PWA build can fetch or send a real nonce yet; hard-rejecting immediately would break clock-in/out fleet-wide until every client updates. Mirrors the SEC-ATT-003 `MISSING_CAPTURED_AT` precedent. A **present** nonce, however, is always strictly enforced regardless of this toggle:
+
+| Reason code | Trigger | Result |
+|---|---|---|
+| `NONCE_MISSING` | no `nonce` field sent | Soft-allowed (`ATTENDANCE_NONCE_MISSING`/`ALLOWED`) — promote to hard-reject once fleet rollout is confirmed |
+| `NONCE_INVALID` | nonce hash not found (never issued, or garbage) | 422, `ATTENDANCE_NONCE_REJECTED` |
+| `NONCE_EXPIRED` | present but past `expiresAt` (300s TTL) | 422 |
+| `NONCE_REUSED` | already consumed (replay) | 422 |
+| `NONCE_ACTION_MISMATCH` | issued for a different action (e.g. CLOCK_OUT nonce sent to clock-in) | 422 |
+| `NONCE_USER_MISMATCH` | issued to a different authenticated user | 422 |
+
+All rejections return one generic message ("Your attendance session has expired. Please try again.") — no detail that would let an attacker distinguish reused from expired from never-issued (spec §8).
+
+**Known gap, explicitly out of scope:** `mixedCheckoutException` is **not** covered by nonce enforcement — spec §8 names it a distinct nonce scope, but this task's action list and expected-files list excluded it (mirrors the SEC-ATT-003 precedent of leaving that endpoint untouched). It remains a documented, currently-open replay surface on that one endpoint.
+
+**No cleanup job.** Consumed/expired `AttendanceNonce` rows are never deleted — no scheduler package (`@nestjs/schedule` or similar) exists in this codebase yet. A future task should add periodic deletion of rows past `expiresAt`.
+
 ## Known Limitations
 
 - `todayUtc()` in AttendanceService and `todayBangkok()` in Dashboard can differ 17:00–23:59 UTC
@@ -176,6 +203,9 @@ Thresholds reuse the SEC-ATT-002 `gpsAgeBucket` constants unchanged (`GPS_AGE_AC
 - Web clock-in/out is disabled (v1.2.66); the backend still does not reject a non-mobile client's **radius** check outright (payload-integrity checks now apply regardless of `source` — see SEC-ATT-003 section above) — SEC-ATT-001 §15 Open Question #1, unresolved
 - `MISSING_CAPTURED_AT`/`MISSING_SOURCE_CAPTURED_AT` are soft-enforced only (see SEC-ATT-003 section above) — a client can still omit `capturedAt` indefinitely without being blocked, by design, pending confirmed mobile rollout
 - `isMockLocation` has no real-world sender today (PWA cannot produce this signal); it only takes effect once a future native build populates it
+- `NONCE_MISSING` is soft-enforced only (SEC-ATT-004, mirrors the SEC-ATT-003 rollout pattern) — a client can omit the nonce entirely without being blocked, by design, pending confirmed mobile fleet rollout
+- `mixedCheckoutException` is not covered by SEC-ATT-004 nonce enforcement — a captured mixed-checkout-exception request remains replayable; spec §8 names it as a distinct nonce scope but it was out of this task's scope
+- No scheduled cleanup of expired/consumed `AttendanceNonce` rows — the table grows unboundedly until a future janitor task is added
 
 ## Related ADRs
 

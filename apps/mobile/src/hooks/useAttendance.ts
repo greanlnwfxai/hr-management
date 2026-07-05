@@ -6,6 +6,7 @@ import {
   clockIn as apiClockIn,
   clockOut as apiClockOut,
   getTodayOffSiteStatus,
+  issueAttendanceNonce,
 } from '../api/client';
 import { SessionExpiredError, ApiCodedError } from '../api/types';
 import type { AttendanceRecord, OffSiteRequestRecord, PaginatedMeta } from '../api/types';
@@ -114,11 +115,28 @@ export function useAttendance(): AttendanceState {
     }
 
     setClockInState('submitting');
+
+    // SEC-ATT-004: fetch the replay-protection nonce as late as possible (after
+    // location is already acquired) to minimize the window before it's used.
+    // Best-effort — if issuance fails for a reason other than session expiry,
+    // fall back to submitting without one (server-side soft-enforced today).
+    let nonce: string | undefined;
+    try {
+      const nonceResponse = await issueAttendanceNonce(token, 'CLOCK_IN');
+      nonce = nonceResponse.nonce;
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        void handleSessionExpired();
+        return;
+      }
+    }
+
     try {
       const result = await apiClockIn(token, {
         source: 'mobile',
         ...location,
         timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
+        ...(nonce ? { nonce } : {}),
       });
       setToday(prev =>
         prev
@@ -169,11 +187,25 @@ export function useAttendance(): AttendanceState {
     }
 
     setClockOutState('submitting');
+
+    // SEC-ATT-004: same late-fetch, best-effort pattern as clock-in.
+    let nonce: string | undefined;
+    try {
+      const nonceResponse = await issueAttendanceNonce(token, 'CLOCK_OUT');
+      nonce = nonceResponse.nonce;
+    } catch (err) {
+      if (err instanceof SessionExpiredError) {
+        void handleSessionExpired();
+        return;
+      }
+    }
+
     try {
       const result = await apiClockOut(token, {
         source: 'mobile',
         ...location,
         timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
+        ...(nonce ? { nonce } : {}),
       });
       setToday(prev => prev ? { ...prev, checkOut: result.checkOut, status: result.status } : prev);
       setClockActionMessage('ลงเวลาออกสำเร็จ');
@@ -214,6 +246,9 @@ export function useAttendance(): AttendanceState {
 }
 
 function translateClockError(msg: string): string {
+  if (msg.includes('attendance session has expired')) {
+    return 'คำขอลงเวลาหมดอายุ กรุณาลองใหม่อีกครั้ง';
+  }
   if (msg.includes('outside the allowed company area')) {
     return 'คุณอยู่นอกพื้นที่บริษัทที่อนุญาต';
   }

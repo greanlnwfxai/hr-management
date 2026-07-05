@@ -60,6 +60,11 @@ export function mockPrisma() {
       findUnique: jest.fn(),
       upsert: jest.fn(),
     },
+    attendanceNonce: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
     auditLog: {
       create: jest.fn(),
       findMany: jest.fn(),

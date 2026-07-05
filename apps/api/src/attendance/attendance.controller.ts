@@ -28,6 +28,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { AttendanceService } from './attendance.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
+import { IssueAttendanceNonceDto } from './dto/issue-attendance-nonce.dto';
 import { MixedCheckoutExceptionDto } from './dto/mixed-checkout-exception.dto';
 import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
 import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
@@ -44,6 +45,16 @@ import { QueryOffsiteReviewDto } from './dto/query-offsite-review.dto';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
   constructor(private attendance: AttendanceService) {}
+
+  @Post('nonce')
+  @ApiOperation({ summary: 'Issue a short-lived, single-use replay-protection nonce for a clock action (SEC-ATT-004)' })
+  @ApiResponse({ status: 201, description: 'Nonce issued' })
+  issueNonce(
+    @CurrentUser() user: { id: string; role: string },
+    @Body() dto: IssueAttendanceNonceDto,
+  ) {
+    return this.attendance.issueNonce(user.id, dto.action);
+  }
 
   @Post('clock-in')
   @ApiOperation({ summary: 'Clock in for today (LATE if after 08:30 Asia/Bangkok)' })

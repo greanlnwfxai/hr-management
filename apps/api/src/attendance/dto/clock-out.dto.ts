@@ -74,7 +74,7 @@ export class ClockOutDto {
   platform?: 'ios' | 'android' | 'web';
 
   @ApiPropertyOptional({
-    description: 'Reserved for SEC-ATT-004 replay protection. Not yet validated or enforced by the backend.',
+    description: 'SEC-ATT-004 replay-protection nonce, obtained from POST /attendance/nonce (action: CLOCK_OUT) immediately before submitting. If present, must be valid, unexpired, unused, and issued for CLOCK_OUT by this user, or the request is rejected. Missing nonce is currently soft-enforced (accepted, audited) for rollout compatibility.',
     maxLength: 128,
   })
   @IsOptional()

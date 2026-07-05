@@ -13,8 +13,9 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
+import { AttendanceNonceService } from './attendance-nonce.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
-import { AttendanceSource, AttendanceReviewStatus, WorkMode } from '../common/enums';
+import { AttendanceNonceAction, AttendanceSource, AttendanceReviewStatus, WorkMode } from '../common/enums';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
@@ -43,6 +44,7 @@ describe('AttendanceService', () => {
   let prisma: PrismaMock;
   let geofenceConfig: jest.Mocked<GeofenceConfigService>;
   let geofenceService: jest.Mocked<GeofenceService>;
+  let attendanceNonceService: jest.Mocked<AttendanceNonceService>;
   let mockAuditLog: { record: jest.Mock };
 
   const userId = 'user-uuid-1';
@@ -86,6 +88,19 @@ describe('AttendanceService', () => {
       isWithinRadius: jest.fn().mockReturnValue(true),
     } as unknown as jest.Mocked<GeofenceService>;
 
+    // SEC-ATT-004: defaults to "nonce accepted" so that pre-existing tests
+    // (which pass an arbitrary/no nonce and don't care about replay
+    // enforcement) are unaffected. Tests that specifically exercise nonce
+    // enforcement override this per-test.
+    attendanceNonceService = {
+      issueNonce: jest.fn().mockResolvedValue({
+        nonce: 'mock-issued-nonce',
+        expiresAt: new Date('2026-06-13T02:00:00.000Z'),
+        action: AttendanceNonceAction.CLOCK_IN,
+      }),
+      consumeNonce: jest.fn().mockResolvedValue({ ok: true }),
+    } as unknown as jest.Mocked<AttendanceNonceService>;
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AttendanceService,
@@ -93,6 +108,7 @@ describe('AttendanceService', () => {
         { provide: AuditLogService, useValue: mockAuditLog },
         { provide: GeofenceService, useValue: geofenceService },
         { provide: GeofenceConfigService, useValue: geofenceConfig },
+        { provide: AttendanceNonceService, useValue: attendanceNonceService },
       ],
     }).compile();
 
@@ -3136,7 +3152,11 @@ describe('AttendanceService', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-06-13T01:30:30.000Z'));
       await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:10.000Z' }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-004: a missing-nonce soft-signal audit call now precedes
+      // ATTENDANCE_CLOCK_IN — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata.gpsAgeBucket).toBe('FRESH');
     });
 
@@ -3144,7 +3164,9 @@ describe('AttendanceService', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-06-13T01:31:00.000Z'));
       await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata.gpsAgeBucket).toBe('ACCEPTABLE');
     });
 
@@ -3234,7 +3256,11 @@ describe('AttendanceService', () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-06-13T01:30:30.000Z'));
       await service.clockOut(userId, { capturedAt: '2026-06-13T01:30:10.000Z' }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-004: a missing-nonce soft-signal audit call now precedes
+      // ATTENDANCE_CLOCK_OUT — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_OUT');
       expect(event.metadata.gpsAgeBucket).toBe('FRESH');
     });
 
@@ -3248,6 +3274,349 @@ describe('AttendanceService', () => {
         .map((call) => call[0])
         .find((call) => call.action === 'ATTENDANCE_CLOCK_OUT');
       expect(event.metadata.gpsAgeBucket).toBe('UNKNOWN');
+    });
+  });
+
+  // ── SEC-ATT-004: replay-protection nonce ────────────────────────────────────
+
+  describe('SEC-ATT-004: issueNonce', () => {
+    it('delegates to AttendanceNonceService.issueNonce with the given userId and action', async () => {
+      attendanceNonceService.issueNonce.mockResolvedValue({
+        nonce: 'abc123',
+        expiresAt: new Date('2026-06-13T02:00:00.000Z'),
+        action: AttendanceNonceAction.CLOCK_IN,
+      });
+
+      const result = await service.issueNonce(userId, AttendanceNonceAction.CLOCK_IN);
+
+      expect(attendanceNonceService.issueNonce).toHaveBeenCalledWith(userId, AttendanceNonceAction.CLOCK_IN);
+      expect(result).toEqual({
+        nonce: 'abc123',
+        expiresAt: new Date('2026-06-13T02:00:00.000Z'),
+        action: AttendanceNonceAction.CLOCK_IN,
+      });
+    });
+  });
+
+  describe('SEC-ATT-004: nonce enforcement on clockIn', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('rollout decision: missing nonce still succeeds (soft-enforced) and is audited ALLOWED', async () => {
+      const result = await service.clockIn(userId, {}, ctx);
+
+      expect(result).toBeDefined();
+      expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_NONCE_MISSING',
+          result: 'ALLOWED',
+          metadata: expect.objectContaining({ reason: 'NONCE_MISSING', nonceAction: AttendanceNonceAction.CLOCK_IN }),
+        }),
+      );
+    });
+
+    it('a present valid nonce is consumed for the CLOCK_IN action', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: true });
+
+      const result = await service.clockIn(userId, { nonce: 'valid-nonce' }, ctx);
+
+      expect(result).toBeDefined();
+      expect(attendanceNonceService.consumeNonce).toHaveBeenCalledWith(
+        userId,
+        AttendanceNonceAction.CLOCK_IN,
+        'valid-nonce',
+      );
+    });
+
+    it.each([
+      ['NONCE_INVALID'],
+      ['NONCE_EXPIRED'],
+      ['NONCE_REUSED'],
+      ['NONCE_ACTION_MISMATCH'],
+      ['NONCE_USER_MISMATCH'],
+    ] as const)('rejects with 422 and audits %s, without creating an attendance record', async (reason) => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason });
+
+      await expect(
+        service.clockIn(userId, { nonce: 'bad-nonce' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_NONCE_REJECTED',
+          result: 'REJECTED',
+          metadata: expect.objectContaining({ reason, nonceAction: AttendanceNonceAction.CLOCK_IN }),
+        }),
+      );
+    });
+
+    it('replay: reusing the same nonce on a second clock-in is rejected', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValueOnce({ ok: true });
+      await service.clockIn(userId, { nonce: 'reused-nonce' }, ctx);
+
+      attendanceNonceService.consumeNonce.mockResolvedValueOnce({ ok: false, reason: 'NONCE_REUSED' });
+      await expect(
+        service.clockIn(userId, { nonce: 'reused-nonce' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it('does not consume the nonce when an earlier payload-integrity check (stale capturedAt) rejects first', async () => {
+      await expect(
+        service.clockIn(userId, { nonce: 'never-should-be-touched', capturedAt: '2020-01-01T00:00:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
+    });
+
+    it('does not consume the nonce when the geofence rejects first (OUTSIDE_RADIUS)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: true,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+      geofenceService.isWithinRadius.mockReturnValue(false);
+
+      await expect(
+        service.clockIn(
+          userId,
+          { nonce: 'never-should-be-touched', source: 'mobile', latitude: 13.0, longitude: 100.0, accuracy: 10 },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
+    });
+
+    it('never includes the raw nonce or raw GPS coordinates in rejected-nonce audit metadata', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason: 'NONCE_INVALID' });
+
+      await expect(
+        service.clockIn(
+          userId,
+          { nonce: 'super-secret-raw-nonce-value', source: 'mobile', latitude: 13.7563, longitude: 100.5018, accuracy: 10 },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_NONCE_REJECTED');
+      expect(event).toBeDefined();
+      const serialized = JSON.stringify(event.metadata);
+      expect(serialized).not.toContain('super-secret-raw-nonce-value');
+      expect(serialized).not.toContain('13.7563');
+      expect(serialized).not.toContain('100.5018');
+      expect(event.metadata).not.toHaveProperty('nonce');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+    });
+  });
+
+  describe('SEC-ATT-004: nonce enforcement on clockOut', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const mockClosedRecord = {
+      ...mockAttendanceFull,
+      checkOut: new Date('2026-06-13T05:00:00.000Z'),
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+      prisma.attendance.update.mockResolvedValue(mockClosedRecord as any);
+    });
+
+    it('rollout decision: missing nonce still succeeds (soft-enforced) and is audited ALLOWED', async () => {
+      const result = await service.clockOut(userId, {}, ctx);
+
+      expect(result).toBeDefined();
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_NONCE_MISSING',
+          result: 'ALLOWED',
+          metadata: expect.objectContaining({ reason: 'NONCE_MISSING', nonceAction: AttendanceNonceAction.CLOCK_OUT }),
+        }),
+      );
+    });
+
+    it('a present valid nonce is consumed for the CLOCK_OUT action', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: true });
+
+      await service.clockOut(userId, { nonce: 'valid-nonce' }, ctx);
+
+      expect(attendanceNonceService.consumeNonce).toHaveBeenCalledWith(
+        userId,
+        AttendanceNonceAction.CLOCK_OUT,
+        'valid-nonce',
+      );
+    });
+
+    it('rejects an expired nonce with 422 and does not update the record', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason: 'NONCE_EXPIRED' });
+
+      await expect(
+        service.clockOut(userId, { nonce: 'expired-nonce' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(prisma.attendance.update).not.toHaveBeenCalled();
+    });
+
+    it('replay: reusing the same nonce on a second clock-out is rejected', async () => {
+      attendanceNonceService.consumeNonce.mockResolvedValueOnce({ ok: true });
+      await service.clockOut(userId, { nonce: 'reused-nonce' }, ctx);
+
+      attendanceNonceService.consumeNonce.mockResolvedValueOnce({ ok: false, reason: 'NONCE_REUSED' });
+      await expect(
+        service.clockOut(userId, { nonce: 'reused-nonce' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+  });
+
+  describe('SEC-ATT-004: nonce enforcement on clockInOffsite / clockOutOffsite', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const offsiteDto = {
+      latitude: 13.9,
+      longitude: 100.9,
+      accuracy: 25,
+      workLocationName: 'Client Office — Siam',
+      reason: 'Client presentation Q2',
+    };
+    const offsiteClockOutDto = { latitude: 13.9, longitude: 100.9, accuracy: 30 };
+    const disabledConfig = {
+      enabled: false,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+    const openOffsiteRecord = {
+      ...mockOpenRecord,
+      attendanceSource: 'OFFSITE_UNPLANNED',
+      workMode: 'OFFSITE',
+    };
+
+    it('clockInOffsite uses the OFFSITE_CLOCK_IN nonce scope, distinct from CLOCK_IN', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull } as any);
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: true });
+
+      await service.clockInOffsite(userId, { ...offsiteDto, nonce: 'offsite-in-nonce' } as any, ctx);
+
+      expect(attendanceNonceService.consumeNonce).toHaveBeenCalledWith(
+        userId,
+        AttendanceNonceAction.OFFSITE_CLOCK_IN,
+        'offsite-in-nonce',
+      );
+    });
+
+    it('clockInOffsite: missing nonce still succeeds (soft-enforced)', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull } as any);
+
+      await expect(service.clockInOffsite(userId, offsiteDto, ctx)).resolves.toBeDefined();
+      expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
+    });
+
+    it('clockInOffsite: rejects an invalid nonce with 422 and does not create the record', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason: 'NONCE_INVALID' });
+
+      await expect(
+        service.clockInOffsite(userId, { ...offsiteDto, nonce: 'bad-nonce' } as any, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+    });
+
+    it('clockOutOffsite uses the OFFSITE_CLOCK_OUT nonce scope, distinct from CLOCK_OUT', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(openOffsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue({ ...mockAttendanceFull, checkOut: new Date() } as any);
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: true });
+
+      await service.clockOutOffsite(userId, { ...offsiteClockOutDto, nonce: 'offsite-out-nonce' } as any, ctx);
+
+      expect(attendanceNonceService.consumeNonce).toHaveBeenCalledWith(
+        userId,
+        AttendanceNonceAction.OFFSITE_CLOCK_OUT,
+        'offsite-out-nonce',
+      );
+    });
+
+    it('clockOutOffsite: rejects a reused nonce with 422 and does not update the record', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(openOffsiteRecord as any);
+      attendanceNonceService.consumeNonce.mockResolvedValue({ ok: false, reason: 'NONCE_REUSED' });
+
+      await expect(
+        service.clockOutOffsite(userId, { ...offsiteClockOutDto, nonce: 'reused-nonce' } as any, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(prisma.attendance.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('SEC-ATT-004: mixedCheckoutException is not covered by nonce enforcement (documented known limitation)', () => {
+    it('never calls AttendanceNonceService.consumeNonce', async () => {
+      const validDto = {
+        latitude: 13.9,
+        longitude: 100.9,
+        accuracy: 25,
+        workLocationName: 'Client Office',
+        reason: 'Meeting ran long',
+      };
+      const onsiteRecord = { ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE', reviewStatus: null };
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(onsiteRecord as any);
+      prisma.attendance.update.mockResolvedValue({ ...mockAttendanceFull, checkOut: new Date() } as any);
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({
+        enabled: false,
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        radiusMeters: 100,
+        maxAccuracyMeters: 100,
+        source: 'env',
+      });
+
+      await service.mixedCheckoutException(userId, validDto as any);
+
+      expect(attendanceNonceService.consumeNonce).not.toHaveBeenCalled();
     });
   });
 });

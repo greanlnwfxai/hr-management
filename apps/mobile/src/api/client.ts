@@ -26,6 +26,8 @@ import {
   type OffsiteClockInPayload,
   type OffsiteClockOutPayload,
   type MixedCheckoutExceptionPayload,
+  type AttendanceNonceAction,
+  type AttendanceNonceResponse,
   ApiCodedError,
 } from './types';
 
@@ -261,6 +263,15 @@ export async function getTodayAttendance(
     token,
   );
   return res.data[0] ?? null;
+}
+
+// SEC-ATT-004: fetch a short-lived, single-use replay-protection nonce
+// immediately before submitting a clock action.
+export async function issueAttendanceNonce(
+  token: string,
+  action: AttendanceNonceAction,
+): Promise<AttendanceNonceResponse> {
+  return authPost<AttendanceNonceResponse>('/attendance/nonce', token, { action });
 }
 
 export async function clockIn(

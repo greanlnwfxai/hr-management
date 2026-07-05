@@ -30,4 +30,6 @@ export const AUDIT_SENSITIVE_KEYS = new Set([
   'longitude',
   'accuracy',
   'distance',
+  'nonce',
+  'tokenhash',
 ]);

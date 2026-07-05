@@ -15,6 +15,7 @@ import type {
   WorkMode as PrismaWorkMode,
 } from '@prisma/client';
 import {
+  AttendanceNonceAction,
   AttendanceReviewStatus,
   AttendanceSource,
   AttendanceStatus,
@@ -25,6 +26,7 @@ import {
 import { AuditLogService } from '../audit-log/audit-log.service';
 import type { AuditLogEvent } from '../audit-log/audit-log.types';
 import { PrismaService } from '../prisma/prisma.service';
+import { AttendanceNonceService, type NonceConsumeResult } from './attendance-nonce.service';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { MixedCheckoutExceptionDto } from './dto/mixed-checkout-exception.dto';
@@ -152,7 +154,15 @@ export class AttendanceService {
     private auditLog: AuditLogService,
     private geofenceService: GeofenceService,
     private geofenceConfig: GeofenceConfigService,
+    private attendanceNonce: AttendanceNonceService,
   ) {}
+
+  // SEC-ATT-004: issue a short-lived, single-use replay-protection nonce for
+  // the given clock action. Any authenticated user may request one (mirrors
+  // the clock-in/out endpoints themselves — no @Roles restriction).
+  async issueNonce(userId: string, action: AttendanceNonceAction) {
+    return this.attendanceNonce.issueNonce(userId, action);
+  }
 
   async clockIn(userId: string, dto: ClockInDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
@@ -190,6 +200,11 @@ export class AttendanceService {
       where: { employeeId_date: { employeeId, date } },
     });
     if (existing) throw new ConflictException('Already clocked in for today');
+
+    // SEC-ATT-004: consumed last, right before the write, so a nonce is only
+    // burned once every other validation (payload integrity, geofence, dup-day)
+    // has already passed.
+    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_IN, 'CLOCK_IN', userId, ctx);
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
     const workMode = dto.workMode ?? WorkMode.ONSITE;
@@ -256,6 +271,9 @@ export class AttendanceService {
     if (src === AttendanceSource.COMPANY_GEOFENCE) {
       await this.validateGeofence(dto, 'CLOCK_OUT', ctx);
     }
+
+    // SEC-ATT-004: consumed last, right before the write.
+    await this.enforceNonce(dto, AttendanceNonceAction.CLOCK_OUT, 'CLOCK_OUT', userId, ctx);
 
     const result = await this.prisma.attendance.update({
       where: { id: record.id },
@@ -333,6 +351,9 @@ export class AttendanceService {
         config.longitude,
       );
     }
+
+    // SEC-ATT-004: consumed last, right before the write.
+    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_IN, 'CLOCK_IN', userId, ctx);
 
     const status = this.isLateInBangkok(now) ? AttendanceStatus.LATE : AttendanceStatus.PRESENT;
 
@@ -421,6 +442,9 @@ export class AttendanceService {
         config.longitude,
       );
     }
+
+    // SEC-ATT-004: consumed last, right before the write.
+    await this.enforceNonce(dto, AttendanceNonceAction.OFFSITE_CLOCK_OUT, 'CLOCK_OUT', userId, ctx);
 
     const result = await this.prisma.attendance.update({
       where: { id: record.id },
@@ -1110,6 +1134,124 @@ export class AttendanceService {
       });
       throw new UnprocessableEntityException('Location data is invalid. Please try again.');
     }
+  }
+
+  // SEC-ATT-004: server-issued, single-use replay-protection nonce, consumed
+  // atomically last (right before the DB write) in every clock-in/out and
+  // off-site clock-in/out path, so that only requests that already passed
+  // every other check (payload integrity, geofence, dup-day) ever get a
+  // chance to burn a nonce.
+  //
+  // Rollout decision (explicit user sign-off, mirrors the SEC-ATT-003
+  // MISSING_CAPTURED_AT precedent): a MISSING nonce is soft-enforced — the
+  // request still succeeds — because POST /attendance/nonce is new in this
+  // task and no currently-shipping mobile/PWA build can fetch or send a real
+  // nonce yet; hard-rejecting it immediately would make every clock-in/out
+  // fail fleet-wide until every client updates. A PRESENT nonce, however, is
+  // always strictly enforced regardless of this soft/hard toggle: invalid,
+  // expired, reused, wrong-action, and wrong-user nonces all hard-reject.
+  // Promote MISSING to a hard rejection in a follow-up once fleet rollout of
+  // this task's mobile changes is confirmed complete.
+  //
+  // `mixedCheckoutException` is NOT covered by nonce enforcement — out of
+  // scope for this task (see CTO Summary "Known Limitations"); it remains a
+  // documented, currently-open replay gap on that one endpoint.
+  private async enforceNonce(
+    dto: { nonce?: string; source?: 'web' | 'mobile' },
+    nonceAction: AttendanceNonceAction,
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
+    userId: string,
+    ctx?: AttendanceAuditContext,
+  ): Promise<void> {
+    if (!dto.nonce) {
+      await this.recordNonceMissingAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        nonceAction,
+        source: dto.source ?? null,
+      });
+      return;
+    }
+
+    const result: NonceConsumeResult = await this.attendanceNonce.consumeNonce(
+      userId,
+      nonceAction,
+      dto.nonce,
+    );
+
+    if (!result.ok) {
+      await this.recordNonceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        nonceAction,
+        source: dto.source ?? null,
+        reason: result.reason,
+      });
+      // Deliberately generic — does not reveal which specific nonce check
+      // failed (spec §8's "no detail that would help an attacker distinguish
+      // reused from expired from never-issued").
+      throw new UnprocessableEntityException(
+        'Your attendance session has expired. Please try again.',
+      );
+    }
+  }
+
+  private async recordNonceMissingAuditBestEffort(args: {
+    actorUserId: string | null;
+    actorRole: string | null;
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    nonceAction: AttendanceNonceAction;
+    source: string | null;
+  }): Promise<void> {
+    await this.recordBestEffort({
+      actorUserId: args.actorUserId,
+      actorRole: args.actorRole,
+      action: 'ATTENDANCE_NONCE_MISSING',
+      targetType: 'ATTENDANCE',
+      targetId: null,
+      targetLabel: args.attemptType === 'CLOCK_IN' ? 'clock-in-nonce-missing' : 'clock-out-nonce-missing',
+      result: 'ALLOWED',
+      metadata: {
+        attemptType: args.attemptType,
+        nonceAction: args.nonceAction,
+        source: args.source,
+        reason: 'NONCE_MISSING',
+        result: 'ALLOWED',
+      },
+    });
+  }
+
+  private async recordNonceRejectedAuditBestEffort(args: {
+    actorUserId: string | null;
+    actorRole: string | null;
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    nonceAction: AttendanceNonceAction;
+    source: string | null;
+    reason:
+      | 'NONCE_INVALID'
+      | 'NONCE_EXPIRED'
+      | 'NONCE_REUSED'
+      | 'NONCE_ACTION_MISMATCH'
+      | 'NONCE_USER_MISMATCH';
+  }): Promise<void> {
+    await this.recordBestEffort({
+      actorUserId: args.actorUserId,
+      actorRole: args.actorRole,
+      action: 'ATTENDANCE_NONCE_REJECTED',
+      targetType: 'ATTENDANCE',
+      targetId: null,
+      targetLabel: args.attemptType === 'CLOCK_IN' ? 'clock-in-nonce-rejected' : 'clock-out-nonce-rejected',
+      result: 'REJECTED',
+      metadata: {
+        attemptType: args.attemptType,
+        nonceAction: args.nonceAction,
+        source: args.source,
+        reason: args.reason,
+        result: 'REJECTED',
+      },
+    });
   }
 
   // Company-radius geofence validation — only applied when source='mobile' and
