@@ -3,7 +3,12 @@
 > **Orientation index, not a spec.** This document lists the planned SEC-ATT
 > work items and their intended order. It records scope and sequencing only —
 > each item gets its own design/spec document when work on it begins.
-> SEC-ATT-001 remains the next actual task after T-096.
+>
+> SEC-ATT-001 is now complete — see
+> [SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
+> for the full threat model, platform capability matrix, and design
+> reference for SEC-ATT-002 through SEC-ATT-007. SEC-ATT-002 is the next
+> actual task.
 
 ## Background
 

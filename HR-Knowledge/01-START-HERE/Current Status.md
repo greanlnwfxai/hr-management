@@ -189,7 +189,7 @@ See [[Attendance Geofence]] for full architecture details.
 
 ## Next Recommended Task
 
-**SEC-ATT-001** — Cross-Platform Attendance Anti-Spoofing Spec, following on from the v1.2.66 web clock-in/out disablement (ADR-029). See [docs/SEC_ATT_ROADMAP.md](../../docs/SEC_ATT_ROADMAP.md) for the full SEC-ATT-001 through SEC-ATT-007 sequencing and the architecture note on why strong device-integrity checks (SEC-ATT-005/006) require a native app/wrapper while backend hardening (SEC-ATT-002–004, 007) does not. **HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused), remain queued if reprioritized.
+**SEC-ATT-002** — Mobile Attendance Payload Hardening. SEC-ATT-001 (Cross-Platform Attendance Anti-Spoofing Spec) is now complete — see [docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](../../docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md) for the threat model, platform capability matrix, and design reference for SEC-ATT-002 through SEC-ATT-007. See [docs/SEC_ATT_ROADMAP.md](../../docs/SEC_ATT_ROADMAP.md) for the full sequencing and the architecture note on why strong device-integrity checks (SEC-ATT-005/006) require a native app/wrapper while backend hardening (SEC-ATT-002–004, 007) does not. **HOTFIX-T089A** — Manager leave UI scope hotfix (paused), or **HOTFIX-T089B** — Admin access denied gates hotfix (paused), remain queued if reprioritized.
 
 ## Security / Process Notes
 

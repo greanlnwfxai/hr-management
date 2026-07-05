@@ -46,9 +46,12 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
 - Backend geofence enforcement (below) and mobile clock-in/out are unaffected
 - Follow-up: **SEC-ATT-001 Cross-Platform Attendance Anti-Spoofing** — this
   hotfix removes the UI affordance but does not add backend-side platform
-  enforcement (e.g. rejecting non-mobile-sourced clock calls outright); see
-  the full SEC-ATT-001 through SEC-ATT-007 sequencing in
-  [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md)
+  enforcement (e.g. rejecting non-mobile-sourced clock calls outright).
+  SEC-ATT-001 is now complete — see
+  [docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](../../../docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
+  for the threat model and design reference, and
+  [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
+  SEC-ATT-001 through SEC-ATT-007 sequencing
 
 ## Query Parameters (GET /attendance, GET /attendance/me)
 
