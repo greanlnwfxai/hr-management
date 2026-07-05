@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsISO8601,
@@ -80,4 +81,11 @@ export class ClockOutDto {
   @IsString()
   @MaxLength(128)
   nonce?: string;
+
+  @ApiPropertyOptional({
+    description: 'SEC-ATT-003: set true only when the client platform itself reports the GPS fix as mocked/simulated (e.g. a future native build’s mock-location flag). The current PWA has no such signal and never sets this field. When present and true, the backend rejects the request.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isMockLocation?: boolean;
 }

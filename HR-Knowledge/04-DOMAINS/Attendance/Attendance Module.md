@@ -46,13 +46,16 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
 - Backend geofence enforcement (below) and mobile clock-in/out are unaffected
 - Follow-up: **SEC-ATT-001 Cross-Platform Attendance Anti-Spoofing** — this
   hotfix removes the UI affordance but does not add backend-side platform
-  enforcement (e.g. rejecting non-mobile-sourced clock calls outright).
-  SEC-ATT-001 and **SEC-ATT-002 Mobile Attendance Payload Hardening** are now
+  enforcement (e.g. rejecting non-mobile-sourced clock calls outright — still
+  true after SEC-ATT-003, see §15 Open Question #1 in the spec).
+  SEC-ATT-001 through **SEC-ATT-003** are now
   complete — see
   [docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](../../../docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
   for the threat model and design reference,
   [docs/CTO_SUMMARY_SEC_ATT_002.md](../../../docs/CTO_SUMMARY_SEC_ATT_002.md)
-  for what SEC-ATT-002 shipped, and
+  for what SEC-ATT-002 shipped,
+  [docs/CTO_SUMMARY_SEC_ATT_003.md](../../../docs/CTO_SUMMARY_SEC_ATT_003.md)
+  for what SEC-ATT-003 shipped, and
   [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
   SEC-ATT-001 through SEC-ATT-007 sequencing
 
@@ -118,7 +121,7 @@ Off-site clock-in requires a pre-approved `OffSiteRequest` for the employee and 
 The attendance module enforces location-based clock-in/out for mobile users. See [[Attendance Geofence]] for full details.
 
 Summary:
-- `source: "mobile"` in clock-in/out body triggers geofence validation (ONSITE mode)
+- `source: "mobile"` in clock-in/out body triggers **company-radius** geofence validation (ONSITE mode) — this radius gate is unaffected by SEC-ATT-003's source-omission fix (see below); the SEC-ATT-003 payload-integrity checks (stale/future/invalid `capturedAt`, `isMockLocation`) are separate and run regardless of `source`
 - `workMode: "OFFSITE"` bypasses the radius check at clock-in (approved request required)
 - Clock-out is always geofence-validated regardless of work mode
 - Backend validates employee GPS against the configured company location
@@ -136,7 +139,33 @@ Summary:
 - `platform` (`ios`/`android`/`web`) — client runtime
 - `nonce` — reserved for SEC-ATT-004 replay protection; accepted but not yet validated or enforced
 
-All four are optional/additive for backward compatibility with mobile app builds that predate this field set — a missing `capturedAt` does not reject the request. The backend buckets GPS freshness from `capturedAt` into `gpsAgeBucket` (`FRESH`/`ACCEPTABLE`/`STALE`/`FUTURE`/`UNKNOWN`) and logs it, along with `platform`/`timezoneOffsetMinutes`/`hasNonce` (never the raw nonce), on the existing attendance audit events. None of these fields are persisted to the `Attendance` table — they are transient, request-scoped signals only, consistent with the existing "GPS is discarded" convention. No request is hard-rejected on freshness/staleness grounds yet — that is SEC-ATT-003's scope.
+All four are optional/additive for backward compatibility with mobile app builds that predate this field set. `platform`/`timezoneOffsetMinutes`/`hasNonce` (never the raw nonce) are logged as-is on the existing attendance audit events. None of these fields are persisted to the `Attendance` table — they are transient, request-scoped signals only, consistent with the existing "GPS is discarded" convention.
+
+### SEC-ATT-003: Hard Rejection of Stale/Future/Mock Location
+
+For **every** clock-in/out and off-site clock-in/out request — `ClockInDto`/`ClockOutDto` (any `source`, including omitted), the `workMode: OFFSITE` branch inside `clockIn`, and `OffsiteClockInDto`/`OffsiteClockOutDto` — the backend hard-rejects (422):
+
+| Reason code | Trigger | Gated by `source`? | Gated by geofence `enabled`? | Enforcement |
+|---|---|---|---|---|
+| `INVALID_CAPTURED_AT` | `capturedAt` present but unparseable | No | No | Hard reject (defense-in-depth; `@IsISO8601()` on the DTO already blocks malformed values with a 400 before this runs) |
+| `STALE_LOCATION` | `capturedAt` older than 120s (server receipt time) | No | No | Hard reject |
+| `FUTURE_LOCATION` | `capturedAt` more than 30s in the future (clock-skew tolerance) | No | No | Hard reject |
+| `MOCK_LOCATION_DETECTED` | client sets the optional `isMockLocation: true` | No | No | Hard reject — **no current production client (the PWA) sends this field**; reserved for a future native build that can read a real mock-location flag |
+| `MISSING_CAPTURED_AT` | `capturedAt` absent, `source` present | No | No | **Soft-enforced only** — request still succeeds, but a separate `ATTENDANCE_CAPTURED_AT_MISSING` audit event (`result: 'ALLOWED'`) is logged |
+| `MISSING_SOURCE_CAPTURED_AT` | `capturedAt` absent, `source` also absent (web, offsite, or a very old client) | No | No | Same soft-enforcement as above — distinguished in the audit trail so visibility into fleet rollout isn't lost |
+| `MISSING_LOCATION` / `POOR_ACCURACY` / `GEOFENCE_NOT_CONFIGURED` / `OUTSIDE_RADIUS` (pre-existing, radius-only) | unchanged | **Yes**, `source === 'mobile'` only | **Yes** (unchanged) | Unchanged |
+
+Hard rejection of `MISSING_CAPTURED_AT`/`MISSING_SOURCE_CAPTURED_AT` is deferred until 100% mobile fleet rollout of the SEC-ATT-002 build is confirmed — an explicit product decision, not an oversight.
+
+**Deliberate choice: the payload-integrity checks above run regardless of the company geofence `enabled` toggle**, unlike the company-radius checks. Payload-freshness/mock-location validation is an anti-spoofing control, not a radius control — an admin turning off company-radius enforcement (e.g. no office configured yet) should not also silently turn off capturedAt/mock validation. This was confirmed against the live environment during SEC-ATT-003 implementation: the running `GeofenceConfig` had `enabled: false`, which would have made the first implementation (gated behind `enabled`, matching the older checks) completely inert — surfaced to the user and corrected before shipping.
+
+**Post-review fix: these checks also run regardless of `source`.** The original implementation additionally gated every check on `dto.source === 'mobile'`, which review correctly identified as a manual-payload-edit bypass — a request that simply omitted `source` (or the off-site clock-in/out endpoints, which have no `source` field at all) skipped every anti-spoofing check. Payload-integrity checks now run unconditionally, extracted into `enforcePayloadIntegrity()` and called from `clockIn` (before the `workMode` branch), `clockOut`, `clockInOffsite`, and `clockOutOffsite`. Only the **company-radius** checks (`MISSING_LOCATION`/`POOR_ACCURACY`/`GEOFENCE_NOT_CONFIGURED`/`OUTSIDE_RADIUS`) remain `source === 'mobile'`-gated — see [docs/CTO_SUMMARY_SEC_ATT_003.md](../../../docs/CTO_SUMMARY_SEC_ATT_003.md) for the full before/after.
+
+Thresholds reuse the SEC-ATT-002 `gpsAgeBucket` constants unchanged (`GPS_AGE_ACCEPTABLE_SECONDS = 120`, `GPS_FUTURE_SKEW_TOLERANCE_SECONDS = 30`) — the `ACCEPTABLE` band (30–120s) still succeeds, so legitimate poor-connectivity clock-ins are not punished (spec §12 abuse-case #12).
+
+**PWA limitation, stated explicitly:** the current STEP Connect PWA has no way to detect a mocked/simulated GPS fix — `isMockLocation` exists in the DTO for a future native build only. This is heuristic/signal-based enforcement, not device-integrity detection (that's SEC-ATT-005/006, native-only).
+
+**Still open, not resolved by SEC-ATT-003:** whether the **company-radius** check itself should also apply to non-mobile-sourced calls — SEC-ATT-001 §15 Open Question #1 — remains unresolved. This is narrower than it used to be: a request that omits `source` can no longer skip the payload-integrity checks (fixed above), only radius enforcement. Travel-speed/implausible-movement heuristics (spec §6) are also not implemented — those are probabilistic signals reserved for the SEC-ATT-007 risk-scoring queue, not a hard-reject task.
 
 ## Known Limitations
 
@@ -144,8 +173,9 @@ All four are optional/additive for backward compatibility with mobile app builds
 - No automatic absent-marking job (future scheduled task)
 - No overtime or shift scheduling
 - Geofence: single office only; GPS spoofing is not preventable at the software layer
-- Web clock-in/out is disabled (v1.2.66), but the backend does not yet reject a non-mobile client that spoofs `source: "mobile"` — closing this gap is SEC-ATT-003's scope, not SEC-ATT-002's
-- `gpsAgeBucket` (SEC-ATT-002) is informational only — a `STALE`/`FUTURE` bucket is logged but never rejects the request; hard rejection of stale/mock/replayed GPS is SEC-ATT-003
+- Web clock-in/out is disabled (v1.2.66); the backend still does not reject a non-mobile client's **radius** check outright (payload-integrity checks now apply regardless of `source` — see SEC-ATT-003 section above) — SEC-ATT-001 §15 Open Question #1, unresolved
+- `MISSING_CAPTURED_AT`/`MISSING_SOURCE_CAPTURED_AT` are soft-enforced only (see SEC-ATT-003 section above) — a client can still omit `capturedAt` indefinitely without being blocked, by design, pending confirmed mobile rollout
+- `isMockLocation` has no real-world sender today (PWA cannot produce this signal); it only takes effect once a future native build populates it
 
 ## Related ADRs
 

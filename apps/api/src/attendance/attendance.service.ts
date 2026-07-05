@@ -45,9 +45,28 @@ export interface AttendanceAuditContext {
   userAgent?: string | null;
 }
 
-// SEC-ATT-002: informational GPS-freshness bucketing only — no rejection.
-// Hard rejection of stale/future-skewed capturedAt values is reserved for SEC-ATT-003.
+// SEC-ATT-002 introduced informational GPS-freshness bucketing (no rejection).
+// SEC-ATT-003 promotes the same thresholds to hard rejection: STALE and FUTURE now 422,
+// via enforcePayloadIntegrity(). A missing `capturedAt` remains accepted (soft-enforced
+// only — see MISSING_CAPTURED_AT/MISSING_SOURCE_CAPTURED_AT below) because there is no
+// confirmed data that every mobile client in the fleet has picked up the SEC-ATT-002
+// build yet; hard-rejecting it is a follow-up once that rollout is confirmed complete.
+//
+// SEC-ATT-003 patch (source-omission bypass fix): payload-integrity checks
+// (INVALID/FUTURE/STALE `capturedAt`, `isMockLocation: true`) run for every
+// clock-in/out and off-site clock-in/out request whenever the relevant field is
+// present, regardless of `source` — a self-reported `source` field is exactly as
+// forgeable as any other client-supplied field, so gating anti-spoofing checks on it
+// was itself a bypass (a caller could omit/forge `source` to skip every check). Only
+// the company-radius checks (MISSING_LOCATION/POOR_ACCURACY/GEOFENCE_NOT_CONFIGURED/
+// OUTSIDE_RADIUS, in validateGeofence()) remain gated behind `source === 'mobile'` +
+// `config.enabled` — whether to require radius enforcement for non-mobile-sourced
+// calls is a separate, still-open question (SEC-ATT-001 §15 Open Question #1), not
+// resolved by this patch. `source` values are restricted to `'web' | 'mobile'` by the
+// DTO's `@IsIn()` validator, so any other value already 400s before reaching the
+// service — there is no "unsupported source" case to handle here.
 type GpsAgeBucket = 'FRESH' | 'ACCEPTABLE' | 'STALE' | 'FUTURE' | 'UNKNOWN';
+type CapturedAtStatus = 'MISSING' | 'INVALID' | 'FRESH' | 'ACCEPTABLE' | 'STALE' | 'FUTURE';
 const GPS_AGE_FRESH_SECONDS = 30;
 const GPS_AGE_ACCEPTABLE_SECONDS = 120;
 const GPS_FUTURE_SKEW_TOLERANCE_SECONDS = 30;
@@ -137,6 +156,9 @@ export class AttendanceService {
 
   async clockIn(userId: string, dto: ClockInDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
+    // Runs before the workMode branch so OFFSITE payloads can't dodge it either —
+    // workMode is as self-reported/forgeable as source.
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', ctx);
     const date = this.todayUtc();
     const now = new Date();
 
@@ -219,6 +241,7 @@ export class AttendanceService {
     // it impossible to check attendanceSource. Off-site records must not fail company
     // geofence validation on clock-out.
     const employeeId = await this.requireEmployeeId(userId);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', ctx);
     const date = this.todayUtc();
 
     const record = await this.prisma.attendance.findUnique({
@@ -272,6 +295,7 @@ export class AttendanceService {
 
   async clockInOffsite(userId: string, dto: OffsiteClockInDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_IN', ctx);
     const date = this.todayBangkok();
     const now = new Date();
 
@@ -371,6 +395,7 @@ export class AttendanceService {
 
   async clockOutOffsite(userId: string, dto: OffsiteClockOutDto, ctx?: AttendanceAuditContext) {
     const employeeId = await this.requireEmployeeId(userId);
+    await this.enforcePayloadIntegrity(dto, 'CLOCK_OUT', ctx);
     const date = this.todayBangkok();
 
     const record = await this.prisma.attendance.findUnique({
@@ -962,12 +987,139 @@ export class AttendanceService {
     return result;
   }
 
-  // Geofence validation — only applied when source='mobile'.
-  // Web and legacy (no source) requests are passed through without checks,
-  // preserving backwards compatibility with the existing web attendance flow.
-  // SEC-ATT-002: `source` is a self-reported hint, not a trusted platform assertion —
-  // it merely decides whether this corroborating validation runs at all. Closing the
-  // gap where a caller omits/forges `source` to skip validation entirely is SEC-ATT-003.
+  // SEC-ATT-003 (patched): payload-integrity checks (capturedAt format/freshness,
+  // isMockLocation) run for EVERY clock-in/out and off-site clock-in/out request
+  // whenever the relevant field is present — independent of `source` and independent
+  // of `config.enabled`. These are anti-spoofing controls, not radius/geofence
+  // controls: an admin disabling company-radius enforcement, or a caller that
+  // omits/never had a `source` field (web, offsite, legacy), is not also opting out
+  // of "is this GPS fix plausible" validation. Only the company-radius checks in
+  // validateGeofence() below remain gated behind `source === 'mobile'`.
+  //
+  // hasCoordinates/hasAccuracy/accuracyBucket for the audit trail are computed
+  // defensively here (not assumed true) since this runs before any location-presence
+  // check and for callers (offsite) that may not carry a `source` field at all.
+  private async enforcePayloadIntegrity(
+    dto: {
+      source?: 'web' | 'mobile';
+      capturedAt?: string;
+      isMockLocation?: boolean;
+      latitude?: number;
+      longitude?: number;
+      accuracy?: number;
+    },
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
+    ctx?: AttendanceAuditContext,
+  ): Promise<void> {
+    const config = await this.geofenceConfig.getEffectiveConfig();
+    const requestSource = dto.source ?? null;
+
+    const hasCoordinatesForAudit = dto.latitude !== undefined && dto.longitude !== undefined;
+    const hasAccuracyForAudit = dto.accuracy !== undefined;
+    const accuracyBucketForAudit: 'UNKNOWN' | 'ACCEPTABLE' | 'POOR' = !hasAccuracyForAudit
+      ? 'UNKNOWN'
+      : dto.accuracy! > config.maxAccuracyMeters
+        ? 'POOR'
+        : 'ACCEPTABLE';
+
+    const capturedAtStatus = this.classifyCapturedAt(dto.capturedAt);
+
+    if (capturedAtStatus === 'INVALID') {
+      // Defense-in-depth: `@IsISO8601()` on the DTO already rejects malformed values
+      // with a 400 before this code runs. This branch guards against a well-formed
+      // ISO-8601 string that class-validator accepts but Date.parse cannot use.
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'INVALID_CAPTURED_AT',
+        source: requestSource,
+        hasCoordinates: hasCoordinatesForAudit,
+        hasAccuracy: hasAccuracyForAudit,
+        accuracyBucket: accuracyBucketForAudit,
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
+      throw new UnprocessableEntityException('Location data is invalid. Please try again.');
+    }
+
+    if (capturedAtStatus === 'MISSING') {
+      // Soft-enforced by explicit decision: log for visibility, do not block.
+      // Promote to a hard rejection once mobile fleet rollout of the SEC-ATT-002
+      // build is confirmed complete. Distinguishing MISSING_SOURCE_CAPTURED_AT (no
+      // `source` at all — web, offsite, or a very old client) from MISSING_CAPTURED_AT
+      // (a `source` was given but capturedAt wasn't) gives visibility into which
+      // population still needs to update, without changing the soft-enforce decision.
+      await this.recordCapturedAtMissingAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        source: requestSource,
+        reason: requestSource ? 'MISSING_CAPTURED_AT' : 'MISSING_SOURCE_CAPTURED_AT',
+        configSource: config.source,
+      });
+    }
+
+    if (capturedAtStatus === 'FUTURE') {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'FUTURE_LOCATION',
+        source: requestSource,
+        hasCoordinates: hasCoordinatesForAudit,
+        hasAccuracy: hasAccuracyForAudit,
+        accuracyBucket: accuracyBucketForAudit,
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
+      throw new UnprocessableEntityException('Location data is invalid. Please try again.');
+    }
+
+    if (capturedAtStatus === 'STALE') {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'STALE_LOCATION',
+        source: requestSource,
+        hasCoordinates: hasCoordinatesForAudit,
+        hasAccuracy: hasAccuracyForAudit,
+        accuracyBucket: accuracyBucketForAudit,
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
+      throw new UnprocessableEntityException('Location data has expired. Please try again.');
+    }
+
+    // SEC-ATT-003: only fires when the client platform itself reports a mock/simulated
+    // fix. No current production client (PWA) sends this — see clock-in/out DTOs and
+    // the CTO Summary's PWA-limitation statement. Reserved for a future native build.
+    if (dto.isMockLocation === true) {
+      await this.recordGeofenceRejectedAuditBestEffort({
+        actorUserId: ctx?.actorUserId ?? null,
+        actorRole: ctx?.actorRole ?? null,
+        attemptType,
+        reason: 'MOCK_LOCATION_DETECTED',
+        source: requestSource,
+        hasCoordinates: hasCoordinatesForAudit,
+        hasAccuracy: hasAccuracyForAudit,
+        accuracyBucket: accuracyBucketForAudit,
+        configSource: config.source,
+        geofenceEnabled: config.enabled,
+      });
+      throw new UnprocessableEntityException('Location data is invalid. Please try again.');
+    }
+  }
+
+  // Company-radius geofence validation — only applied when source='mobile' and
+  // config.enabled. Web/offsite/legacy (no source) requests skip radius enforcement,
+  // preserving backwards compatibility with the existing web attendance flow. Whether
+  // to require radius enforcement for non-mobile-sourced calls is a separate, still-open
+  // question (SEC-ATT-001 §15 Open Question #1), not resolved here. Payload-integrity
+  // checks (capturedAt/isMockLocation) are no longer gated on `source` — see
+  // enforcePayloadIntegrity() above, called separately by every clock-in/out path
+  // before this function runs.
   private async validateGeofence(
     dto: ClockInDto | ClockOutDto,
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
@@ -976,6 +1128,7 @@ export class AttendanceService {
     if (dto.source !== 'mobile') return;
 
     const config = await this.geofenceConfig.getEffectiveConfig();
+
     if (!config.enabled) return;
 
     if (dto.latitude === undefined || dto.longitude === undefined || dto.accuracy === undefined) {
@@ -984,6 +1137,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         reason: 'MISSING_LOCATION',
+        source: 'mobile',
         hasCoordinates: false,
         hasAccuracy: false,
         accuracyBucket: 'UNKNOWN',
@@ -1001,6 +1155,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         reason: 'POOR_ACCURACY',
+        source: 'mobile',
         hasCoordinates: true,
         hasAccuracy: true,
         accuracyBucket: 'POOR',
@@ -1018,6 +1173,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         reason: 'GEOFENCE_NOT_CONFIGURED',
+        source: 'mobile',
         hasCoordinates: true,
         hasAccuracy: true,
         accuracyBucket: 'ACCEPTABLE',
@@ -1043,6 +1199,7 @@ export class AttendanceService {
         actorRole: ctx?.actorRole ?? null,
         attemptType,
         reason: 'OUTSIDE_RADIUS',
+        source: 'mobile',
         hasCoordinates: true,
         hasAccuracy: true,
         accuracyBucket: 'ACCEPTABLE',
@@ -1060,7 +1217,16 @@ export class AttendanceService {
     actorUserId: string | null;
     actorRole: string | null;
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
-    reason: 'MISSING_LOCATION' | 'POOR_ACCURACY' | 'GEOFENCE_NOT_CONFIGURED' | 'OUTSIDE_RADIUS';
+    reason:
+      | 'MISSING_LOCATION'
+      | 'POOR_ACCURACY'
+      | 'GEOFENCE_NOT_CONFIGURED'
+      | 'OUTSIDE_RADIUS'
+      | 'INVALID_CAPTURED_AT'
+      | 'STALE_LOCATION'
+      | 'FUTURE_LOCATION'
+      | 'MOCK_LOCATION_DETECTED';
+    source: string | null;
     hasCoordinates: boolean;
     hasAccuracy: boolean;
     accuracyBucket: 'UNKNOWN' | 'ACCEPTABLE' | 'POOR';
@@ -1077,7 +1243,7 @@ export class AttendanceService {
       result: 'REJECTED',
       metadata: {
         attemptType: args.attemptType,
-        source: 'mobile',
+        source: args.source,
         reason: args.reason,
         hasCoordinates: args.hasCoordinates,
         hasAccuracy: args.hasAccuracy,
@@ -1089,20 +1255,60 @@ export class AttendanceService {
     });
   }
 
-  // SEC-ATT-002: bucketed freshness signal for future risk scoring (SEC-ATT-007) and
-  // hard rejection (SEC-ATT-003). Missing/unparseable capturedAt (e.g. an older mobile
-  // build that predates this field) buckets to 'UNKNOWN' rather than being rejected —
-  // backward compatibility for in-flight app rollouts is required for SEC-ATT-002.
-  private computeGpsAgeBucket(capturedAt: string | undefined, now: Date = new Date()): GpsAgeBucket {
-    if (!capturedAt) return 'UNKNOWN';
+  // SEC-ATT-003 (patched): soft-enforcement signal for a missing `capturedAt`, on any
+  // request regardless of `source`. Deliberately NOT `result: 'REJECTED'` — the request
+  // still succeeds. This gives HR/security visibility into how much of the fleet still
+  // omits `capturedAt` before a future task promotes this to a hard rejection.
+  // `reason` distinguishes a `source`-bearing caller that dropped `capturedAt`
+  // (MISSING_CAPTURED_AT) from a caller with no `source` concept at all — web, offsite,
+  // or a pre-SEC-ATT-002 client (MISSING_SOURCE_CAPTURED_AT).
+  private async recordCapturedAtMissingAuditBestEffort(args: {
+    actorUserId: string | null;
+    actorRole: string | null;
+    attemptType: 'CLOCK_IN' | 'CLOCK_OUT';
+    source: string | null;
+    reason: 'MISSING_CAPTURED_AT' | 'MISSING_SOURCE_CAPTURED_AT';
+    configSource: 'db' | 'env';
+  }): Promise<void> {
+    await this.recordBestEffort({
+      actorUserId: args.actorUserId,
+      actorRole: args.actorRole,
+      action: 'ATTENDANCE_CAPTURED_AT_MISSING',
+      targetType: 'ATTENDANCE',
+      targetId: null,
+      targetLabel: args.attemptType === 'CLOCK_IN' ? 'clock-in-captured-at-missing' : 'clock-out-captured-at-missing',
+      result: 'ALLOWED',
+      metadata: {
+        attemptType: args.attemptType,
+        source: args.source,
+        reason: args.reason,
+        configSource: args.configSource,
+        result: 'ALLOWED',
+      },
+    });
+  }
+
+  // SEC-ATT-002/003: classifies a client-supplied capturedAt against server receipt time.
+  // MISSING and INVALID are distinguished so callers can soft-allow one (missing, pending
+  // confirmed mobile rollout) while hard-rejecting the other (unparseable value).
+  private classifyCapturedAt(capturedAt: string | undefined, now: Date = new Date()): CapturedAtStatus {
+    if (!capturedAt) return 'MISSING';
     const capturedMs = Date.parse(capturedAt);
-    if (Number.isNaN(capturedMs)) return 'UNKNOWN';
+    if (Number.isNaN(capturedMs)) return 'INVALID';
 
     const ageSeconds = (now.getTime() - capturedMs) / 1000;
     if (ageSeconds < -GPS_FUTURE_SKEW_TOLERANCE_SECONDS) return 'FUTURE';
     if (ageSeconds <= GPS_AGE_FRESH_SECONDS) return 'FRESH';
     if (ageSeconds <= GPS_AGE_ACCEPTABLE_SECONDS) return 'ACCEPTABLE';
     return 'STALE';
+  }
+
+  // SEC-ATT-002: bucketed freshness signal for audit/risk-scoring (SEC-ATT-007). Missing
+  // and invalid both collapse to 'UNKNOWN' here — this bucket is informational only, the
+  // MISSING vs. INVALID distinction that matters for rejection lives in classifyCapturedAt().
+  private computeGpsAgeBucket(capturedAt: string | undefined, now: Date = new Date()): GpsAgeBucket {
+    const status = this.classifyCapturedAt(capturedAt, now);
+    return status === 'MISSING' || status === 'INVALID' ? 'UNKNOWN' : status;
   }
 
   // SEC-ATT-002: client-supplied metadata that is safe to audit-log as-is — never raw

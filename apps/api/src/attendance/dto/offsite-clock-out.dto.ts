@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsISO8601,
@@ -50,4 +51,8 @@ export class OffsiteClockOutDto {
   @IsString()
   @MaxLength(128)
   nonce?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isMockLocation?: boolean;
 }

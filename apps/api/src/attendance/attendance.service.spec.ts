@@ -14,7 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
-import { AttendanceSource, AttendanceReviewStatus } from '../common/enums';
+import { AttendanceSource, AttendanceReviewStatus, WorkMode } from '../common/enums';
 import { ClockInDto } from './dto/clock-in.dto';
 import { ClockOutDto } from './dto/clock-out.dto';
 import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
@@ -726,7 +726,12 @@ describe('AttendanceService', () => {
     it('metadata.employeeId is the resolved employee id (not undefined)', async () => {
       await service.clockIn(userId, {}, ctx);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003 (patched): an empty dto has no source and no capturedAt, so a
+      // MISSING_SOURCE_CAPTURED_AT soft-signal audit call now precedes ATTENDANCE_CLOCK_IN
+      // — find the success event by action rather than assuming call order.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata?.employeeId).toBe(employeeId);
     });
 
@@ -741,7 +746,12 @@ describe('AttendanceService', () => {
       // Geofence passes (disabled by default in beforeEach)
       await service.clockIn(userId, sensitiveDto, ctx);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003: no capturedAt is sent, so a MISSING_CAPTURED_AT soft-signal audit
+      // call now precedes ATTENDANCE_CLOCK_IN — find the success event by action rather
+      // than assuming call order, so this test keeps guarding the right event's privacy.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       const serialized = JSON.stringify(event.metadata);
       expect(serialized).not.toContain('13.7563');
       expect(serialized).not.toContain('100.5018');
@@ -825,7 +835,12 @@ describe('AttendanceService', () => {
     it('metadata.employeeId is the resolved employee id (not undefined)', async () => {
       await service.clockOut(userId, {}, ctx);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003 (patched): a MISSING_SOURCE_CAPTURED_AT soft-signal audit call now
+      // precedes ATTENDANCE_CLOCK_OUT for an empty dto — find the success event by
+      // action rather than assuming call order.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_OUT');
       expect(event.metadata?.employeeId).toBe(employeeId);
     });
 
@@ -840,7 +855,12 @@ describe('AttendanceService', () => {
       // Geofence passes (disabled by default in beforeEach)
       await service.clockOut(userId, sensitiveDto, ctx);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003: no capturedAt is sent, so a MISSING_CAPTURED_AT soft-signal audit
+      // call now precedes ATTENDANCE_CLOCK_OUT — find the success event by action rather
+      // than assuming call order, so this test keeps guarding the right event's privacy.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_OUT');
       const serialized = JSON.stringify(event.metadata);
       expect(serialized).not.toContain('13.7563');
       expect(serialized).not.toContain('100.5018');
@@ -1022,7 +1042,12 @@ describe('AttendanceService', () => {
         service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
       ).rejects.toThrow(UnprocessableEntityException);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003: this fixture omits capturedAt, so a MISSING_CAPTURED_AT soft-signal
+      // call now precedes the OUTSIDE_RADIUS rejection — find the rejection event by
+      // action rather than assuming call order (same fix as the configSource test above).
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_GEOFENCE_REJECTED');
       expect(event.metadata).not.toHaveProperty('latitude');
       expect(event.metadata).not.toHaveProperty('longitude');
       expect(event.metadata).not.toHaveProperty('accuracy');
@@ -1068,8 +1093,615 @@ describe('AttendanceService', () => {
         service.clockIn(userId, { source: 'mobile', latitude: COMPANY_LAT, longitude: COMPANY_LON, accuracy: 25 }, ctx),
       ).rejects.toThrow(UnprocessableEntityException);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003: a MISSING_CAPTURED_AT soft-signal audit call now precedes the
+      // OUTSIDE_RADIUS rejection when capturedAt is absent (as in this fixture), so find
+      // the geofence-rejected event by action rather than assuming call order.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_GEOFENCE_REJECTED');
       expect(event.metadata).toMatchObject({ configSource: 'db', geofenceEnabled: true });
+    });
+  });
+
+  describe('SEC-ATT-003: mock/stale/future location rejection (mobile source)', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const baseMobileDto = {
+      source: 'mobile' as const,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      accuracy: 25,
+    };
+
+    beforeEach(() => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledConfig);
+      geofenceService.isWithinRadius.mockReturnValue(true);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('accepts a fresh capturedAt within the geofence (abuse-case #1)', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:30.000Z'));
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:10.000Z' }, ctx),
+      ).resolves.toBeDefined();
+    });
+
+    it('accepts a capturedAt in the ACCEPTABLE band without rejecting (abuse-case #12: legitimate poor connectivity)', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:31:30.000Z')); // 90s old — inside the 120s ceiling
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).resolves.toBeDefined();
+    });
+
+    it('allows a missing capturedAt (soft-enforced) but logs a MISSING_CAPTURED_AT audit signal, not a rejection', async () => {
+      await expect(service.clockIn(userId, baseMobileDto, ctx)).resolves.toBeDefined();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_CAPTURED_AT_MISSING',
+          result: 'ALLOWED',
+          metadata: expect.objectContaining({ attemptType: 'CLOCK_IN', reason: 'MISSING_CAPTURED_AT' }),
+        }),
+      );
+      expect(mockAuditLog.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_REJECTED' }),
+      );
+    });
+
+    it('rejects an unparseable capturedAt with INVALID_CAPTURED_AT (defense-in-depth beyond the DTO\'s @IsISO8601)', async () => {
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: 'not-a-real-timestamp' } as any, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          result: 'REJECTED',
+          metadata: expect.objectContaining({ reason: 'INVALID_CAPTURED_AT' }),
+        }),
+      );
+    });
+
+    it('rejects a stale capturedAt beyond the acceptable window with STALE_LOCATION', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z')); // 10 minutes after capturedAt
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION' }),
+        }),
+      );
+    });
+
+    it('rejects a future capturedAt beyond the clock-skew tolerance with FUTURE_LOCATION', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:35:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'FUTURE_LOCATION' }),
+        }),
+      );
+    });
+
+    it('rejects when isMockLocation is explicitly true, with MOCK_LOCATION_DETECTED', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, capturedAt: new Date().toISOString(), isMockLocation: true },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'MOCK_LOCATION_DETECTED' }),
+        }),
+      );
+    });
+
+    it('does not reject when isMockLocation is explicitly false', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, capturedAt: new Date().toISOString(), isMockLocation: false },
+          ctx,
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('applies the same STALE_LOCATION rejection on clock-out for a COMPANY_GEOFENCE record', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockOut(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-out-geofence-rejected',
+          metadata: expect.objectContaining({ attemptType: 'CLOCK_OUT', reason: 'STALE_LOCATION' }),
+        }),
+      );
+    });
+
+    it('does not leak raw GPS fields or the raw nonce into audit metadata for a rejected attempt', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, capturedAt: 'not-a-real-timestamp', nonce: 'top-secret-nonce-value' } as any,
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_GEOFENCE_REJECTED');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('accuracy');
+      expect(event.metadata).not.toHaveProperty('distance');
+      expect(event.metadata).not.toHaveProperty('nonce');
+      expect(JSON.stringify(event.metadata)).not.toContain('top-secret-nonce-value');
+    });
+
+    it('rejects a stale capturedAt for OFFSITE workMode too — payload-integrity now runs before the workMode branch (SEC-ATT-003 bypass fix: workMode is as forgeable as source)', async () => {
+      prisma.offSiteRequest.findFirst.mockResolvedValue({ id: 'req-1' });
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, workMode: WorkMode.OFFSITE, capturedAt: '2026-06-13T01:30:00.000Z' },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      // Never reaches the off-site-request lookup — payload integrity is checked first.
+      expect(prisma.offSiteRequest.findFirst).not.toHaveBeenCalled();
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION' }),
+        }),
+      );
+    });
+  });
+
+  describe('SEC-ATT-003: payload-freshness/mock checks run independently of geofence enabled', () => {
+    // Explicit product decision: an admin disabling company-radius enforcement
+    // (config.enabled = false) turns off geofence/radius validation only. It does not
+    // also disable anti-spoofing validation of the client's own capturedAt/mock-location
+    // signal — those checks run for every `source: 'mobile'` request regardless.
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const disabledConfig = {
+      enabled: false,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'db' as const,
+    };
+    const baseMobileDto = {
+      source: 'mobile' as const,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      accuracy: 25,
+    };
+
+    beforeEach(() => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('rejects a stale capturedAt with STALE_LOCATION even when geofence is disabled', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', geofenceEnabled: false }),
+        }),
+      );
+    });
+
+    it('rejects a future capturedAt with FUTURE_LOCATION even when geofence is disabled', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:35:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'FUTURE_LOCATION', geofenceEnabled: false }),
+        }),
+      );
+    });
+
+    it('rejects isMockLocation: true with MOCK_LOCATION_DETECTED even when geofence is disabled', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { ...baseMobileDto, capturedAt: new Date().toISOString(), isMockLocation: true },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'MOCK_LOCATION_DETECTED', geofenceEnabled: false }),
+        }),
+      );
+    });
+
+    it('rejects an unparseable capturedAt with INVALID_CAPTURED_AT even when geofence is disabled', async () => {
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: 'not-a-real-timestamp' } as any, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'INVALID_CAPTURED_AT', geofenceEnabled: false }),
+        }),
+      );
+    });
+
+    it('proceeds normally (radius check skipped) for a valid, fresh, non-mock payload when geofence is disabled', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:10.000Z'));
+
+      await expect(
+        service.clockIn(userId, { ...baseMobileDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).resolves.toBeDefined();
+
+      expect(geofenceService.isWithinRadius).not.toHaveBeenCalled();
+      expect(mockAuditLog.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_REJECTED' }),
+      );
+    });
+
+    it('still soft-allows a missing capturedAt (logged, not rejected) when geofence is disabled', async () => {
+      await expect(service.clockIn(userId, baseMobileDto, ctx)).resolves.toBeDefined();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_CAPTURED_AT_MISSING',
+          result: 'ALLOWED',
+        }),
+      );
+    });
+
+    it('still enforces MISSING_LOCATION-style gating as before: with geofence disabled, missing lat/lon does not block clock-in', async () => {
+      // Pre-existing behavior, unchanged by SEC-ATT-003: MISSING_LOCATION/POOR_ACCURACY
+      // remain gated behind config.enabled, same as before this task.
+      await expect(
+        service.clockIn(userId, { source: 'mobile', capturedAt: new Date().toISOString() }, ctx),
+      ).resolves.toBeDefined();
+    });
+  });
+
+  describe('SEC-ATT-003 (patched): source omission no longer bypasses payload-integrity checks', () => {
+    // HOLD-fix verification: previously, validateGeofence() returned immediately when
+    // `dto.source !== 'mobile'`, so a request that simply omitted `source` (or crafted
+    // it as "web") skipped every capturedAt/isMockLocation check below — a manual
+    // payload-edit bypass of the entire anti-spoofing threat model. These checks now
+    // run for every request, regardless of `source`.
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const enabledEnvConfig = {
+      enabled: true,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    beforeEach(() => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(enabledEnvConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('rejects a stale capturedAt with source omitted', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null }),
+        }),
+      );
+    });
+
+    it('rejects a future capturedAt with source omitted', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { capturedAt: '2026-06-13T01:35:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'FUTURE_LOCATION', source: null }),
+        }),
+      );
+    });
+
+    it('rejects an invalid (unparseable) capturedAt with source omitted', async () => {
+      await expect(
+        service.clockIn(userId, { capturedAt: 'not-a-real-timestamp' } as any, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'INVALID_CAPTURED_AT', source: null }),
+        }),
+      );
+    });
+
+    it('rejects isMockLocation: true with source omitted', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          { capturedAt: new Date().toISOString(), isMockLocation: true },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'MOCK_LOCATION_DETECTED', source: null }),
+        }),
+      );
+    });
+
+    it('allows a missing capturedAt with source omitted (soft-enforced) but flags it distinctly as MISSING_SOURCE_CAPTURED_AT', async () => {
+      await expect(service.clockIn(userId, {}, ctx)).resolves.toBeDefined();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_CAPTURED_AT_MISSING',
+          result: 'ALLOWED',
+          metadata: expect.objectContaining({
+            reason: 'MISSING_SOURCE_CAPTURED_AT',
+            source: null,
+          }),
+        }),
+      );
+      expect(mockAuditLog.record).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'ATTENDANCE_GEOFENCE_REJECTED' }),
+      );
+    });
+
+    it('rejects a stale capturedAt with source omitted even when geofence is disabled', async () => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue({ ...enabledEnvConfig, enabled: false });
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null, geofenceEnabled: false }),
+        }),
+      );
+    });
+
+    it('does not leak raw GPS or the raw nonce into audit metadata for a source-omitted rejected attempt', async () => {
+      await expect(
+        service.clockIn(
+          userId,
+          {
+            latitude: COMPANY_LAT,
+            longitude: COMPANY_LON,
+            accuracy: 25,
+            capturedAt: 'not-a-real-timestamp',
+            nonce: 'top-secret-nonce-value',
+          } as any,
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_GEOFENCE_REJECTED');
+      expect(event.metadata).not.toHaveProperty('latitude');
+      expect(event.metadata).not.toHaveProperty('longitude');
+      expect(event.metadata).not.toHaveProperty('accuracy');
+      expect(event.metadata).not.toHaveProperty('nonce');
+      expect(JSON.stringify(event.metadata)).not.toContain('top-secret-nonce-value');
+      expect(JSON.stringify(event.metadata)).not.toContain(String(COMPANY_LAT));
+      expect(JSON.stringify(event.metadata)).not.toContain(String(COMPANY_LON));
+    });
+
+    it('rejects a stale capturedAt with source omitted on clock-out too', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({ ...mockOpenRecord, attendanceSource: 'COMPANY_GEOFENCE' } as any);
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockOut(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-out-geofence-rejected',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null }),
+        }),
+      );
+    });
+  });
+
+  describe('SEC-ATT-003 (patched): offsite clock-in/out payloads are no longer exempt from payload-integrity checks', () => {
+    // Previously, clockInOffsite()/clockOutOffsite() never called any capturedAt/mock
+    // validation at all, regardless of source (OffsiteClockInDto/OffsiteClockOutDto have
+    // no `source` field). This closes that gap too.
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const offsiteDto = {
+      latitude: 13.9,
+      longitude: 100.9,
+      accuracy: 25,
+      workLocationName: 'Client Office — Siam',
+      reason: 'Client presentation Q2',
+    };
+    const disabledConfig = {
+      enabled: false,
+      latitude: COMPANY_LAT,
+      longitude: COMPANY_LON,
+      radiusMeters: 100,
+      maxAccuracyMeters: 100,
+      source: 'env' as const,
+    };
+
+    beforeEach(() => {
+      geofenceConfig.getEffectiveConfig.mockResolvedValue(disabledConfig);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      (prisma as any).offSiteRequest.findFirst.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, workMode: 'OFFSITE' } as any);
+    });
+
+    it('clockInOffsite rejects a stale capturedAt', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockInOffsite(userId, { ...offsiteDto, capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null }),
+        }),
+      );
+    });
+
+    it('clockInOffsite rejects isMockLocation: true', async () => {
+      await expect(
+        service.clockInOffsite(
+          userId,
+          { ...offsiteDto, capturedAt: new Date().toISOString(), isMockLocation: true },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(prisma.attendance.create).not.toHaveBeenCalled();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'MOCK_LOCATION_DETECTED', source: null }),
+        }),
+      );
+    });
+
+    it('clockInOffsite soft-allows a missing capturedAt, flagged as MISSING_SOURCE_CAPTURED_AT', async () => {
+      await expect(service.clockInOffsite(userId, offsiteDto, ctx)).resolves.toBeDefined();
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_CAPTURED_AT_MISSING',
+          result: 'ALLOWED',
+          metadata: expect.objectContaining({ reason: 'MISSING_SOURCE_CAPTURED_AT', source: null }),
+        }),
+      );
+    });
+
+    it('clockOutOffsite rejects a stale capturedAt', async () => {
+      prisma.attendance.findUnique.mockResolvedValue({
+        ...mockOpenRecord,
+        attendanceSource: 'OFFSITE_UNPLANNED',
+        workMode: 'OFFSITE',
+      } as any);
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+
+      await expect(
+        service.clockOutOffsite(
+          userId,
+          { latitude: 13.9, longitude: 100.9, accuracy: 30, capturedAt: '2026-06-13T01:30:00.000Z' },
+          ctx,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          targetLabel: 'clock-out-geofence-rejected',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null }),
+        }),
+      );
     });
   });
 
@@ -1232,7 +1864,12 @@ describe('AttendanceService', () => {
       await service.clockInOffsite(userId, offsiteDto);
 
       expect(mockAuditLog.record).toHaveBeenCalled();
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003 (patched): offsiteDto has no source and no capturedAt, so a
+      // MISSING_SOURCE_CAPTURED_AT soft-signal audit call now precedes
+      // ATTENDANCE_OFFSITE_CLOCK_IN — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_OFFSITE_CLOCK_IN');
       expect(event.action).toBe('ATTENDANCE_OFFSITE_CLOCK_IN');
       expect(event.metadata).not.toHaveProperty('latitude');
       expect(event.metadata).not.toHaveProperty('longitude');
@@ -1390,7 +2027,12 @@ describe('AttendanceService', () => {
 
       await service.clockOutOffsite(userId, offsiteClockOutDto);
 
-      const event = mockAuditLog.record.mock.calls[0][0];
+      // SEC-ATT-003 (patched): offsiteClockOutDto has no source and no capturedAt, so a
+      // MISSING_SOURCE_CAPTURED_AT soft-signal audit call now precedes
+      // ATTENDANCE_OFFSITE_CLOCK_OUT — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_OFFSITE_CLOCK_OUT');
       expect(event.action).toBe('ATTENDANCE_OFFSITE_CLOCK_OUT');
       expect(event.metadata).not.toHaveProperty('latitude');
       expect(event.metadata).not.toHaveProperty('longitude');
@@ -2453,6 +3095,29 @@ describe('AttendanceService', () => {
     });
   });
 
+  describe('SEC-ATT-003: DTO validation for isMockLocation', () => {
+    it('ClockInDto accepts isMockLocation as a boolean', async () => {
+      const dto = plainToInstance(ClockInDto, { isMockLocation: true });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('ClockInDto still accepts an empty payload without isMockLocation (backward compatibility)', async () => {
+      const dto = plainToInstance(ClockInDto, {});
+      expect((await validate(dto)).some((e) => e.property === 'isMockLocation')).toBe(false);
+    });
+
+    it('ClockInDto rejects a non-boolean isMockLocation', async () => {
+      const dto = plainToInstance(ClockInDto, { isMockLocation: 'yes' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'isMockLocation')).toBe(true);
+    });
+
+    it('ClockOutDto accepts isMockLocation as a boolean', async () => {
+      const dto = plainToInstance(ClockOutDto, { isMockLocation: false });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+  });
+
   describe('SEC-ATT-002: gpsAgeBucket + client metadata (clockIn)', () => {
     const ctx = {
       actorUserId: userId,
@@ -2483,40 +3148,64 @@ describe('AttendanceService', () => {
       expect(event.metadata.gpsAgeBucket).toBe('ACCEPTABLE');
     });
 
-    it('buckets a capturedAt several minutes old as STALE, without rejecting the request (SEC-ATT-003 will add rejection)', async () => {
+    it('rejects a capturedAt several minutes old with STALE_LOCATION even without a source field (SEC-ATT-003 bypass fix: payload-integrity checks no longer gated on source)', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
-      const result = await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx);
-      expect(result).toBeDefined();
-      const event = mockAuditLog.record.mock.calls[0][0];
-      expect(event.metadata.gpsAgeBucket).toBe('STALE');
+      await expect(
+        service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'STALE_LOCATION', source: null }),
+        }),
+      );
     });
 
-    it('buckets a capturedAt in the future beyond the clock-skew tolerance as FUTURE', async () => {
+    it('rejects a capturedAt in the future beyond the clock-skew tolerance with FUTURE_LOCATION even without a source field', async () => {
       jest.useFakeTimers();
       jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
-      await service.clockIn(userId, { capturedAt: '2026-06-13T01:35:00.000Z' }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
-      expect(event.metadata.gpsAgeBucket).toBe('FUTURE');
+      await expect(
+        service.clockIn(userId, { capturedAt: '2026-06-13T01:35:00.000Z' }, ctx),
+      ).rejects.toThrow(UnprocessableEntityException);
+
+      expect(mockAuditLog.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ATTENDANCE_GEOFENCE_REJECTED',
+          metadata: expect.objectContaining({ reason: 'FUTURE_LOCATION', source: null }),
+        }),
+      );
     });
 
     it('buckets a missing capturedAt as UNKNOWN and does not reject the request (backward compatibility)', async () => {
       const result = await service.clockIn(userId, {}, ctx);
       expect(result).toBeDefined();
-      const event = mockAuditLog.record.mock.calls[0][0];
+
+      // SEC-ATT-003 (patched): a MISSING_SOURCE_CAPTURED_AT soft-signal audit call now
+      // precedes ATTENDANCE_CLOCK_IN — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata.gpsAgeBucket).toBe('UNKNOWN');
     });
 
     it('includes platform and timezoneOffsetMinutes in audit metadata when provided', async () => {
       await service.clockIn(userId, { platform: 'android', timezoneOffsetMinutes: 420 }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
+
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata.platform).toBe('android');
       expect(event.metadata.timezoneOffsetMinutes).toBe(420);
     });
 
     it('records hasNonce as a boolean but never logs the raw nonce value', async () => {
       await service.clockIn(userId, { nonce: 'super-secret-future-nonce-value' }, ctx);
-      const event = mockAuditLog.record.mock.calls[0][0];
+
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_IN');
       expect(event.metadata.hasNonce).toBe(true);
       expect(event.metadata).not.toHaveProperty('nonce');
       expect(JSON.stringify(event.metadata)).not.toContain('super-secret-future-nonce-value');
@@ -2552,7 +3241,12 @@ describe('AttendanceService', () => {
     it('still clocks out and buckets UNKNOWN when capturedAt is missing (backward compatibility)', async () => {
       const result = await service.clockOut(userId, {}, ctx);
       expect(result).toBeDefined();
-      const event = mockAuditLog.record.mock.calls[0][0];
+
+      // SEC-ATT-003 (patched): a MISSING_SOURCE_CAPTURED_AT soft-signal audit call now
+      // precedes ATTENDANCE_CLOCK_OUT — find the success event by action.
+      const event = mockAuditLog.record.mock.calls
+        .map((call) => call[0])
+        .find((call) => call.action === 'ATTENDANCE_CLOCK_OUT');
       expect(event.metadata.gpsAgeBucket).toBe('UNKNOWN');
     });
   });

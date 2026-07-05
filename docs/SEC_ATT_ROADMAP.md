@@ -4,12 +4,13 @@
 > work items and their intended order. It records scope and sequencing only —
 > each item gets its own design/spec document when work on it begins.
 >
-> SEC-ATT-001 and SEC-ATT-002 are now complete — see
+> SEC-ATT-001 through SEC-ATT-003 are now complete — see
 > [SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
 > for the full threat model, platform capability matrix, and design
-> reference for SEC-ATT-002 through SEC-ATT-007, and
+> reference for SEC-ATT-002 through SEC-ATT-007,
 > [CTO_SUMMARY_SEC_ATT_002.md](CTO_SUMMARY_SEC_ATT_002.md) for what SEC-ATT-002
-> actually shipped. SEC-ATT-003 is the next actual task.
+> actually shipped, and [CTO_SUMMARY_SEC_ATT_003.md](CTO_SUMMARY_SEC_ATT_003.md)
+> for what SEC-ATT-003 actually shipped. SEC-ATT-004 is the next actual task.
 
 ## Background
 
@@ -40,7 +41,7 @@ SEC-ATT-007 are the planned steps to close that gap.
 |---|---|---|
 | SEC-ATT-001 | Cross-platform attendance anti-spoofing spec — defines the overall threat model and phased plan for SEC-ATT-002 through 007 | No (spec only) |
 | SEC-ATT-002 ✅ | Mobile attendance payload hardening — tighten what the client sends and how the backend validates shape/freshness of the payload | No |
-| SEC-ATT-003 | Backend rejection of mock/simulated/stale location — server-side checks against mock-location flags, GPS staleness, and implausible movement | No |
+| SEC-ATT-003 ✅ | Backend rejection of mock/simulated/stale location — server-side checks against mock-location flags, GPS staleness, and implausible movement | No |
 | SEC-ATT-004 | Server nonce / replay protection — prevent a captured clock-in/out request from being replayed | No |
 | SEC-ATT-005 | Android Play Integrity — device/app attestation for Android | Yes |
 | SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes |
