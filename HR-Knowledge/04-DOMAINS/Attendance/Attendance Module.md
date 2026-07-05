@@ -47,9 +47,12 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
 - Follow-up: **SEC-ATT-001 Cross-Platform Attendance Anti-Spoofing** — this
   hotfix removes the UI affordance but does not add backend-side platform
   enforcement (e.g. rejecting non-mobile-sourced clock calls outright).
-  SEC-ATT-001 is now complete — see
+  SEC-ATT-001 and **SEC-ATT-002 Mobile Attendance Payload Hardening** are now
+  complete — see
   [docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md](../../../docs/SEC_ATT_001_CROSS_PLATFORM_ANTI_SPOOFING_SPEC.md)
-  for the threat model and design reference, and
+  for the threat model and design reference,
+  [docs/CTO_SUMMARY_SEC_ATT_002.md](../../../docs/CTO_SUMMARY_SEC_ATT_002.md)
+  for what SEC-ATT-002 shipped, and
   [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
   SEC-ATT-001 through SEC-ATT-007 sequencing
 
@@ -119,10 +122,21 @@ Summary:
 - `workMode: "OFFSITE"` bypasses the radius check at clock-in (approved request required)
 - Clock-out is always geofence-validated regardless of work mode
 - Backend validates employee GPS against the configured company location
-- Employee GPS is never stored; backend validates and discards it
+- Onsite (`COMPANY_GEOFENCE`) employee GPS is never stored; backend validates and discards it. Off-site clock-in/out **does** persist raw coordinates on the `Attendance` row for dispute resolution — see [[Off-site Work Mode]]. Neither path ever writes raw GPS to `AuditLog`.
 - Company geofence is configurable via `GET/PATCH /attendance/geofence-config` (admin only)
 - DB config takes priority over env-var fallback
 - Audit event `ATTENDANCE_GEOFENCE_CONFIG_UPDATED` is recorded on each admin update (safe metadata — no coordinates)
+
+### SEC-ATT-002: Mobile Payload Metadata
+
+`ClockInDto`/`ClockOutDto`/`OffsiteClockInDto`/`OffsiteClockOutDto` accept four additional optional fields, sent by STEP Connect Mobile since this task:
+
+- `capturedAt` (ISO-8601) — when the client captured the GPS fix
+- `timezoneOffsetMinutes` — client's local UTC offset
+- `platform` (`ios`/`android`/`web`) — client runtime
+- `nonce` — reserved for SEC-ATT-004 replay protection; accepted but not yet validated or enforced
+
+All four are optional/additive for backward compatibility with mobile app builds that predate this field set — a missing `capturedAt` does not reject the request. The backend buckets GPS freshness from `capturedAt` into `gpsAgeBucket` (`FRESH`/`ACCEPTABLE`/`STALE`/`FUTURE`/`UNKNOWN`) and logs it, along with `platform`/`timezoneOffsetMinutes`/`hasNonce` (never the raw nonce), on the existing attendance audit events. None of these fields are persisted to the `Attendance` table — they are transient, request-scoped signals only, consistent with the existing "GPS is discarded" convention. No request is hard-rejected on freshness/staleness grounds yet — that is SEC-ATT-003's scope.
 
 ## Known Limitations
 
@@ -130,7 +144,8 @@ Summary:
 - No automatic absent-marking job (future scheduled task)
 - No overtime or shift scheduling
 - Geofence: single office only; GPS spoofing is not preventable at the software layer
-- Web clock-in/out is disabled (v1.2.66), but the backend does not yet reject a non-mobile client that spoofs `source: "mobile"` — closing this gap is the scope of the upcoming SEC-ATT-001 anti-spoofing work
+- Web clock-in/out is disabled (v1.2.66), but the backend does not yet reject a non-mobile client that spoofs `source: "mobile"` — closing this gap is SEC-ATT-003's scope, not SEC-ATT-002's
+- `gpsAgeBucket` (SEC-ATT-002) is informational only — a `STALE`/`FUTURE` bucket is logged but never rejects the request; hard rejection of stale/mock/replayed GPS is SEC-ATT-003
 
 ## Related ADRs
 

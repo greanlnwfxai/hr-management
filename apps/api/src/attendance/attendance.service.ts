@@ -45,6 +45,13 @@ export interface AttendanceAuditContext {
   userAgent?: string | null;
 }
 
+// SEC-ATT-002: informational GPS-freshness bucketing only — no rejection.
+// Hard rejection of stale/future-skewed capturedAt values is reserved for SEC-ATT-003.
+type GpsAgeBucket = 'FRESH' | 'ACCEPTABLE' | 'STALE' | 'FUTURE' | 'UNKNOWN';
+const GPS_AGE_FRESH_SECONDS = 30;
+const GPS_AGE_ACCEPTABLE_SECONDS = 120;
+const GPS_FUTURE_SKEW_TOLERANCE_SECONDS = 30;
+
 const ATTENDANCE_SELECT = {
   id: true,
   date: true,
@@ -198,6 +205,7 @@ export class AttendanceService {
         hasCheckOut: result.checkOut !== null,
         hasNote: result.note !== null && result.note !== undefined,
         hasCoordinates: !!(dto.latitude),
+        ...this.clientMetadata(dto),
         ...(offSiteRequestId && { offSiteRequestId }),
       },
     });
@@ -255,6 +263,7 @@ export class AttendanceService {
         hasCheckIn: result.checkIn !== null,
         hasCheckOut: true,
         hasNote: result.note !== null && result.note !== undefined,
+        ...this.clientMetadata(dto),
       },
     });
 
@@ -353,6 +362,7 @@ export class AttendanceService {
         isPlanned: !!approvedRequest,
         hasOffSiteRequestId: !!approvedRequest,
         hasDistanceData: checkInDistanceFromCompanyMeters !== null,
+        ...this.clientMetadata(dto),
       },
     });
 
@@ -425,6 +435,7 @@ export class AttendanceService {
         accuracyBucket,
         hasNote: dto.note !== undefined,
         hasDistanceData: checkOutDistanceFromCompanyMeters !== null,
+        ...this.clientMetadata(dto),
       },
     });
 
@@ -954,6 +965,9 @@ export class AttendanceService {
   // Geofence validation — only applied when source='mobile'.
   // Web and legacy (no source) requests are passed through without checks,
   // preserving backwards compatibility with the existing web attendance flow.
+  // SEC-ATT-002: `source` is a self-reported hint, not a trusted platform assertion —
+  // it merely decides whether this corroborating validation runs at all. Closing the
+  // gap where a caller omits/forges `source` to skip validation entirely is SEC-ATT-003.
   private async validateGeofence(
     dto: ClockInDto | ClockOutDto,
     attemptType: 'CLOCK_IN' | 'CLOCK_OUT',
@@ -1073,6 +1087,41 @@ export class AttendanceService {
         result: 'REJECTED',
       },
     });
+  }
+
+  // SEC-ATT-002: bucketed freshness signal for future risk scoring (SEC-ATT-007) and
+  // hard rejection (SEC-ATT-003). Missing/unparseable capturedAt (e.g. an older mobile
+  // build that predates this field) buckets to 'UNKNOWN' rather than being rejected —
+  // backward compatibility for in-flight app rollouts is required for SEC-ATT-002.
+  private computeGpsAgeBucket(capturedAt: string | undefined, now: Date = new Date()): GpsAgeBucket {
+    if (!capturedAt) return 'UNKNOWN';
+    const capturedMs = Date.parse(capturedAt);
+    if (Number.isNaN(capturedMs)) return 'UNKNOWN';
+
+    const ageSeconds = (now.getTime() - capturedMs) / 1000;
+    if (ageSeconds < -GPS_FUTURE_SKEW_TOLERANCE_SECONDS) return 'FUTURE';
+    if (ageSeconds <= GPS_AGE_FRESH_SECONDS) return 'FRESH';
+    if (ageSeconds <= GPS_AGE_ACCEPTABLE_SECONDS) return 'ACCEPTABLE';
+    return 'STALE';
+  }
+
+  // SEC-ATT-002: client-supplied metadata that is safe to audit-log as-is — never raw
+  // GPS (already covered by AUDIT_SENSITIVE_KEYS) and never the reserved nonce value
+  // itself (presence only), since it is earmarked as a future replay-protection secret.
+  private clientMetadata(dto: {
+    source?: 'web' | 'mobile';
+    platform?: 'ios' | 'android' | 'web';
+    timezoneOffsetMinutes?: number;
+    capturedAt?: string;
+    nonce?: string;
+  }) {
+    return {
+      source: dto.source ?? null,
+      platform: dto.platform ?? null,
+      timezoneOffsetMinutes: dto.timezoneOffsetMinutes ?? null,
+      gpsAgeBucket: this.computeGpsAgeBucket(dto.capturedAt),
+      hasNonce: !!dto.nonce,
+    };
   }
 
   private async requireEmployeeId(userId: string): Promise<string> {

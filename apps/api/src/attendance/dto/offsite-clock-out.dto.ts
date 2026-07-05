@@ -1,4 +1,7 @@
 import {
+  IsIn,
+  IsInt,
+  IsISO8601,
   IsNumber,
   IsString,
   IsOptional,
@@ -28,4 +31,23 @@ export class OffsiteClockOutDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  capturedAt?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(-720)
+  @Max(840)
+  timezoneOffsetMinutes?: number;
+
+  @IsOptional()
+  @IsIn(['ios', 'android', 'web'])
+  platform?: 'ios' | 'android' | 'web';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  nonce?: string;
 }

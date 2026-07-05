@@ -10,7 +10,8 @@ import {
 import { SessionExpiredError, ApiCodedError } from '../api/types';
 import type { AttendanceRecord, OffSiteRequestRecord, PaginatedMeta } from '../api/types';
 import { useAuth } from '../auth/useAuth';
-import { useDeviceLocation } from './useDeviceLocation';
+import { useDeviceLocation, type DeviceLocation } from './useDeviceLocation';
+import { getTimezoneOffsetMinutes } from '../utils/timezone';
 
 export type AttendanceLoadState = 'idle' | 'loading' | 'success' | 'error';
 export type ClockActionState = 'idle' | 'locating' | 'submitting' | 'success' | 'error';
@@ -97,7 +98,7 @@ export function useAttendance(): AttendanceState {
     setClockActionMessage(null);
     setClockInState('locating');
 
-    let location: { latitude: number; longitude: number; accuracy: number };
+    let location: DeviceLocation;
     try {
       location = await getLocation();
     } catch (err) {
@@ -117,6 +118,7 @@ export function useAttendance(): AttendanceState {
       const result = await apiClockIn(token, {
         source: 'mobile',
         ...location,
+        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
       });
       setToday(prev =>
         prev
@@ -151,7 +153,7 @@ export function useAttendance(): AttendanceState {
     setClockOutOutsideGeofence(false);
     setClockOutState('locating');
 
-    let location: { latitude: number; longitude: number; accuracy: number };
+    let location: DeviceLocation;
     try {
       location = await getLocation();
     } catch (err) {
@@ -168,7 +170,11 @@ export function useAttendance(): AttendanceState {
 
     setClockOutState('submitting');
     try {
-      const result = await apiClockOut(token, { source: 'mobile', ...location });
+      const result = await apiClockOut(token, {
+        source: 'mobile',
+        ...location,
+        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
+      });
       setToday(prev => prev ? { ...prev, checkOut: result.checkOut, status: result.status } : prev);
       setClockActionMessage('ลงเวลาออกสำเร็จ');
       setClockOutState('success');

@@ -1,6 +1,8 @@
 import { Type } from 'class-transformer';
 import {
   IsIn,
+  IsInt,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -48,4 +50,34 @@ export class ClockOutDto {
   @IsPositive()
   @Type(() => Number)
   accuracy?: number;
+
+  @ApiPropertyOptional({
+    example: '2026-07-05T09:14:32.000Z',
+    description: 'ISO-8601 timestamp of when the client captured the GPS fix. Optional for backward compatibility with older mobile builds; used server-side only for freshness signals, never persisted.',
+  })
+  @IsOptional()
+  @IsISO8601()
+  capturedAt?: string;
+
+  @ApiPropertyOptional({ example: 420, description: "Client's local timezone offset from UTC, in minutes (e.g. Bangkok UTC+7 = 420)" })
+  @IsOptional()
+  @IsInt()
+  @Min(-720)
+  @Max(840)
+  @Type(() => Number)
+  timezoneOffsetMinutes?: number;
+
+  @ApiPropertyOptional({ enum: ['ios', 'android', 'web'], description: 'Client runtime platform, for diagnostic/risk-signal purposes only' })
+  @IsOptional()
+  @IsIn(['ios', 'android', 'web'])
+  platform?: 'ios' | 'android' | 'web';
+
+  @ApiPropertyOptional({
+    description: 'Reserved for SEC-ATT-004 replay protection. Not yet validated or enforced by the backend.',
+    maxLength: 128,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  nonce?: string;
 }

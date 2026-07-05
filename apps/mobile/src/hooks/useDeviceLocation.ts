@@ -6,6 +6,8 @@ export interface DeviceLocation {
   latitude: number;
   longitude: number;
   accuracy: number;
+  capturedAt: string;
+  platform: 'ios' | 'android' | 'web';
 }
 
 export interface UseDeviceLocationResult {
@@ -33,6 +35,8 @@ export function useDeviceLocation(): UseDeviceLocationResult {
       let latitude: number;
       let longitude: number;
       let accuracy: number;
+      let capturedAtMs: number;
+      const platform: DeviceLocation['platform'] = Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web';
 
       if (Platform.OS === 'web') {
         // expo-location web hardcodes maximumAge: Infinity — bypass it with the
@@ -47,15 +51,17 @@ export function useDeviceLocation(): UseDeviceLocationResult {
         latitude = pos.coords.latitude;
         longitude = pos.coords.longitude;
         accuracy = pos.coords.accuracy ?? 9999;
+        capturedAtMs = pos.timestamp;
       } else {
         const result = await Location.getCurrentPositionAsync({
           accuracy: Location.Accuracy.High,
         });
         ({ latitude, longitude } = result.coords);
         accuracy = result.coords.accuracy ?? 9999;
+        capturedAtMs = result.timestamp;
       }
 
-      return { latitude, longitude, accuracy };
+      return { latitude, longitude, accuracy, capturedAt: new Date(capturedAtMs).toISOString(), platform };
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('กรุณา')) {
         throw err;

@@ -165,6 +165,9 @@ export interface MobileLocationPayload {
   longitude: number;
   accuracy: number;
   workMode?: WorkMode;
+  capturedAt?: string;
+  timezoneOffsetMinutes?: number;
+  platform?: 'ios' | 'android' | 'web';
 }
 
 export interface ClockActionResult {
@@ -254,6 +257,9 @@ export interface OffsiteClockInPayload {
   workLocationName: string;
   reason: string;
   note?: string;
+  capturedAt?: string;
+  timezoneOffsetMinutes?: number;
+  platform?: 'ios' | 'android' | 'web';
 }
 
 export interface OffsiteClockOutPayload {
@@ -261,6 +267,9 @@ export interface OffsiteClockOutPayload {
   longitude: number;
   accuracy: number;
   note?: string;
+  capturedAt?: string;
+  timezoneOffsetMinutes?: number;
+  platform?: 'ios' | 'android' | 'web';
 }
 
 export interface MixedCheckoutExceptionPayload {

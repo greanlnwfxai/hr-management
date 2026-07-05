@@ -4,7 +4,8 @@ import { clockInOffsite, clockOutOffsite } from '../api/client';
 import { SessionExpiredError } from '../api/types';
 import type { AttendanceRecord } from '../api/types';
 import { useAuth } from '../auth/useAuth';
-import { useDeviceLocation } from './useDeviceLocation';
+import { useDeviceLocation, type DeviceLocation } from './useDeviceLocation';
+import { getTimezoneOffsetMinutes } from '../utils/timezone';
 
 export type OffsiteClockState = 'idle' | 'locating' | 'submitting' | 'success' | 'error';
 
@@ -57,7 +58,7 @@ export function useOffsiteAttendance(
     setClockActionMessage(null);
     setClockInState('locating');
 
-    let location: { latitude: number; longitude: number; accuracy: number };
+    let location: DeviceLocation;
     try {
       location = await getLocation();
     } catch (err) {
@@ -77,6 +78,7 @@ export function useOffsiteAttendance(
         ...location,
         workLocationName,
         reason,
+        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
         ...(note ? { note } : {}),
       });
       if (!mountedRef.current) return null;
@@ -106,7 +108,7 @@ export function useOffsiteAttendance(
     setClockActionMessage(null);
     setClockOutState('locating');
 
-    let location: { latitude: number; longitude: number; accuracy: number };
+    let location: DeviceLocation;
     try {
       location = await getLocation();
     } catch (err) {
@@ -124,6 +126,7 @@ export function useOffsiteAttendance(
     try {
       const record = await clockOutOffsite(token, {
         ...location,
+        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
         ...(note ? { note } : {}),
       });
       if (!mountedRef.current) return null;

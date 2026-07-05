@@ -6,6 +6,8 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { AttendanceService } from './attendance.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +15,10 @@ import { GeofenceService } from './geofence.service';
 import { GeofenceConfigService } from './geofence-config.service';
 import { mockPrisma } from '../test-utils/prisma.mock';
 import { AttendanceSource, AttendanceReviewStatus } from '../common/enums';
+import { ClockInDto } from './dto/clock-in.dto';
+import { ClockOutDto } from './dto/clock-out.dto';
+import { OffsiteClockInDto } from './dto/offsite-clock-in.dto';
+import { OffsiteClockOutDto } from './dto/offsite-clock-out.dto';
 
 type PrismaMock = ReturnType<typeof mockPrisma> & {
   employee: { findFirst: jest.Mock };
@@ -2370,6 +2376,184 @@ describe('AttendanceService', () => {
       expect(mockAuditLog.record).toHaveBeenCalledWith(
         expect.objectContaining({ actorRole: 'MANAGER', action: 'ATTENDANCE_OFFSITE_REJECTED' }),
       );
+    });
+  });
+
+  // ── SEC-ATT-002: mobile payload metadata ────────────────────────────────────
+
+  describe('SEC-ATT-002: DTO validation for capturedAt/timezoneOffsetMinutes/platform/nonce', () => {
+    it('ClockInDto accepts a fully-populated mobile payload including the new fields', async () => {
+      const dto = plainToInstance(ClockInDto, {
+        source: 'mobile',
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        accuracy: 25,
+        capturedAt: '2026-06-13T01:30:00.000Z',
+        timezoneOffsetMinutes: 420,
+        platform: 'android',
+        nonce: 'reserved-not-yet-enforced',
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('ClockInDto still accepts an empty payload (backward compatibility with older mobile builds)', async () => {
+      const dto = plainToInstance(ClockInDto, {});
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('ClockInDto rejects a malformed capturedAt', async () => {
+      const dto = plainToInstance(ClockInDto, { capturedAt: 'not-a-date' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'capturedAt')).toBe(true);
+    });
+
+    it('ClockInDto rejects an unrecognized platform value', async () => {
+      const dto = plainToInstance(ClockInDto, { platform: 'desktop' });
+      const errors = await validate(dto);
+      expect(errors.some((e) => e.property === 'platform')).toBe(true);
+    });
+
+    it('ClockOutDto accepts the new fields and rejects malformed capturedAt the same way', async () => {
+      const ok = plainToInstance(ClockOutDto, {
+        capturedAt: '2026-06-13T01:30:00.000Z',
+        timezoneOffsetMinutes: -300,
+        platform: 'ios',
+      });
+      expect(await validate(ok)).toHaveLength(0);
+
+      const bad = plainToInstance(ClockOutDto, { capturedAt: 'nope' });
+      const errors = await validate(bad);
+      expect(errors.some((e) => e.property === 'capturedAt')).toBe(true);
+    });
+
+    it('OffsiteClockInDto accepts the new optional fields', async () => {
+      const dto = plainToInstance(OffsiteClockInDto, {
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        accuracy: 25,
+        workLocationName: 'Client site',
+        reason: 'Client meeting',
+        capturedAt: '2026-06-13T01:30:00.000Z',
+        timezoneOffsetMinutes: 420,
+        platform: 'ios',
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+
+    it('OffsiteClockOutDto accepts the new optional fields', async () => {
+      const dto = plainToInstance(OffsiteClockOutDto, {
+        latitude: COMPANY_LAT,
+        longitude: COMPANY_LON,
+        accuracy: 25,
+        capturedAt: '2026-06-13T01:30:00.000Z',
+        timezoneOffsetMinutes: 420,
+        platform: 'web',
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    });
+  });
+
+  describe('SEC-ATT-002: gpsAgeBucket + client metadata (clockIn)', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(null);
+      prisma.attendance.create.mockResolvedValue({ ...mockAttendanceFull, status: 'PRESENT' } as any);
+    });
+
+    it('buckets a capturedAt from a few seconds ago as FRESH', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:30.000Z'));
+      await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:10.000Z' }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('FRESH');
+    });
+
+    it('buckets a capturedAt about a minute old as ACCEPTABLE', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:31:00.000Z'));
+      await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('ACCEPTABLE');
+    });
+
+    it('buckets a capturedAt several minutes old as STALE, without rejecting the request (SEC-ATT-003 will add rejection)', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:40:00.000Z'));
+      const result = await service.clockIn(userId, { capturedAt: '2026-06-13T01:30:00.000Z' }, ctx);
+      expect(result).toBeDefined();
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('STALE');
+    });
+
+    it('buckets a capturedAt in the future beyond the clock-skew tolerance as FUTURE', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:00.000Z'));
+      await service.clockIn(userId, { capturedAt: '2026-06-13T01:35:00.000Z' }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('FUTURE');
+    });
+
+    it('buckets a missing capturedAt as UNKNOWN and does not reject the request (backward compatibility)', async () => {
+      const result = await service.clockIn(userId, {}, ctx);
+      expect(result).toBeDefined();
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('UNKNOWN');
+    });
+
+    it('includes platform and timezoneOffsetMinutes in audit metadata when provided', async () => {
+      await service.clockIn(userId, { platform: 'android', timezoneOffsetMinutes: 420 }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.platform).toBe('android');
+      expect(event.metadata.timezoneOffsetMinutes).toBe(420);
+    });
+
+    it('records hasNonce as a boolean but never logs the raw nonce value', async () => {
+      await service.clockIn(userId, { nonce: 'super-secret-future-nonce-value' }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.hasNonce).toBe(true);
+      expect(event.metadata).not.toHaveProperty('nonce');
+      expect(JSON.stringify(event.metadata)).not.toContain('super-secret-future-nonce-value');
+    });
+  });
+
+  describe('SEC-ATT-002: gpsAgeBucket + client metadata (clockOut)', () => {
+    const ctx = {
+      actorUserId: userId,
+      actorRole: 'EMPLOYEE',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest-test',
+    };
+    const mockClosedRecord = {
+      ...mockAttendanceFull,
+      checkOut: new Date('2026-06-13T05:00:00.000Z'),
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.attendance.findUnique.mockResolvedValue(mockOpenRecord as any);
+      prisma.attendance.update.mockResolvedValue(mockClosedRecord as any);
+    });
+
+    it('buckets clock-out capturedAt freshness the same way as clock-in', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-13T01:30:30.000Z'));
+      await service.clockOut(userId, { capturedAt: '2026-06-13T01:30:10.000Z' }, ctx);
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('FRESH');
+    });
+
+    it('still clocks out and buckets UNKNOWN when capturedAt is missing (backward compatibility)', async () => {
+      const result = await service.clockOut(userId, {}, ctx);
+      expect(result).toBeDefined();
+      const event = mockAuditLog.record.mock.calls[0][0];
+      expect(event.metadata.gpsAgeBucket).toBe('UNKNOWN');
     });
   });
 });
