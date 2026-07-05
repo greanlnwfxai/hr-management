@@ -12,8 +12,16 @@
 > actually shipped, [CTO_SUMMARY_SEC_ATT_003.md](CTO_SUMMARY_SEC_ATT_003.md)
 > for what SEC-ATT-003 actually shipped, and
 > [CTO_SUMMARY_SEC_ATT_004.md](CTO_SUMMARY_SEC_ATT_004.md) for what SEC-ATT-004
-> actually shipped. SEC-ATT-005 is the next actual task (blocked on a native
-> mobile build decision — see table below).
+> actually shipped. SEC-ATT-005 (Android Play Integrity) has now been
+> **feasibility-assessed** in
+> [SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md](SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md)
+> (with [CTO_SUMMARY_SEC_ATT_005A.md](CTO_SUMMARY_SEC_ATT_005A.md)), which
+> **recommends DEFER** — Play Integrity is categorically unavailable on the
+> current PWA and cannot proceed until a native Android build strategy is
+> approved (still open, §15 Open Question #3 in the spec). The next
+> **backend-executable** work is therefore SEC-ATT-006A (iOS feasibility) and
+> SEC-ATT-007 (risk scoring + review queue) planning — neither is blocked on the
+> native-build decision. Do not block the PWA attendance flow on Play Integrity.
 
 ## Background
 
@@ -46,7 +54,8 @@ SEC-ATT-007 are the planned steps to close that gap.
 | SEC-ATT-002 ✅ | Mobile attendance payload hardening — tighten what the client sends and how the backend validates shape/freshness of the payload | No |
 | SEC-ATT-003 ✅ | Backend rejection of mock/simulated/stale location — server-side checks against mock-location flags, GPS staleness, and implausible movement | No |
 | SEC-ATT-004 ✅ | Server nonce / replay protection — prevent a captured clock-in/out request from being replayed | No |
-| SEC-ATT-005 | Android Play Integrity — device/app attestation for Android | Yes |
+| SEC-ATT-005A | Android Play Integrity **feasibility & architecture decision** — options matrix, conceptual backend/native prerequisites, phased rollout; recommends DEFER (spec/decision only, no build) | No (feasibility only) |
+| SEC-ATT-005 | Android Play Integrity — device/app attestation for Android | Yes (DEFERRED — see SEC-ATT-005A) |
 | SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes |
 | SEC-ATT-007 | Attendance risk scoring + review queue — aggregate signals from 002–006 into a risk score with a human review workflow, reusing the existing `AttendanceReviewStatus` lifecycle from the mixed-checkout-exception workflow ([[Mixed Checkout Exception]], ADR-027) | No (consumes signals from prior items) |
 
