@@ -348,6 +348,13 @@ const translations = {
 
     nav_offsite_review: 'Off-site Review',
 
+    // Attendance Risk Reviews (SEC-ATT-007B)
+    nav_risk_reviews: 'Risk Reviews',
+    page_risk_reviews: 'Attendance Risk Reviews',
+    loading_risk_reviews: 'Loading risk reviews…',
+    empty_risk_reviews: 'No risk review records found.',
+    error_risk_reviews: 'Failed to load risk reviews.',
+
     nav_geofence_settings: 'Geofence Settings',
     page_geofence_settings: 'Geofence Settings',
     geofence_enabled_label: 'Enable Geofence',
@@ -721,6 +728,13 @@ const translations = {
     error_audit_logs: 'โหลดประวัติตรวจสอบล้มเหลว',
 
     nav_offsite_review: 'ตรวจสอบนอกสถานที่',
+
+    // Attendance Risk Reviews (SEC-ATT-007B)
+    nav_risk_reviews: 'ความเสี่ยงการลงเวลา',
+    page_risk_reviews: 'ตรวจสอบความเสี่ยงการลงเวลา',
+    loading_risk_reviews: 'กำลังโหลดรายการความเสี่ยง…',
+    empty_risk_reviews: 'ไม่พบรายการความเสี่ยง',
+    error_risk_reviews: 'โหลดรายการความเสี่ยงล้มเหลว',
 
     nav_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',
     page_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',

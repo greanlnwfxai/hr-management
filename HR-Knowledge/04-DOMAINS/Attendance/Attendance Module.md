@@ -31,6 +31,13 @@ Tracks daily employee attendance via clock-in and clock-out. Evaluates whether a
 
 Note: geofence-config routes are declared before `/me` and `/:id` in the controller to avoid `ParseUUIDPipe` conflicts.
 
+**Admin Web UI:** the risk-review queue above now has a SUPER_ADMIN/HR_ADMIN-only
+Admin Web page at `apps/web/app/(app)/attendance/risk-reviews/page.tsx`
+(`/attendance/risk-reviews`, SEC-ATT-007B) — filterable queue table (status/
+riskLevel/result/action/employeeId/date range) + a detail/review modal that
+calls the `PATCH .../:id/review` endpoint. No backend/schema change; see
+[docs/CTO_SUMMARY_SEC_ATT_007B.md](../../../docs/CTO_SUMMARY_SEC_ATT_007B.md).
+
 ## Web vs. Mobile Clock Channel (v1.2.66)
 
 As of `v1.2.66-disable-web-clock-actions`, the Web/Admin `/attendance` page no
@@ -81,8 +88,11 @@ change** — see [[ADR-029 Web vs Mobile Attendance Clock Policy]]:
   privacy-safe LOW/MEDIUM/HIGH/CRITICAL risk row (categorical reason codes
   only — never raw GPS, nonce, or attestation tokens) whenever an existing
   SEC-ATT-002/003/004 check flags or rejects a clock-in/out; SUPER_ADMIN/
-  HR_ADMIN-only APIs expose the queue (MANAGER access deferred; no Admin Web
-  UI yet — see SEC-ATT-007B), and
+  HR_ADMIN-only APIs expose the queue (MANAGER access deferred),
+  [docs/CTO_SUMMARY_SEC_ATT_007B.md](../../../docs/CTO_SUMMARY_SEC_ATT_007B.md)
+  for **SEC-ATT-007B** — the Admin Web UI for that queue (complete): a
+  SUPER_ADMIN/HR_ADMIN-only page at `/attendance/risk-reviews`, no backend/
+  schema change, and
   [docs/SEC_ATT_ROADMAP.md](../../../docs/SEC_ATT_ROADMAP.md) for the full
   SEC-ATT-001 through SEC-ATT-007B sequencing
 

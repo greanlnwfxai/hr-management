@@ -25,6 +25,7 @@ function navForRole(role: AuthUser['role']): NavDef[] {
         { href: '/leave',                          labelKey: 'nav_leave',             testid: 'nav-leave' },
         { href: '/offsite',                        labelKey: 'nav_offsite',           testid: 'nav-offsite' },
         { href: '/attendance/offsite-review',      labelKey: 'nav_offsite_review',    testid: 'nav-offsite-review' },
+        { href: '/attendance/risk-reviews',         labelKey: 'nav_risk_reviews',      testid: 'nav-risk-reviews' },
         { href: '/audit-logs',                     labelKey: 'nav_audit_logs',        testid: 'nav-audit-logs' },
         { href: '/attendance/geofence-settings',   labelKey: 'nav_geofence_settings', testid: 'nav-geofence-settings' },
       ];

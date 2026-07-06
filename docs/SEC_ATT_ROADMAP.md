@@ -29,8 +29,14 @@
 > privacy-safe `AttendanceRiskReview` row (categorical reason codes + derived
 > risk level only — never raw GPS/nonce/tokens) whenever an existing
 > SEC-ATT-002/003/004 check flags or rejects a clock-in/out, and exposes
-> SUPER_ADMIN/HR_ADMIN-only review-queue APIs. The next item is
-> **SEC-ATT-007B** (Admin Web UI for the review queue) — not blocked on the
+> SUPER_ADMIN/HR_ADMIN-only review-queue APIs. **SEC-ATT-007B (Admin Web UI
+> for the review queue) is now also complete** — see
+> [CTO_SUMMARY_SEC_ATT_007B.md](CTO_SUMMARY_SEC_ATT_007B.md). It adds a
+> SUPER_ADMIN/HR_ADMIN-only page at `/attendance/risk-reviews` (filterable
+> queue table + a detail/review modal), consuming the SEC-ATT-007A APIs only
+> — no backend/schema change. With both 007A and 007B complete, there is no
+> further SEC-ATT-007 work queued; the remaining open items are SEC-ATT-005/
+> 006 (native Play Integrity/App Attest), both DEFERRED pending the shared
 > native-build decision. Do not block the PWA attendance flow on Play
 > Integrity, App Attest/DeviceCheck, or risk scoring.
 
@@ -70,7 +76,7 @@ SEC-ATT-007 are the planned steps to close that gap.
 | SEC-ATT-006A | iOS App Attest / DeviceCheck **feasibility & architecture decision** — options matrix, conceptual (stateful) backend/native prerequisites, phased rollout; recommends DEFER (spec/decision only, no build) | No (feasibility only) |
 | SEC-ATT-006 | iOS App Attest / DeviceCheck — device/app attestation for iOS | Yes (DEFERRED — see SEC-ATT-006A) |
 | SEC-ATT-007A ✅ | Attendance risk scoring + review queue **backend foundation** — new `AttendanceRiskReview` table; scores sanitized reason codes from the existing SEC-ATT-002/003/004 checks into LOW/MEDIUM/HIGH/CRITICAL; SUPER_ADMIN/HR_ADMIN-only list/read/review APIs. No Admin Web UI. See [CTO_SUMMARY_SEC_ATT_007A.md](CTO_SUMMARY_SEC_ATT_007A.md). | No |
-| SEC-ATT-007B | Admin Web UI for the risk-review queue (consumes SEC-ATT-007A's APIs) | No |
+| SEC-ATT-007B ✅ | Admin Web UI for the risk-review queue — filterable queue table + detail/review modal at `/attendance/risk-reviews` (SUPER_ADMIN/HR_ADMIN only), consumes SEC-ATT-007A's APIs only, no backend/schema change. See [CTO_SUMMARY_SEC_ATT_007B.md](CTO_SUMMARY_SEC_ATT_007B.md). | No |
 
 ## Sequencing Rationale
 
@@ -79,8 +85,10 @@ current PWA/mobile-web client. Items 005–006 require a native app or native
 wrapper and are blocked on that decision being made separately; they are
 ordered last so backend hardening isn't blocked waiting on a mobile platform
 decision. Their feasibility precursors (SEC-ATT-005A, SEC-ATT-006A) are
-complete and both recommend DEFER; SEC-ATT-007A (backend foundation) is now
-also complete, so the next executable item is SEC-ATT-007B (Admin Web UI).
+complete and both recommend DEFER; SEC-ATT-007A/007B (backend foundation +
+Admin Web UI) are both now complete, so there is no further executable
+SEC-ATT-007 item — the only open items are 005/006, both blocked on the
+native-build decision.
 
 ## Related Notes
 

@@ -492,6 +492,73 @@ export function rejectOffsiteReview(id: string, reviewNote?: string) {
   });
 }
 
+// ── Attendance Risk Reviews (SEC-ATT-007A backend, SEC-ATT-007B UI) ───────────
+
+export type AttendanceRiskReview = {
+  id: string;
+  employeeId: string | null;
+  attendanceId: string | null;
+  userId: string | null;
+  action: string;
+  result: string;
+  riskLevel: string;
+  reasonCodes: string[];
+  status: string;
+  source: string | null;
+  platform: string | null;
+  metadataJson: Record<string, unknown> | null;
+  reviewedById: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+  employee?: {
+    id: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+    department?: { id: string; name: string } | null;
+  } | null;
+  reviewedBy?: {
+    id: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+  } | null;
+};
+
+export function getRiskReviews(params?: {
+  page?: number;
+  limit?: number;
+  employeeId?: string;
+  riskLevel?: string;
+  status?: string;
+  action?: string;
+  result?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const qs = new URLSearchParams();
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.limit) qs.set('limit', String(params.limit));
+  if (params?.employeeId) qs.set('employeeId', params.employeeId);
+  if (params?.riskLevel) qs.set('riskLevel', params.riskLevel);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.action) qs.set('action', params.action);
+  if (params?.result) qs.set('result', params.result);
+  if (params?.startDate) qs.set('startDate', params.startDate);
+  if (params?.endDate) qs.set('endDate', params.endDate);
+  const query = qs.toString() ? `?${qs}` : '';
+  return apiFetch<PaginatedResponse<AttendanceRiskReview>>(`/attendance/risk-reviews${query}`);
+}
+
+export function reviewRiskReview(id: string, status: string, reviewNote?: string) {
+  return apiFetch<AttendanceRiskReview>(`/attendance/risk-reviews/${id}/review`, {
+    method: 'PATCH',
+    body: JSON.stringify(reviewNote !== undefined ? { status, reviewNote } : { status }),
+  });
+}
+
 // ── Leave ─────────────────────────────────────────────────────────────────────
 
 export type LeaveRequest = {
