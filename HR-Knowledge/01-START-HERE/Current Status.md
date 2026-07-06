@@ -193,6 +193,8 @@ See [[Attendance Geofence]] for full architecture details.
 
 **Environment note (found during SEC-ATT-007B, not fixed — see CTO summary §8/9):** the local, git-ignored root `.env` has `NEXT_PUBLIC_API_URL=https://hr.eds-center.com/api` instead of `http://localhost:4002`. This bakes a non-localhost API host into the Dockerized web build, so browser-level (Playwright) tests of *any* data-fetching admin page fail with a CORS error in this sandbox — confirmed unrelated to any specific task by reproducing it against the pre-existing, unmodified `audit-logs` page and dashboard. Left untouched per explicit user instruction; a future task should confirm with the user whether `.env`'s `NEXT_PUBLIC_API_URL` should point at `http://localhost:4002` for local Docker verification.
 
+**HOTFIX-SEC-ATT-007B-I18N** (Admin Web only, no backend/schema change): the SEC-ATT-007B Risk Review Queue page (`/attendance/risk-reviews`) shipped with several labels, filter options, table headers, badge values, and modal/review-form text still hardcoded in English even when Thai is selected. Fully localized to `apps/web/lib/i18n.ts` (`risk_reviews_*` keys plus `riskLevelLabel`/`riskReviewStatusLabel`/`riskReviewResultLabel`/`riskReviewActionLabel` enum-label helpers); English remains fully available via the existing language switch. No raw GPS/nonce/token/password values are displayed (unchanged from SEC-ATT-007B). See [docs/CTO_SUMMARY_HOTFIX_SEC_ATT_007B_I18N.md](../../docs/CTO_SUMMARY_HOTFIX_SEC_ATT_007B_I18N.md).
+
 ## Security / Process Notes
 
 - Full security review is not required for every task.

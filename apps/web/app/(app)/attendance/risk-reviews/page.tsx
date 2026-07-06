@@ -15,6 +15,13 @@ import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
 import { useLanguage } from '@/hooks/useLanguage';
+import {
+  type Language,
+  riskLevelLabel,
+  riskReviewStatusLabel,
+  riskReviewResultLabel,
+  riskReviewActionLabel,
+} from '@/lib/i18n';
 
 const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const STATUSES = ['PENDING', 'REVIEWED', 'APPROVED', 'REJECTED', 'IGNORED'];
@@ -55,17 +62,17 @@ function formatDateTime(iso?: string | null): string {
   });
 }
 
-function riskLevelBadge(level: string) {
+function riskLevelBadge(level: string, lang: Language) {
   const cls: Record<string, string> = {
     LOW: 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300',
     MEDIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
     HIGH: 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400',
     CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400',
   };
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[level] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{level}</span>;
+  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[level] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{riskLevelLabel(level, lang)}</span>;
 }
 
-function statusBadge(status: string) {
+function statusBadge(status: string, lang: Language) {
   const cls: Record<string, string> = {
     PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
     REVIEWED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
@@ -73,16 +80,16 @@ function statusBadge(status: string) {
     REJECTED: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
     IGNORED: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400',
   };
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[status] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{status}</span>;
+  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[status] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{riskReviewStatusLabel(status, lang)}</span>;
 }
 
-function resultBadge(result: string) {
+function resultBadge(result: string, lang: Language) {
   const cls: Record<string, string> = {
     ACCEPTED: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400',
     REJECTED: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400',
     FLAGGED: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400',
   };
-  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[result] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{result}</span>;
+  return <span className={`rounded px-2 py-0.5 text-xs font-medium ${cls[result] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400'}`}>{riskReviewResultLabel(result, lang)}</span>;
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -109,7 +116,7 @@ const EMPTY_FILTERS: Filters = {
 };
 
 export default function RiskReviewsPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const user = getUser();
   const admin = isAdmin(user);
 
@@ -179,11 +186,11 @@ export default function RiskReviewsPage() {
     setReviewSubmitting(true);
     try {
       await reviewRiskReview(detail.id, reviewStatus, reviewNote.trim() || undefined);
-      setToast({ message: 'Risk review updated successfully.', type: 'success' });
+      setToast({ message: t('risk_reviews_toast_success'), type: 'success' });
       setDetail(null);
       load();
     } catch (err) {
-      setToast({ message: err instanceof ApiError ? err.message : 'Failed to update risk review.', type: 'error' });
+      setToast({ message: err instanceof ApiError ? err.message : t('risk_reviews_toast_error'), type: 'error' });
     } finally {
       setReviewSubmitting(false);
     }
@@ -209,7 +216,7 @@ export default function RiskReviewsPage() {
           {t('page_risk_reviews')}
         </h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Review clock-in/out attempts flagged or rejected by SEC-ATT-002/003/004 anti-spoofing checks
+          {t('risk_reviews_subtitle')}
         </p>
       </div>
 
@@ -220,65 +227,65 @@ export default function RiskReviewsPage() {
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Status</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_status')}</label>
             <select
               value={draft.status}
               onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}
               className={`${INPUT} w-full`}
               data-testid="filter-status"
             >
-              <option value="">All Statuses</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              <option value="">{t('risk_reviews_filter_all_statuses')}</option>
+              {STATUSES.map((s) => <option key={s} value={s}>{riskReviewStatusLabel(s, lang)}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Risk Level</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_risk_level')}</label>
             <select
               value={draft.riskLevel}
               onChange={(e) => setDraft((d) => ({ ...d, riskLevel: e.target.value }))}
               className={`${INPUT} w-full`}
               data-testid="filter-risk-level"
             >
-              <option value="">All Levels</option>
-              {RISK_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+              <option value="">{t('risk_reviews_filter_all_levels')}</option>
+              {RISK_LEVELS.map((l) => <option key={l} value={l}>{riskLevelLabel(l, lang)}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Result</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_result')}</label>
             <select
               value={draft.result}
               onChange={(e) => setDraft((d) => ({ ...d, result: e.target.value }))}
               className={`${INPUT} w-full`}
               data-testid="filter-result"
             >
-              <option value="">All Results</option>
-              {RESULTS.map((r) => <option key={r} value={r}>{r}</option>)}
+              <option value="">{t('risk_reviews_filter_all_results')}</option>
+              {RESULTS.map((r) => <option key={r} value={r}>{riskReviewResultLabel(r, lang)}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Action</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_action')}</label>
             <select
               value={draft.action}
               onChange={(e) => setDraft((d) => ({ ...d, action: e.target.value }))}
               className={`${INPUT} w-full`}
               data-testid="filter-action"
             >
-              <option value="">All Actions</option>
-              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+              <option value="">{t('risk_reviews_filter_all_actions')}</option>
+              {ACTIONS.map((a) => <option key={a} value={a}>{riskReviewActionLabel(a, lang)}</option>)}
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Employee ID</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_employee_id')}</label>
             <input
               type="text"
               value={draft.employeeId}
               onChange={(e) => setDraft((d) => ({ ...d, employeeId: e.target.value }))}
-              placeholder="Employee UUID"
+              placeholder={t('risk_reviews_filter_employee_id_placeholder')}
               className={`${INPUT} w-full`}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Date From</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_date_from')}</label>
             <input
               type="date"
               value={draft.startDate}
@@ -287,7 +294,7 @@ export default function RiskReviewsPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">Date To</label>
+            <label className="mb-1 block text-xs font-medium text-zinc-500 dark:text-zinc-400 uppercase tracking-wide">{t('risk_reviews_filter_date_to')}</label>
             <input
               type="date"
               value={draft.endDate}
@@ -299,9 +306,10 @@ export default function RiskReviewsPage() {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             type="submit"
+            data-testid="btn-apply-filters"
             className="rounded-md bg-zinc-800 dark:bg-zinc-200 px-4 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300"
           >
-            Apply Filters
+            {t('risk_reviews_apply_filters')}
           </button>
           {hasFilters && (
             <button
@@ -314,8 +322,8 @@ export default function RiskReviewsPage() {
           )}
           {listResult && (
             <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">
-              {listResult.meta.total.toLocaleString()} record{listResult.meta.total !== 1 ? 's' : ''} · page {listResult.meta.page} of {listResult.meta.totalPages}
-              {hasFilters && <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">filtered</span>}
+              {listResult.meta.total.toLocaleString()} {listResult.meta.total !== 1 ? t('risk_reviews_records_plural') : t('risk_reviews_records_singular')} · {t('risk_reviews_page_word')} {listResult.meta.page} {t('risk_reviews_of_word')} {listResult.meta.totalPages}
+              {hasFilters && <span className="ml-1 rounded bg-zinc-100 dark:bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">{t('risk_reviews_filtered_badge')}</span>}
             </span>
           )}
         </div>
@@ -333,7 +341,17 @@ export default function RiskReviewsPage() {
               <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700 text-sm">
                 <thead className="bg-zinc-50 dark:bg-zinc-900/60">
                   <tr>
-                    {['Created', 'Employee', 'Action', 'Result', 'Risk', 'Status', 'Source / Platform', 'Reviewed', ''].map((h, i) => (
+                    {[
+                      t('risk_reviews_col_created'),
+                      t('risk_reviews_col_employee'),
+                      t('risk_reviews_col_action'),
+                      t('risk_reviews_col_result'),
+                      t('risk_reviews_col_risk'),
+                      t('risk_reviews_col_status'),
+                      t('risk_reviews_col_source_platform'),
+                      t('risk_reviews_col_reviewed'),
+                      '',
+                    ].map((h, i) => (
                       <th key={i} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -352,17 +370,17 @@ export default function RiskReviewsPage() {
                           {emp?.employeeCode && <span className="block text-zinc-400 dark:text-zinc-500">{emp.employeeCode}</span>}
                         </td>
                         <td className="px-4 py-3 font-mono text-xs text-zinc-600 dark:text-zinc-400 whitespace-nowrap">
-                          {rec.action}
+                          {riskReviewActionLabel(rec.action, lang)}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">{resultBadge(rec.result)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{riskLevelBadge(rec.riskLevel)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{statusBadge(rec.status)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{resultBadge(rec.result, lang)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{riskLevelBadge(rec.riskLevel, lang)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{statusBadge(rec.status, lang)}</td>
                         <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                           {[rec.source, rec.platform].filter(Boolean).join(' / ') || '—'}
                         </td>
                         <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                           {rec.reviewedAt
-                            ? `${rec.reviewedBy ? `${rec.reviewedBy.firstName} ${rec.reviewedBy.lastName}` : 'Reviewed'} · ${formatDateTime(rec.reviewedAt)}`
+                            ? `${rec.reviewedBy ? `${rec.reviewedBy.firstName} ${rec.reviewedBy.lastName}` : t('risk_reviews_reviewed_fallback')} · ${formatDateTime(rec.reviewedAt)}`
                             : '—'}
                         </td>
                         <td className="px-4 py-3">
@@ -371,7 +389,7 @@ export default function RiskReviewsPage() {
                             onClick={() => openDetail(rec)}
                             className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-0.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700"
                           >
-                            Detail
+                            {t('risk_reviews_detail_btn')}
                           </button>
                         </td>
                       </tr>
@@ -384,7 +402,9 @@ export default function RiskReviewsPage() {
 
           {listResult.meta.totalPages > 1 && (
             <div className="mt-3 flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
-              <span>Page {listResult.meta.page} of {listResult.meta.totalPages} ({listResult.meta.total.toLocaleString()} total)</span>
+              <span>
+                {t('risk_reviews_page_word')} {listResult.meta.page} {t('risk_reviews_of_word')} {listResult.meta.totalPages} ({listResult.meta.total.toLocaleString()} {t('risk_reviews_total_word')})
+              </span>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -408,22 +428,22 @@ export default function RiskReviewsPage() {
 
       {/* Detail / review modal */}
       {detail && (
-        <Modal title="Risk Review Detail" onClose={() => setDetail(null)} wide>
+        <Modal title={t('risk_reviews_detail_title')} onClose={() => setDetail(null)} wide>
           <dl>
-            <DetailRow label="ID" value={<span className="font-mono text-xs">{detail.id}</span>} />
-            <DetailRow label="Created" value={formatDateTime(detail.createdAt)} />
+            <DetailRow label={t('risk_reviews_detail_id')} value={<span className="font-mono text-xs">{detail.id}</span>} />
+            <DetailRow label={t('risk_reviews_detail_created')} value={formatDateTime(detail.createdAt)} />
             <DetailRow
-              label="Employee"
+              label={t('risk_reviews_detail_employee')}
               value={detail.employee
                 ? `${detail.employee.firstName} ${detail.employee.lastName} (${detail.employee.employeeCode})${detail.employee.department ? ` · ${detail.employee.department.name}` : ''}`
                 : null}
             />
-            <DetailRow label="Action" value={<span className="font-mono">{detail.action}</span>} />
-            <DetailRow label="Result" value={resultBadge(detail.result)} />
-            <DetailRow label="Risk Level" value={riskLevelBadge(detail.riskLevel)} />
-            <DetailRow label="Status" value={statusBadge(detail.status)} />
+            <DetailRow label={t('risk_reviews_detail_action')} value={<span className="font-mono">{riskReviewActionLabel(detail.action, lang)}</span>} />
+            <DetailRow label={t('risk_reviews_detail_result')} value={resultBadge(detail.result, lang)} />
+            <DetailRow label={t('risk_reviews_detail_risk_level')} value={riskLevelBadge(detail.riskLevel, lang)} />
+            <DetailRow label={t('risk_reviews_detail_status')} value={statusBadge(detail.status, lang)} />
             <DetailRow
-              label="Reason Codes"
+              label={t('risk_reviews_detail_reason_codes')}
               value={detail.reasonCodes.length > 0
                 ? (
                   <div className="flex flex-wrap gap-1">
@@ -436,16 +456,16 @@ export default function RiskReviewsPage() {
                 )
                 : null}
             />
-            <DetailRow label="Source" value={detail.source} />
-            <DetailRow label="Platform" value={detail.platform} />
+            <DetailRow label={t('risk_reviews_detail_source')} value={detail.source} />
+            <DetailRow label={t('risk_reviews_detail_platform')} value={detail.platform} />
             <DetailRow
-              label="Reviewed By"
+              label={t('risk_reviews_detail_reviewed_by')}
               value={detail.reviewedBy ? `${detail.reviewedBy.firstName} ${detail.reviewedBy.lastName} (${detail.reviewedBy.employeeCode})` : null}
             />
-            <DetailRow label="Reviewed At" value={detail.reviewedAt ? formatDateTime(detail.reviewedAt) : null} />
-            <DetailRow label="Previous Note" value={detail.reviewNote} />
+            <DetailRow label={t('risk_reviews_detail_reviewed_at')} value={detail.reviewedAt ? formatDateTime(detail.reviewedAt) : null} />
+            <DetailRow label={t('risk_reviews_detail_previous_note')} value={detail.reviewNote} />
             <DetailRow
-              label="Metadata"
+              label={t('risk_reviews_detail_metadata')}
               value={detail.metadataJson != null
                 ? (
                   <pre className="mt-1 overflow-x-auto rounded bg-zinc-50 dark:bg-zinc-900 p-3 text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-all">
@@ -459,7 +479,7 @@ export default function RiskReviewsPage() {
           {/* Review action — uses the existing PATCH /attendance/risk-reviews/:id/review endpoint */}
           <div className="mt-4 border-t border-zinc-200 dark:border-zinc-700 pt-4">
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Update Review Status
+              {t('risk_reviews_update_status_label')}
             </label>
             <select
               value={reviewStatus}
@@ -467,15 +487,15 @@ export default function RiskReviewsPage() {
               className={`${INPUT} w-full`}
               data-testid="review-status-select"
             >
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STATUSES.map((s) => <option key={s} value={s}>{riskReviewStatusLabel(s, lang)}</option>)}
             </select>
             <label className="mb-1 mt-3 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Review Note (optional)
+              {t('risk_reviews_note_label')}
             </label>
             <textarea
               value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)}
-              placeholder="e.g. Confirmed with employee — GPS delay, not spoofing."
+              placeholder={t('risk_reviews_note_placeholder')}
               maxLength={500}
               rows={3}
               className="w-full resize-none rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none"
@@ -494,7 +514,7 @@ export default function RiskReviewsPage() {
                 disabled={reviewSubmitting || reviewStatus === detail.status}
                 className="rounded-md bg-zinc-800 dark:bg-zinc-200 px-4 py-2 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-50"
               >
-                {reviewSubmitting ? 'Saving…' : 'Update Review'}
+                {reviewSubmitting ? t('risk_reviews_saving') : t('risk_reviews_update_btn')}
               </button>
             </div>
           </div>

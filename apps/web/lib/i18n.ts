@@ -354,6 +354,58 @@ const translations = {
     loading_risk_reviews: 'Loading risk reviews…',
     empty_risk_reviews: 'No risk review records found.',
     error_risk_reviews: 'Failed to load risk reviews.',
+    risk_reviews_subtitle: 'Review clock-in/out attempts flagged or rejected by SEC-ATT-002/003/004 anti-spoofing checks',
+    risk_reviews_filter_status: 'Status',
+    risk_reviews_filter_all_statuses: 'All Statuses',
+    risk_reviews_filter_risk_level: 'Risk Level',
+    risk_reviews_filter_all_levels: 'All Levels',
+    risk_reviews_filter_result: 'Result',
+    risk_reviews_filter_all_results: 'All Results',
+    risk_reviews_filter_action: 'Action',
+    risk_reviews_filter_all_actions: 'All Actions',
+    risk_reviews_filter_employee_id: 'Employee ID',
+    risk_reviews_filter_employee_id_placeholder: 'Employee UUID',
+    risk_reviews_filter_date_from: 'Date From',
+    risk_reviews_filter_date_to: 'Date To',
+    risk_reviews_apply_filters: 'Apply Filters',
+    risk_reviews_filtered_badge: 'filtered',
+    risk_reviews_records_singular: 'record',
+    risk_reviews_records_plural: 'records',
+    risk_reviews_page_word: 'page',
+    risk_reviews_of_word: 'of',
+    risk_reviews_total_word: 'total',
+    risk_reviews_col_created: 'Created',
+    risk_reviews_col_employee: 'Employee',
+    risk_reviews_col_action: 'Action',
+    risk_reviews_col_result: 'Result',
+    risk_reviews_col_risk: 'Risk',
+    risk_reviews_col_status: 'Status',
+    risk_reviews_col_source_platform: 'Source / Platform',
+    risk_reviews_col_reviewed: 'Reviewed',
+    risk_reviews_detail_btn: 'Detail',
+    risk_reviews_reviewed_fallback: 'Reviewed',
+    risk_reviews_detail_title: 'Risk Review Detail',
+    risk_reviews_detail_id: 'ID',
+    risk_reviews_detail_created: 'Created',
+    risk_reviews_detail_employee: 'Employee',
+    risk_reviews_detail_action: 'Action',
+    risk_reviews_detail_result: 'Result',
+    risk_reviews_detail_risk_level: 'Risk Level',
+    risk_reviews_detail_status: 'Status',
+    risk_reviews_detail_reason_codes: 'Reason Codes',
+    risk_reviews_detail_source: 'Source',
+    risk_reviews_detail_platform: 'Platform',
+    risk_reviews_detail_reviewed_by: 'Reviewed By',
+    risk_reviews_detail_reviewed_at: 'Reviewed At',
+    risk_reviews_detail_previous_note: 'Previous Note',
+    risk_reviews_detail_metadata: 'Metadata',
+    risk_reviews_update_status_label: 'Update Review Status',
+    risk_reviews_note_label: 'Review Note (optional)',
+    risk_reviews_note_placeholder: 'e.g. Confirmed with employee — GPS delay, not spoofing.',
+    risk_reviews_update_btn: 'Update Review',
+    risk_reviews_saving: 'Saving…',
+    risk_reviews_toast_success: 'Risk review updated successfully.',
+    risk_reviews_toast_error: 'Failed to update risk review.',
 
     nav_geofence_settings: 'Geofence Settings',
     page_geofence_settings: 'Geofence Settings',
@@ -735,6 +787,58 @@ const translations = {
     loading_risk_reviews: 'กำลังโหลดรายการความเสี่ยง…',
     empty_risk_reviews: 'ไม่พบรายการความเสี่ยง',
     error_risk_reviews: 'โหลดรายการความเสี่ยงล้มเหลว',
+    risk_reviews_subtitle: 'ตรวจสอบการลงเวลาเข้า-ออกที่ถูกระบบป้องกันการปลอมแปลง SEC-ATT-002/003/004 แจ้งเตือนหรือปฏิเสธ',
+    risk_reviews_filter_status: 'สถานะ',
+    risk_reviews_filter_all_statuses: 'ทุกสถานะ',
+    risk_reviews_filter_risk_level: 'ระดับความเสี่ยง',
+    risk_reviews_filter_all_levels: 'ทุกระดับ',
+    risk_reviews_filter_result: 'ผลลัพธ์',
+    risk_reviews_filter_all_results: 'ทุกผลลัพธ์',
+    risk_reviews_filter_action: 'การดำเนินการ',
+    risk_reviews_filter_all_actions: 'ทุกการดำเนินการ',
+    risk_reviews_filter_employee_id: 'รหัสพนักงาน (UUID)',
+    risk_reviews_filter_employee_id_placeholder: 'รหัส UUID ของพนักงาน',
+    risk_reviews_filter_date_from: 'วันที่เริ่ม',
+    risk_reviews_filter_date_to: 'วันที่สิ้นสุด',
+    risk_reviews_apply_filters: 'ใช้ตัวกรอง',
+    risk_reviews_filtered_badge: 'กรองแล้ว',
+    risk_reviews_records_singular: 'รายการ',
+    risk_reviews_records_plural: 'รายการ',
+    risk_reviews_page_word: 'หน้า',
+    risk_reviews_of_word: 'จาก',
+    risk_reviews_total_word: 'ทั้งหมด',
+    risk_reviews_col_created: 'วันที่สร้าง',
+    risk_reviews_col_employee: 'พนักงาน',
+    risk_reviews_col_action: 'การดำเนินการ',
+    risk_reviews_col_result: 'ผลลัพธ์',
+    risk_reviews_col_risk: 'ความเสี่ยง',
+    risk_reviews_col_status: 'สถานะ',
+    risk_reviews_col_source_platform: 'แหล่งที่มา / แพลตฟอร์ม',
+    risk_reviews_col_reviewed: 'ตรวจสอบ',
+    risk_reviews_detail_btn: 'ดูรายละเอียด',
+    risk_reviews_reviewed_fallback: 'ตรวจสอบแล้ว',
+    risk_reviews_detail_title: 'รายละเอียดการตรวจสอบความเสี่ยง',
+    risk_reviews_detail_id: 'รหัส',
+    risk_reviews_detail_created: 'วันที่สร้าง',
+    risk_reviews_detail_employee: 'พนักงาน',
+    risk_reviews_detail_action: 'การดำเนินการ',
+    risk_reviews_detail_result: 'ผลลัพธ์',
+    risk_reviews_detail_risk_level: 'ระดับความเสี่ยง',
+    risk_reviews_detail_status: 'สถานะ',
+    risk_reviews_detail_reason_codes: 'รหัสเหตุผล',
+    risk_reviews_detail_source: 'แหล่งที่มา',
+    risk_reviews_detail_platform: 'แพลตฟอร์ม',
+    risk_reviews_detail_reviewed_by: 'ตรวจสอบโดย',
+    risk_reviews_detail_reviewed_at: 'วันที่ตรวจสอบ',
+    risk_reviews_detail_previous_note: 'บันทึกก่อนหน้า',
+    risk_reviews_detail_metadata: 'ข้อมูลเมตา',
+    risk_reviews_update_status_label: 'อัปเดตสถานะการตรวจสอบ',
+    risk_reviews_note_label: 'บันทึกการตรวจสอบ (ไม่บังคับ)',
+    risk_reviews_note_placeholder: 'เช่น ยืนยันกับพนักงานแล้ว — ความล่าช้าของ GPS ไม่ใช่การปลอมแปลง',
+    risk_reviews_update_btn: 'อัปเดตการตรวจสอบ',
+    risk_reviews_saving: 'กำลังบันทึก…',
+    risk_reviews_toast_success: 'อัปเดตการตรวจสอบความเสี่ยงสำเร็จ',
+    risk_reviews_toast_error: 'อัปเดตการตรวจสอบความเสี่ยงล้มเหลว',
 
     nav_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',
     page_geofence_settings: 'ตั้งค่าพื้นที่อนุญาต',
@@ -814,4 +918,36 @@ export function roleLabel(role: string, lang: Language): string {
     th: { SUPER_ADMIN: 'ผู้ดูแลระบบสูงสุด', HR_ADMIN: 'HR Admin', MANAGER: 'ผู้จัดการ', EMPLOYEE: 'พนักงาน' },
   };
   return map[lang][role] ?? role.replace('_', ' ');
+}
+
+export function riskLevelLabel(level: string, lang: Language): string {
+  const map: Record<Language, Record<string, string>> = {
+    en: { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High', CRITICAL: 'Critical' },
+    th: { LOW: 'ต่ำ', MEDIUM: 'ปานกลาง', HIGH: 'สูง', CRITICAL: 'วิกฤต' },
+  };
+  return map[lang][level] ?? level;
+}
+
+export function riskReviewStatusLabel(status: string, lang: Language): string {
+  const map: Record<Language, Record<string, string>> = {
+    en: { PENDING: 'Pending', REVIEWED: 'Reviewed', APPROVED: 'Approved', REJECTED: 'Rejected', IGNORED: 'Ignored' },
+    th: { PENDING: 'รอดำเนินการ', REVIEWED: 'ตรวจสอบแล้ว', APPROVED: 'อนุมัติแล้ว', REJECTED: 'ปฏิเสธแล้ว', IGNORED: 'ละเว้นแล้ว' },
+  };
+  return map[lang][status] ?? status;
+}
+
+export function riskReviewResultLabel(result: string, lang: Language): string {
+  const map: Record<Language, Record<string, string>> = {
+    en: { ACCEPTED: 'Accepted', REJECTED: 'Rejected', FLAGGED: 'Flagged' },
+    th: { ACCEPTED: 'ผ่าน', REJECTED: 'ถูกปฏิเสธ', FLAGGED: 'ถูกแจ้งเตือน' },
+  };
+  return map[lang][result] ?? result;
+}
+
+export function riskReviewActionLabel(action: string, lang: Language): string {
+  const map: Record<Language, Record<string, string>> = {
+    en: { CLOCK_IN: 'Clock In', CLOCK_OUT: 'Clock Out', OFFSITE_CLOCK_IN: 'Off-Site Clock In', OFFSITE_CLOCK_OUT: 'Off-Site Clock Out' },
+    th: { CLOCK_IN: 'เช็กอิน', CLOCK_OUT: 'เช็กเอาต์', OFFSITE_CLOCK_IN: 'เช็กอินนอกสถานที่', OFFSITE_CLOCK_OUT: 'เช็กเอาต์นอกสถานที่' },
+  };
+  return map[lang][action] ?? action;
 }

@@ -38,14 +38,17 @@ test.describe('Attendance Risk Reviews', () => {
 
   test('filter form has Apply Filters button', async ({ page }) => {
     await page.goto('/attendance/risk-reviews');
-    await expect(page.getByRole('button', { name: 'Apply Filters' })).toBeVisible();
+    // App defaults to Thai (DEFAULT_LANGUAGE in lib/i18n.ts); use the stable
+    // data-testid rather than the localized button label so the assertion
+    // doesn't depend on which language is active.
+    await expect(page.locator('[data-testid="btn-apply-filters"]')).toBeVisible();
   });
 
   test('filtering by an unused risk level shows empty state', async ({ page }) => {
     await page.goto('/attendance/risk-reviews');
     await expect(page.locator('[data-testid="loading-risk-reviews"]')).not.toBeVisible({ timeout: 15000 });
     await page.selectOption('[data-testid="filter-status"]', 'IGNORED');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.locator('[data-testid="btn-apply-filters"]').click();
     await expect(page.locator('[data-testid="loading-risk-reviews"]')).not.toBeVisible({ timeout: 15000 });
     const hasTable = await page.locator('table').first().isVisible().catch(() => false);
     const hasEmpty = await page.locator('[data-testid="empty-risk-reviews"]').isVisible().catch(() => false);
@@ -58,8 +61,10 @@ test.describe('Attendance Risk Reviews', () => {
     const hasTable = await page.locator('table').first().isVisible().catch(() => false);
     if (!hasTable) return; // Empty state — no detail to test
     await page.locator('[data-testid^="btn-detail-"]').first().click();
-    await expect(page.getByRole('heading', { name: 'Risk Review Detail' })).toBeVisible();
+    // Modal title is localized (Thai by default); assert on the review form
+    // controls instead of the heading text to stay language-independent.
     await expect(page.locator('[data-testid="review-status-select"]')).toBeVisible();
+    await expect(page.locator('[data-testid="btn-submit-review"]')).toBeVisible();
     // Never show raw GPS/nonce/token values in the rendered detail panel.
     const bodyText = await page.locator('body').innerText();
     expect(bodyText.toLowerCase()).not.toContain('"latitude"');
