@@ -55,9 +55,9 @@ function redactSensitive(value: unknown): unknown {
 
 const INPUT = 'rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400';
 
-function formatDateTime(iso?: string | null): string {
+function formatDateTime(iso: string | null | undefined, lang: Language): string {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
+  return new Date(iso).toLocaleString(lang === 'th' ? 'th-TH' : 'en-US', {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   });
 }
@@ -363,7 +363,7 @@ export default function RiskReviewsPage() {
                     return (
                       <tr key={rec.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-700/50">
                         <td className="px-4 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
-                          {formatDateTime(rec.createdAt)}
+                          {formatDateTime(rec.createdAt, lang)}
                         </td>
                         <td className="px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300 max-w-[160px] truncate" title={emp?.employeeCode}>
                           {empName}
@@ -380,7 +380,7 @@ export default function RiskReviewsPage() {
                         </td>
                         <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">
                           {rec.reviewedAt
-                            ? `${rec.reviewedBy ? `${rec.reviewedBy.firstName} ${rec.reviewedBy.lastName}` : t('risk_reviews_reviewed_fallback')} · ${formatDateTime(rec.reviewedAt)}`
+                            ? `${rec.reviewedBy ? `${rec.reviewedBy.firstName} ${rec.reviewedBy.lastName}` : t('risk_reviews_reviewed_fallback')} · ${formatDateTime(rec.reviewedAt, lang)}`
                             : '—'}
                         </td>
                         <td className="px-4 py-3">
@@ -431,7 +431,7 @@ export default function RiskReviewsPage() {
         <Modal title={t('risk_reviews_detail_title')} onClose={() => setDetail(null)} wide>
           <dl>
             <DetailRow label={t('risk_reviews_detail_id')} value={<span className="font-mono text-xs">{detail.id}</span>} />
-            <DetailRow label={t('risk_reviews_detail_created')} value={formatDateTime(detail.createdAt)} />
+            <DetailRow label={t('risk_reviews_detail_created')} value={formatDateTime(detail.createdAt, lang)} />
             <DetailRow
               label={t('risk_reviews_detail_employee')}
               value={detail.employee
@@ -462,7 +462,7 @@ export default function RiskReviewsPage() {
               label={t('risk_reviews_detail_reviewed_by')}
               value={detail.reviewedBy ? `${detail.reviewedBy.firstName} ${detail.reviewedBy.lastName} (${detail.reviewedBy.employeeCode})` : null}
             />
-            <DetailRow label={t('risk_reviews_detail_reviewed_at')} value={detail.reviewedAt ? formatDateTime(detail.reviewedAt) : null} />
+            <DetailRow label={t('risk_reviews_detail_reviewed_at')} value={detail.reviewedAt ? formatDateTime(detail.reviewedAt, lang) : null} />
             <DetailRow label={t('risk_reviews_detail_previous_note')} value={detail.reviewNote} />
             <DetailRow
               label={t('risk_reviews_detail_metadata')}
