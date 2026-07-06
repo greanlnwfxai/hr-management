@@ -151,6 +151,7 @@ const translations = {
     empty_departments: 'No departments found.',
     dept_col_name: 'Name',
     dept_col_desc: 'Description',
+    dept_col_manager: 'Manager',
     dept_col_employees: 'Employees',
     dept_col_positions: 'Positions',
     dept_col_created: 'Created',
@@ -158,6 +159,8 @@ const translations = {
     dept_modal_edit: 'Edit Department',
     dept_field_name: 'Name *',
     dept_field_desc: 'Description',
+    dept_field_manager: 'Department Manager',
+    dept_manager_none: '— No manager —',
     dept_name_placeholder: 'e.g. Engineering',
     dept_desc_placeholder: 'Optional description',
 
@@ -584,6 +587,7 @@ const translations = {
     empty_departments: 'ไม่พบแผนก',
     dept_col_name: 'ชื่อ',
     dept_col_desc: 'รายละเอียด',
+    dept_col_manager: 'ผู้จัดการ',
     dept_col_employees: 'พนักงาน',
     dept_col_positions: 'ตำแหน่ง',
     dept_col_created: 'วันที่สร้าง',
@@ -591,6 +595,8 @@ const translations = {
     dept_modal_edit: 'แก้ไขแผนก',
     dept_field_name: 'ชื่อ *',
     dept_field_desc: 'รายละเอียด',
+    dept_field_manager: 'ผู้จัดการแผนก',
+    dept_manager_none: '— ไม่มีผู้จัดการ —',
     dept_name_placeholder: 'เช่น วิศวกรรม',
     dept_desc_placeholder: 'รายละเอียด (ไม่บังคับ)',
 

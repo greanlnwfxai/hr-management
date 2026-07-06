@@ -37,10 +37,11 @@ apps/api/src/
 
 ## Completed Milestone
 - **STEP 05–15 completed** — auth, employee CRUD, Prisma schema/migrations, Docker foundation.
+- **STEP 16 — Department Module completed** — CRUD API, manager assignment, department-scoped approval RBAC (ADR-023), admin web UI, and (STEP-16B) unit/e2e test coverage plus an i18n fix for the manager field. See [docs/CTO_SUMMARY_STEP_16A_DEPARTMENT_AUDIT.md](docs/CTO_SUMMARY_STEP_16A_DEPARTMENT_AUDIT.md) and [docs/CTO_SUMMARY_STEP_16B_DEPARTMENT_TESTS_I18N.md](docs/CTO_SUMMARY_STEP_16B_DEPARTMENT_TESTS_I18N.md).
 - Commit: `feat: complete phase 1 auth employee docker foundation`
 
 ## Current Next Step
-- **STEP 16 — Department Module**
+- See `## Next Recommended Task` in [HR-Knowledge/01-START-HERE/Current Status.md](HR-Knowledge/01-START-HERE/Current%20Status.md) for the up-to-date roadmap pointer (this section is not kept in sync release-by-release).
 
 ---
 

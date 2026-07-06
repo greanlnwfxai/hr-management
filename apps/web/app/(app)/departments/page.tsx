@@ -144,7 +144,7 @@ export default function DepartmentsPage() {
         <div className="flex items-center gap-3">
           {meta && <span className="text-sm text-zinc-400 dark:text-zinc-500">{meta.total} total</span>}
           {admin && (
-            <button onClick={openCreate} className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white">
+            <button data-testid="btn-add-department" onClick={openCreate} className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white">
               {t('dept_add')}
             </button>
           )}
@@ -154,13 +154,14 @@ export default function DepartmentsPage() {
       <div className="mb-4 flex gap-3">
         <form onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); setPage(1); }} className="flex gap-2">
           <input
+            data-testid="search-input"
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder={t('dept_search_placeholder')}
             className="rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-800 px-3 py-1.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none"
           />
-          <button type="submit" className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white">{t('search')}</button>
+          <button data-testid="btn-search" type="submit" className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white">{t('search')}</button>
           {search && (
             <button type="button" onClick={() => { setSearch(''); setSearchInput(''); setPage(1); }} className="rounded-md border border-zinc-200 dark:border-zinc-600 px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('clear')}</button>
           )}
@@ -180,7 +181,7 @@ export default function DepartmentsPage() {
                 <thead className="bg-zinc-50 dark:bg-zinc-900/60">
                   <tr>
                     {[
-                      t('dept_col_name'), t('dept_col_desc'), 'ผู้จัดการ', t('dept_col_employees'),
+                      t('dept_col_name'), t('dept_col_desc'), t('dept_col_manager'), t('dept_col_employees'),
                       t('dept_col_positions'), t('dept_col_created'),
                       ...(admin ? [t('actions')] : []),
                     ].map((h) => (
@@ -202,7 +203,7 @@ export default function DepartmentsPage() {
                       {admin && (
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
-                            <button onClick={() => openEdit(dept)} className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('edit')}</button>
+                            <button data-testid="btn-edit-department" onClick={() => openEdit(dept)} className="rounded border border-zinc-200 dark:border-zinc-600 px-2 py-1 text-xs text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">{t('edit')}</button>
                             <button
                               onClick={() => handleDelete(dept)}
                               disabled={dept._count.employees > 0 || dept._count.positions > 0}
@@ -243,9 +244,9 @@ export default function DepartmentsPage() {
             <Field label={t('dept_field_desc')}>
               <textarea rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className={INPUT + ' resize-none'} placeholder={t('dept_desc_placeholder')} />
             </Field>
-            <Field label="ผู้จัดการแผนก">
+            <Field label={t('dept_field_manager')}>
               <select value={form.managerId} onChange={(e) => setForm({ ...form, managerId: e.target.value })} className={INPUT}>
-                <option value="">— ไม่มีผู้จัดการ —</option>
+                <option value="">{t('dept_manager_none')}</option>
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.id}>
                     {emp.firstName} {emp.lastName} ({emp.employeeCode})
