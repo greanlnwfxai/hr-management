@@ -11,8 +11,13 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
+import { useApprovedLeave } from '../src/hooks/useApprovedLeave';
+import { findApprovedLeaveForDate } from '../src/utils/leaveOverlay';
+import { leaveTypeLabel, leaveStatusLabel } from '../src/hooks/useLeave';
 import type { AttendanceRecord, AttendanceStatus } from '../src/api/types';
 import { MobileBottomNav, MobileScreenHeader } from '../src/components';
+
+const LEAVE_DOT_COLOR = '#1a56db';
 
 const THAI_DAY_NAMES = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 const THAI_MONTH_ABBR = [
@@ -54,6 +59,7 @@ export default function CalendarScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
   const { loadState, today, history, refresh } = useAttendance();
+  const { loadState: leaveLoadState, approvedLeave, refresh: refreshLeave } = useApprovedLeave();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) router.replace('/login');
@@ -95,10 +101,22 @@ export default function CalendarScreen() {
     dotMap.set(todayDate, dotColor(today.status));
   }
 
+  // Approved leave takes precedence over the normal workday/weekend and
+  // attendance-derived dot for every date it covers.
+  const leaveMap = new Map<number, ReturnType<typeof findApprovedLeaveForDate>>();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const leave = findApprovedLeaveForDate(approvedLeave, new Date(year, month, d));
+    if (leave) {
+      leaveMap.set(d, leave);
+      dotMap.set(d, LEAVE_DOT_COLOR);
+    }
+  }
+
   const selectedRecord = recordMap.get(selectedDay) ?? null;
+  const selectedLeave = leaveMap.get(selectedDay) ?? null;
   const selectedDow = new Date(year, month, selectedDay).getDay();
   const isSelectedWeekend = selectedDow === 0 || selectedDow === 6;
-  const isRefreshing = loadState === 'loading';
+  const isRefreshing = loadState === 'loading' || leaveLoadState === 'loading';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
@@ -122,7 +140,11 @@ export default function CalendarScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => { refresh(); refreshLeave(); }}
+            tintColor="#1a56db"
+          />
         }
       >
         {/* Month header */}
@@ -210,10 +232,18 @@ export default function CalendarScreen() {
                 <Text style={styles.cardHeaderDay}>
                   {selectedDay === todayDate ? 'วันนี้' : THAI_DAY_NAMES[selectedDow]}
                   {' · '}
-                  {isSelectedWeekend ? 'วันหยุดสุดสัปดาห์' : 'วันทำงาน'}
+                  {selectedLeave
+                    ? leaveTypeLabel(selectedLeave.leaveType)
+                    : isSelectedWeekend ? 'วันหยุดสุดสัปดาห์' : 'วันทำงาน'}
                 </Text>
               </View>
-              {selectedRecord && (
+              {selectedLeave ? (
+                <View style={[styles.statusBadge, { backgroundColor: statusBg('PRESENT') }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusFg('PRESENT') }]}>
+                    {leaveStatusLabel(selectedLeave.status)}
+                  </Text>
+                </View>
+              ) : selectedRecord && (
                 <View style={[styles.statusBadge, { backgroundColor: statusBg(selectedRecord.status) }]}>
                   <Text style={[styles.statusBadgeText, { color: statusFg(selectedRecord.status) }]}>
                     {statusLabel(selectedRecord.status)}
@@ -225,7 +255,13 @@ export default function CalendarScreen() {
             <View style={styles.cardDivider} />
 
             {/* Card body */}
-            {isSelectedWeekend && !selectedRecord ? (
+            {selectedLeave ? (
+              <View style={styles.cardEmpty}>
+                <Text style={styles.cardEmptyText}>
+                  {`${leaveTypeLabel(selectedLeave.leaveType)} · ${leaveStatusLabel(selectedLeave.status)}`}
+                </Text>
+              </View>
+            ) : isSelectedWeekend && !selectedRecord ? (
               <View style={styles.cardEmpty}>
                 <Text style={styles.cardEmptyText}>ไม่มีข้อมูลการลงเวลา</Text>
               </View>

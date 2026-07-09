@@ -17,9 +17,11 @@ import { useAttendance } from '../src/hooks/useAttendance';
 import { useHomeSummaries } from '../src/hooks/useHomeSummaries';
 import { getGeofenceLocation, getTodayOffSiteStatus } from '../src/api/client';
 import { roleLabel } from '../src/utils/roles';
+import { findApprovedLeaveForDate } from '../src/utils/leaveOverlay';
+import { leaveTypeLabel, leaveStatusLabel } from '../src/hooks/useLeave';
 import { GeofenceMapModal, MobileBottomNav } from '../src/components';
 import type { ClockAction } from '../src/components/GeofenceMapModal';
-import type { OffSiteRequestRecord } from '../src/api/types';
+import type { LeaveRequestRecord, OffSiteRequestRecord } from '../src/api/types';
 
 const THAI_DAY_SHORT = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
@@ -49,15 +51,20 @@ function TodayScheduleCard({
   onPress,
   checkIn,
   checkOut,
+  approvedLeave,
 }: {
   onPress: () => void;
   checkIn?: string | null;
   checkOut?: string | null;
+  approvedLeave?: LeaveRequestRecord | null;
 }) {
   const now = new Date();
   const day = now.getDate();
   const dow = now.getDay();
   const isWeekend = dow === 0 || dow === 6;
+  const dayTypeLabel = approvedLeave
+    ? leaveTypeLabel(approvedLeave.leaveType)
+    : isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน';
   return (
     <Pressable
       style={({ pressed }) => [styles.scheduleCard, pressed && { opacity: 0.82 }]}
@@ -69,13 +76,17 @@ function TodayScheduleCard({
         <Text style={styles.scheduleDayShort}>{THAI_DAY_SHORT[dow]}</Text>
       </View>
       <View style={styles.scheduleBody}>
-        <Text style={styles.scheduleDayType}>
-          {isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน'}
-        </Text>
-        <Text style={styles.scheduleTime}>08:30–17:30</Text>
-        <Text style={styles.scheduleStatus}>
-          {`เข้า ${formatTimeStr(checkIn)}  ออก ${formatTimeStr(checkOut)}`}
-        </Text>
+        <Text style={styles.scheduleDayType}>{dayTypeLabel}</Text>
+        {approvedLeave ? (
+          <Text style={styles.scheduleTime}>{leaveStatusLabel(approvedLeave.status)}</Text>
+        ) : (
+          <>
+            <Text style={styles.scheduleTime}>08:30–17:30</Text>
+            <Text style={styles.scheduleStatus}>
+              {`เข้า ${formatTimeStr(checkIn)}  ออก ${formatTimeStr(checkOut)}`}
+            </Text>
+          </>
+        )}
       </View>
       <Text style={styles.scheduleArrow}>›</Text>
     </Pressable>
@@ -243,6 +254,7 @@ export default function HomeScreen() {
     leaveCards,
     overtime,
     monthAttendance,
+    approvedLeave,
     refresh: summaryRefresh,
   } = useHomeSummaries();
   const [mapModalVisible, setMapModalVisible] = useState(false);
@@ -330,6 +342,11 @@ export default function HomeScreen() {
   const identityLine = [profile?.username ? `@${profile.username}` : null, roleLabel(role), department]
     .filter(Boolean)
     .join(' · ');
+
+  const todayLeave = useMemo(
+    () => findApprovedLeaveForDate(approvedLeave, new Date()),
+    [approvedLeave],
+  );
 
   // Monthly attendance stats computed from the full current-month history.
   const stats = useMemo(() => {
@@ -611,6 +628,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/attendance')}
               checkIn={today?.checkIn}
               checkOut={today?.checkOut}
+              approvedLeave={todayLeave}
             />
             <Text style={styles.calSubtitle}>รายการคำขอ</Text>
             <Pressable

@@ -38,6 +38,7 @@ export interface HomeSummaryState {
   leaveCards: HomeLeaveSummaryCard[];
   overtime: HomeOvertimeSummary;
   monthAttendance: AttendanceRecord[];
+  approvedLeave: LeaveRequestRecord[];
   error: string | null;
   refresh: () => void;
 }
@@ -53,6 +54,7 @@ export function useHomeSummaries(): HomeSummaryState {
     totalWorkMinutes: 0,
   });
   const [monthAttendance, setMonthAttendance] = useState<AttendanceRecord[]>([]);
+  const [approvedLeave, setApprovedLeave] = useState<LeaveRequestRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const handleSessionExpired = useCallback(async () => {
@@ -65,6 +67,7 @@ export function useHomeSummaries(): HomeSummaryState {
       setLeaveCards(defaultLeaveCards());
       setOvertime({ overtimeMinutes: 0, totalWorkMinutes: 0 });
       setMonthAttendance([]);
+      setApprovedLeave([]);
       setLoadState('idle');
       return;
     }
@@ -91,6 +94,7 @@ export function useHomeSummaries(): HomeSummaryState {
 
       setLeaveCards(buildLeaveCards(balances, approvedLeave, currentYear, yearStart, yearEnd));
       setMonthAttendance(attendance);
+      setApprovedLeave(approvedLeave);
       setOvertime(buildOvertimeSummary(attendance));
       setLoadState('success');
     } catch (err) {
@@ -101,6 +105,7 @@ export function useHomeSummaries(): HomeSummaryState {
       setLeaveCards(defaultLeaveCards());
       setOvertime({ overtimeMinutes: 0, totalWorkMinutes: 0 });
       setMonthAttendance([]);
+      setApprovedLeave([]);
       setError(err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลสรุปได้');
       setLoadState('error');
     }
@@ -115,6 +120,7 @@ export function useHomeSummaries(): HomeSummaryState {
     leaveCards,
     overtime,
     monthAttendance,
+    approvedLeave,
     error,
     refresh: fetchData,
   };
