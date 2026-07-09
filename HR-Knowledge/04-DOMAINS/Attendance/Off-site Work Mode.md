@@ -141,6 +141,8 @@ Off-site request management is at `/offsite` in the web admin. Supports list vie
 
 Employees submit off-site requests from the `offsite-request` screen. The `GeofenceMapModal` component shows a map view during off-site clock-in for location awareness.
 
+Off-site **clock-in/clock-out** (as opposed to the pre-approval request above) are separate STEP Connect screens: `apps/mobile/app/offsite-checkin.tsx` (GPS, required `workLocationName` + `reason`, optional `note`) and `apps/mobile/app/offsite-checkout.tsx` (GPS, required `note` as of REQ-002E-F1). Both screens submit through the shared `apps/mobile/src/hooks/useOffsiteAttendance.ts` hook, which is the single place that attaches `capturedAt`/`timezoneOffsetMinutes`/`platform`/the SEC-ATT-004 replay nonce and enforces the client-side GPS-accuracy guard (rejects >100m fixes before they leave the device, mirroring the server DTO's `@Max(100)`). Validation and payload-building are pure functions in `apps/mobile/src/utils/offsiteAttendance.ts`, unit-tested independently of the screens. See [docs/CTO_SUMMARY_REQ_002E.md](../../../docs/CTO_SUMMARY_REQ_002E.md) (initial UI) and [docs/CTO_SUMMARY_REQ_002E_F1_OFFSITE_SUBMIT_NORMALIZATION.md](../../../docs/CTO_SUMMARY_REQ_002E_F1_OFFSITE_SUBMIT_NORMALIZATION.md) (submit-path normalization + required check-out note).
+
 ---
 
 ## Known Limitations

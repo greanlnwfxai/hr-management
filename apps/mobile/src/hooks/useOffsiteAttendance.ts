@@ -6,8 +6,15 @@ import type { AttendanceRecord } from '../api/types';
 import { useAuth } from '../auth/useAuth';
 import { useDeviceLocation, type DeviceLocation } from './useDeviceLocation';
 import { getTimezoneOffsetMinutes } from '../utils/timezone';
+import { buildOffsiteClockInPayload, buildOffsiteClockOutPayload } from '../utils/offsiteAttendance';
 
 export type OffsiteClockState = 'idle' | 'locating' | 'submitting' | 'success' | 'error';
+
+// Mirrors the server DTO's @Max(100) accuracy constraint (offsite-clock-in.dto.ts /
+// offsite-clock-out.dto.ts). Checked client-side too so a low-accuracy fix never
+// leaves the device — avoids a wasted round trip and keeps it out of the
+// attendance service entirely (it would 400 at the ValidationPipe either way).
+const MAX_ACCURACY_METERS = 100;
 
 export interface OffsiteAttendanceState {
   clockInState: OffsiteClockState;
@@ -19,7 +26,8 @@ export interface OffsiteAttendanceState {
     reason: string,
     note?: string,
   ) => Promise<AttendanceRecord | null>;
-  performOffsiteClockOut: (note?: string) => Promise<AttendanceRecord | null>;
+  // note is required every time — off-site check-out must always carry a reason.
+  performOffsiteClockOut: (note: string) => Promise<AttendanceRecord | null>;
   resetClockState: () => void;
 }
 
@@ -70,6 +78,16 @@ export function useOffsiteAttendance(
       return null;
     }
 
+    // Reject a low-accuracy fix before it ever reaches the server — the DTO's
+    // @Max(100) would 400 it anyway, but blocking here avoids a wasted round
+    // trip and keeps a bad reading from touching the attendance service at all.
+    if (location.accuracy > MAX_ACCURACY_METERS) {
+      if (!mountedRef.current) return null;
+      setClockActionError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่');
+      setClockInState('error');
+      return null;
+    }
+
     if (!mountedRef.current) return null;
     setClockInState('submitting');
 
@@ -88,14 +106,17 @@ export function useOffsiteAttendance(
     }
 
     try {
-      const record = await clockInOffsite(token, {
-        ...location,
-        workLocationName,
-        reason,
-        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
-        ...(note ? { note } : {}),
-        ...(nonce ? { nonce } : {}),
-      });
+      const record = await clockInOffsite(
+        token,
+        buildOffsiteClockInPayload(
+          location,
+          workLocationName,
+          reason,
+          getTimezoneOffsetMinutes(),
+          note,
+          nonce,
+        ),
+      );
       if (!mountedRef.current) return null;
       setClockActionMessage('ลงเวลาเข้า (นอกสถานที่) สำเร็จ');
       setClockInState('success');
@@ -114,7 +135,7 @@ export function useOffsiteAttendance(
   }, [token, clockInState, getLocation, handleSessionExpired, onSuccess]);
 
   const performOffsiteClockOut = useCallback(async (
-    note?: string,
+    note: string,
   ): Promise<AttendanceRecord | null> => {
     if (!token) return null;
     if (clockOutState === 'locating' || clockOutState === 'submitting') return null;
@@ -135,6 +156,13 @@ export function useOffsiteAttendance(
       return null;
     }
 
+    if (location.accuracy > MAX_ACCURACY_METERS) {
+      if (!mountedRef.current) return null;
+      setClockActionError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่');
+      setClockOutState('error');
+      return null;
+    }
+
     if (!mountedRef.current) return null;
     setClockOutState('submitting');
 
@@ -151,12 +179,10 @@ export function useOffsiteAttendance(
     }
 
     try {
-      const record = await clockOutOffsite(token, {
-        ...location,
-        timezoneOffsetMinutes: getTimezoneOffsetMinutes(),
-        ...(note ? { note } : {}),
-        ...(nonce ? { nonce } : {}),
-      });
+      const record = await clockOutOffsite(
+        token,
+        buildOffsiteClockOutPayload(location, getTimezoneOffsetMinutes(), note, nonce),
+      );
       if (!mountedRef.current) return null;
       setClockActionMessage('ลงเวลาออก (นอกสถานที่) สำเร็จ');
       setClockOutState('success');

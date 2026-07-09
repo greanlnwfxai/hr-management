@@ -13,10 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useDeviceLocation } from '../src/hooks/useDeviceLocation';
-import { clockInOffsite } from '../src/api/client';
-import { SessionExpiredError } from '../src/api/types';
+import { useOffsiteAttendance } from '../src/hooks/useOffsiteAttendance';
 import type { OffSiteRequestRecord } from '../src/api/types';
 import { getTodayOffSiteStatus } from '../src/api/client';
+import { validateWorkLocationName, validateOffsiteReason } from '../src/utils/offsiteAttendance';
 
 // ─── GPS accuracy bucket ──────────────────────────────────────────────────────
 
@@ -46,21 +46,29 @@ function gpsStatusColor(status: GpsStatus): string {
 
 export default function OffsiteCheckinScreen() {
   const router = useRouter();
-  const { token, isAuthenticated, isLoading, signOut } = useAuth();
+  const { token, isAuthenticated, isLoading } = useAuth();
   const { refresh: refreshAttendance } = useAttendance();
   const { getLocation } = useDeviceLocation();
+  const mountedRef = useRef(true);
 
   const [workLocationName, setWorkLocationName] = useState('');
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
   const [locationNameError, setLocationNameError] = useState('');
   const [reasonError, setReasonError] = useState('');
-  const [submitError, setSubmitError] = useState('');
+  // GPS preview pill shown on mount, purely informational — the actual submit
+  // always re-acquires a fresh location via the shared useOffsiteAttendance hook.
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>('loading');
-  const [location, setLocation] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [todayOffSite, setTodayOffSite] = useState<OffSiteRequestRecord | null>(null);
-  const mountedRef = useRef(true);
+
+  const {
+    clockInState,
+    clockActionError,
+    performOffsiteClockIn,
+  } = useOffsiteAttendance(() => {
+    refreshAttendance();
+    if (mountedRef.current) router.back();
+  });
 
   useEffect(() => {
     mountedRef.current = true;
@@ -79,14 +87,13 @@ export default function OffsiteCheckinScreen() {
       .catch(() => { /* non-critical */ });
   }, [token]);
 
-  // Acquire GPS on mount
+  // Acquire GPS on mount (preview only)
   useEffect(() => {
     let cancelled = false;
     setGpsStatus('loading');
     getLocation()
       .then((loc) => {
         if (cancelled) return;
-        setLocation(loc);
         setGpsStatus(loc.accuracy > 100 ? 'low_accuracy' : 'ready');
       })
       .catch((err: Error) => {
@@ -102,85 +109,24 @@ export default function OffsiteCheckinScreen() {
   }, []);
 
   const isPlanned = todayOffSite?.status === 'APPROVED';
-  const canSubmit = gpsStatus === 'ready' &&
+  const submitting = clockInState === 'locating' || clockInState === 'submitting';
+  const canSubmit = !submitting &&
     workLocationName.trim().length >= 1 &&
-    reason.trim().length >= 3 &&
-    !submitting;
+    reason.trim().length >= 3;
 
   function validateFields(): boolean {
-    let ok = true;
-    if (!workLocationName.trim()) {
-      setLocationNameError('กรุณาระบุสถานที่ทำงาน');
-      ok = false;
-    } else {
-      setLocationNameError('');
-    }
-    if (reason.trim().length < 3) {
-      setReasonError('กรุณาระบุเหตุผล (อย่างน้อย 3 ตัวอักษร)');
-      ok = false;
-    } else {
-      setReasonError('');
-    }
-    return ok;
+    const locErr = validateWorkLocationName(workLocationName);
+    setLocationNameError(locErr);
+    const reasonErr = validateOffsiteReason(reason);
+    setReasonError(reasonErr);
+    return !locErr && !reasonErr;
   }
 
   const handleSubmit = useCallback(async () => {
-    if (!token || submitting) return;
+    if (submitting) return;
     if (!validateFields()) return;
-
-    setSubmitError('');
-    setSubmitting(true);
-
-    // Re-acquire fresh GPS at submit time — never use the mount-time cached reading
-    setGpsStatus('loading');
-    let freshLocation: { latitude: number; longitude: number; accuracy: number };
-    try {
-      freshLocation = await getLocation();
-    } catch (err) {
-      if (!mountedRef.current) return;
-      const msg = err instanceof Error ? err.message : '';
-      if (msg.includes('อนุญาต') || msg.includes('permission') || msg.includes('denied')) {
-        setGpsStatus('denied');
-      } else {
-        setGpsStatus('error');
-      }
-      setSubmitting(false);
-      return;
-    }
-
-    if (freshLocation.accuracy > 100) {
-      if (!mountedRef.current) return;
-      setLocation(freshLocation);
-      setGpsStatus('low_accuracy');
-      setSubmitError('ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่');
-      setSubmitting(false);
-      return;
-    }
-
-    setLocation(freshLocation);
-    setGpsStatus('ready');
-
-    try {
-      await clockInOffsite(token, {
-        ...freshLocation,
-        workLocationName: workLocationName.trim(),
-        reason: reason.trim(),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      });
-      refreshAttendance();
-      if (mountedRef.current) router.back();
-    } catch (err) {
-      if (err instanceof SessionExpiredError) {
-        await signOut();
-        router.replace('/login');
-        return;
-      }
-      if (mountedRef.current) {
-        setSubmitError(translateError(err instanceof Error ? err.message : ''));
-        setSubmitting(false);
-      }
-    }
-  }, [token, submitting, workLocationName, reason, note, getLocation, refreshAttendance, signOut, router]);
+    await performOffsiteClockIn(workLocationName.trim(), reason.trim(), note.trim() || undefined);
+  }, [submitting, workLocationName, reason, note, performOffsiteClockIn]);
 
   return (
     <SafeAreaView style={s.root} edges={['top', 'left', 'right']}>
@@ -275,9 +221,9 @@ export default function OffsiteCheckinScreen() {
         </View>
 
         {/* Submit error */}
-        {!!submitError && (
+        {!!clockActionError && (
           <View style={s.errorBox}>
-            <Text style={s.errorText}>{submitError}</Text>
+            <Text style={s.errorText}>{clockActionError}</Text>
           </View>
         )}
 
@@ -305,16 +251,6 @@ export default function OffsiteCheckinScreen() {
       </ScrollView>
     </SafeAreaView>
   );
-}
-
-function translateError(msg: string): string {
-  if (msg.includes('accuracy')) return 'ความแม่นยำ GPS ต่ำเกินไป กรุณาเดินออกนอกอาคารหรือลองใหม่';
-  if (msg.includes('Already clocked in')) return 'ลงเวลาเข้าไปแล้วสำหรับวันนี้';
-  if (msg.includes('No employee profile')) return 'ไม่พบข้อมูลพนักงานที่เชื่อมกับบัญชีนี้';
-  if (msg.includes('workLocationName')) return 'กรุณาระบุสถานที่ทำงาน';
-  if (msg.includes('reason')) return 'กรุณาระบุเหตุผล (อย่างน้อย 3 ตัวอักษร)';
-  if (msg.includes('ไม่สามารถเชื่อมต่อ')) return 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
-  return msg || 'ไม่สามารถดำเนินการได้ กรุณาลองใหม่อีกครั้ง';
 }
 
 const TEAL = '#0d9488';
