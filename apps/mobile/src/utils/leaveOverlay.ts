@@ -1,4 +1,5 @@
 import type { LeaveRequestRecord } from '../api/types';
+import { leaveTypeLabel } from '../hooks/useLeave';
 
 function parseDateOnly(value: string): Date {
   const datePart = value.includes('T') ? value.split('T')[0] : value;
@@ -26,4 +27,16 @@ export function findApprovedLeaveForDate(
   }
 
   return null;
+}
+
+/**
+ * Resolves the day-type label to display for a schedule/attendance header:
+ * an approved leave's type always takes precedence over the normal
+ * workday/weekend fallback label passed by the caller.
+ */
+export function resolveDayTypeLabel(
+  approvedLeave: LeaveRequestRecord | null,
+  fallbackLabel: string,
+): string {
+  return approvedLeave ? leaveTypeLabel(approvedLeave.leaveType) : fallbackLabel;
 }

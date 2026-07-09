@@ -1,4 +1,4 @@
-import { findApprovedLeaveForDate } from './leaveOverlay';
+import { findApprovedLeaveForDate, resolveDayTypeLabel } from './leaveOverlay';
 import type { LeaveRequestRecord } from '../api/types';
 
 const employee = { id: 'emp-1', employeeCode: 'E001', firstName: 'Somchai', lastName: 'Test' };
@@ -58,5 +58,28 @@ describe('findApprovedLeaveForDate', () => {
 
   it('returns null for an empty leave list', () => {
     expect(findApprovedLeaveForDate([], new Date(2026, 6, 9))).toBeNull();
+  });
+});
+
+describe('resolveDayTypeLabel', () => {
+  // The attendance tab ("ลงเวลา") used to compute its day-type label from
+  // weekday/weekend only, ignoring approved leave — so 9 ก.ค. 2569 showed
+  // "วันทำงาน" even though the home screen correctly showed "ลาพักร้อน" for the
+  // same date. This covers the shared label-resolution logic both screens now
+  // call; it does not by itself guard the call sites wiring it into each screen.
+  it('shows the leave type label when an approved leave covers the date, overriding the workday fallback', () => {
+    const leave = makeLeave({ leaveType: 'VACATION', status: 'APPROVED' });
+    expect(resolveDayTypeLabel(leave, 'วันทำงาน')).toBe('ลาพักร้อน');
+  });
+
+  it('falls back to the caller-provided workday/weekend label when there is no approved leave', () => {
+    expect(resolveDayTypeLabel(null, 'วันทำงาน')).toBe('วันทำงาน');
+    expect(resolveDayTypeLabel(null, 'วันหยุด')).toBe('วันหยุด');
+  });
+
+  it('uses the caller-specific fallback label even when it differs between screens', () => {
+    // home.tsx uses "วันหยุดประจำรอบ" for weekends; attendance.tsx uses "วันหยุด".
+    // The resolver must not hardcode either — it only overrides when leave is present.
+    expect(resolveDayTypeLabel(null, 'วันหยุดประจำรอบ')).toBe('วันหยุดประจำรอบ');
   });
 });

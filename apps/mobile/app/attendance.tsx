@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,7 +13,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/auth/useAuth';
 import { useAttendance } from '../src/hooks/useAttendance';
 import { useOffSiteRequests } from '../src/hooks/useOffSiteRequests';
-import type { AttendanceRecord, AttendanceReviewStatus, AttendanceStatus, OffSiteRequestRecord } from '../src/api/types';
+import { useApprovedLeave } from '../src/hooks/useApprovedLeave';
+import { findApprovedLeaveForDate, resolveDayTypeLabel } from '../src/utils/leaveOverlay';
+import { leaveStatusLabel } from '../src/hooks/useLeave';
+import type { AttendanceRecord, AttendanceReviewStatus, AttendanceStatus, LeaveRequestRecord, OffSiteRequestRecord } from '../src/api/types';
 import { MobileBottomNav } from '../src/components';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -80,15 +83,17 @@ function reviewStatusColor(status: AttendanceReviewStatus): string {
 
 function AttendanceHeader({
   today,
+  approvedLeave,
   onProfilePress,
 }: {
   today: AttendanceRecord | null;
+  approvedLeave?: LeaveRequestRecord | null;
   onProfilePress: () => void;
 }) {
   const now = new Date();
   const dow = now.getDay();
   const isWeekend = dow === 0 || dow === 6;
-  const dayType = isWeekend ? 'วันหยุด' : 'วันทำงาน';
+  const dayType = resolveDayTypeLabel(approvedLeave ?? null, isWeekend ? 'วันหยุด' : 'วันทำงาน');
   const fullDate = `${THAI_DAY_FULL[dow]} ${now.getDate()} ${THAI_MONTH_FULL[now.getMonth()]} ${now.getFullYear() + 543}`;
 
   const inTime = formatTime(today?.checkIn ?? null);
@@ -152,6 +157,9 @@ function AttendanceHeader({
 
       {/* Day type + date */}
       <Text style={hdr.dayType}>{dayType}</Text>
+      {approvedLeave ? (
+        <Text style={hdr.leaveStatus}>{leaveStatusLabel(approvedLeave.status)}</Text>
+      ) : null}
       <Text style={hdr.fullDate}>{fullDate}</Text>
       <View style={hdr.summaryRow}>
         <View style={hdr.summaryPill}>
@@ -272,8 +280,14 @@ export default function AttendanceScreen() {
     refresh,
   } = useAttendance();
   const { requests: offSiteRequests, loadState: offSiteLoadState, refresh: refreshOffSite } = useOffSiteRequests();
+  const { approvedLeave, refresh: refreshLeave } = useApprovedLeave();
 
   const [activeTab, setActiveTab] = useState<'time' | 'request'>('time');
+
+  const todayLeave = useMemo(
+    () => findApprovedLeaveForDate(approvedLeave, new Date()),
+    [approvedLeave],
+  );
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -291,7 +305,7 @@ export default function AttendanceScreen() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-      <AttendanceHeader today={today} onProfilePress={() => router.push('/profile')} />
+      <AttendanceHeader today={today} approvedLeave={todayLeave} onProfilePress={() => router.push('/profile')} />
 
       {/* ── Tab bar ─────────────────────────────────────────────────── */}
       <View style={styles.tabBar}>
@@ -322,7 +336,11 @@ export default function AttendanceScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#1a56db" />
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => { refresh(); refreshLeave(); }}
+            tintColor="#1a56db"
+          />
         }
       >
         {activeTab === 'time' && (
@@ -525,6 +543,11 @@ const hdr = StyleSheet.create({
     fontWeight: '700',
     color: '#ffffff',
     marginTop: 4,
+  },
+  leaveStatus: {
+    fontSize: 12,
+    color: '#bfdbfe',
+    marginTop: -2,
   },
   fullDate: {
     fontSize: 13,

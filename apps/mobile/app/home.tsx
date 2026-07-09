@@ -17,8 +17,8 @@ import { useAttendance } from '../src/hooks/useAttendance';
 import { useHomeSummaries } from '../src/hooks/useHomeSummaries';
 import { getGeofenceLocation, getTodayOffSiteStatus } from '../src/api/client';
 import { roleLabel } from '../src/utils/roles';
-import { findApprovedLeaveForDate } from '../src/utils/leaveOverlay';
-import { leaveTypeLabel, leaveStatusLabel } from '../src/hooks/useLeave';
+import { findApprovedLeaveForDate, resolveDayTypeLabel } from '../src/utils/leaveOverlay';
+import { leaveStatusLabel } from '../src/hooks/useLeave';
 import { GeofenceMapModal, MobileBottomNav } from '../src/components';
 import type { ClockAction } from '../src/components/GeofenceMapModal';
 import type { LeaveRequestRecord, OffSiteRequestRecord } from '../src/api/types';
@@ -62,9 +62,7 @@ function TodayScheduleCard({
   const day = now.getDate();
   const dow = now.getDay();
   const isWeekend = dow === 0 || dow === 6;
-  const dayTypeLabel = approvedLeave
-    ? leaveTypeLabel(approvedLeave.leaveType)
-    : isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน';
+  const dayTypeLabel = resolveDayTypeLabel(approvedLeave ?? null, isWeekend ? 'วันหยุดประจำรอบ' : 'วันทำงาน');
   return (
     <Pressable
       style={({ pressed }) => [styles.scheduleCard, pressed && { opacity: 0.82 }]}
