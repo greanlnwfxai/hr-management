@@ -20,9 +20,9 @@ Tracks daily employee attendance via clock-in and clock-out. Evaluates whether a
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All attendance records (paginated) |
 | GET | /attendance/:id | ✅ | Any (owner or admin) | Single attendance record |
 | POST | /attendance/offsite/mixed-checkout-exception | ✅ | Any | Submit mixed checkout exception (ONSITE check-in + off-site check-out) |
-| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN | List pending off-site / mixed checkout records for review |
-| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve pending record |
-| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject pending record (reason required) |
+| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | List pending off-site / mixed checkout records for review (MANAGER: own managed department only) |
+| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Approve pending record (MANAGER: own managed department, cannot self-review) |
+| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Reject pending record (reason required; MANAGER: own managed department, cannot self-review) |
 | GET | /attendance/risk-reviews | ✅ | SUPER_ADMIN, HR_ADMIN | List privacy-safe attendance risk-review rows (SEC-ATT-007A; MANAGER deferred) |
 | GET | /attendance/risk-reviews/:id | ✅ | SUPER_ADMIN, HR_ADMIN | Single risk-review row |
 | PATCH | /attendance/risk-reviews/:id/review | ✅ | SUPER_ADMIN, HR_ADMIN | Set status/reviewNote on a risk-review row (administrative status tracking only) |
@@ -37,6 +37,17 @@ Admin Web page at `apps/web/app/(app)/attendance/risk-reviews/page.tsx`
 riskLevel/result/action/employeeId/date range) + a detail/review modal that
 calls the `PATCH .../:id/review` endpoint. No backend/schema change; see
 [docs/CTO_SUMMARY_SEC_ATT_007B.md](../../../docs/CTO_SUMMARY_SEC_ATT_007B.md).
+
+The `offsite-review` endpoints above have an Admin Web page at
+`apps/web/app/(app)/attendance/offsite-review/page.tsx` (`/attendance/offsite-review`,
+visible in nav for SUPER_ADMIN, HR_ADMIN, and MANAGER) — a card list filterable by
+review status/date range/employee UUID, with approve/reject modals (reject requires
+a ≥3-character reason) that call the endpoints above. Cards show only
+distance-from-company and GPS-accuracy metrics (never raw latitude/longitude), and
+distinguish true off-site records from mixed-checkout-exception records
+(`attendanceSource=COMPANY_GEOFENCE` + `reviewStatus` set) via a badge. Fully
+localized (Thai/English) via `lib/i18n.ts`; see
+[docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md](../../../docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md).
 
 ## Web vs. Mobile Clock Channel (v1.2.66)
 
