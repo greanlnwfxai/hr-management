@@ -455,6 +455,12 @@ export type OffsiteReviewRecord = {
     department?: { id: string; name: string } | null;
     position?: { id: string; title: string } | null;
   } | null;
+  reviewedBy?: {
+    id: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+  } | null;
   createdAt: string;
   updatedAt: string;
 };

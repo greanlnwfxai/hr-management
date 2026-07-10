@@ -148,9 +148,9 @@ A separate page, `/attendance/offsite-review` (`apps/web/app/(app)/attendance/of
 - **Privacy:** cards show only `checkInAccuracyMeters`/`checkOutAccuracyMeters` and `checkInDistanceFromCompanyMeters`/`checkOutDistanceFromCompanyMeters` (rounded meters) — **never raw latitude/longitude**. The backend's `REVIEW_SELECT` projection doesn't fetch the raw coordinate columns at all, so there is no code path that could leak them.
 - **Filters:** review status, date range, and employee ID (added in REQ-002F).
 - **i18n:** fully localized (Thai/English) via `lib/i18n.ts`, retrofitted in REQ-002F (the page previously hardcoded Thai copy and ignored the language toggle).
-- **Known gap:** the review projection exposes `reviewedById` (UUID) only, not a resolved reviewer name — see Known Limitations below.
+- **Reviewer identity (OFFSITE-POLISH-REVIEWEDBY-001):** the review projection now resolves the `reviewedBy` relation (`id`, `employeeCode`, `firstName`, `lastName` only — no email/hash/token), mirroring the risk-reviews `RISK_REVIEW_SELECT` pattern. Resolved records show "Reviewed by: `<name>`"; pending records show the "Not reviewed yet" fallback; a resolved record whose reviewer has no linked Employee record (e.g. the default seed admin) shows a distinct "Reviewer unavailable" fallback instead of reusing the pending copy, since reusing it would read as a contradiction next to a review timestamp.
 
-See [docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md](../../../docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md) for the full implementation record.
+See [docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md](../../../docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md) for the full implementation record and [docs/CTO_SUMMARY_OFFSITE_POLISH_REVIEWEDBY_001.md](../../../docs/CTO_SUMMARY_OFFSITE_POLISH_REVIEWEDBY_001.md) for the reviewer-name polish.
 
 ---
 
@@ -169,7 +169,6 @@ Off-site **clock-in/clock-out** (as opposed to the pre-approval request above) a
 | Clock-out geofence not bypassed for OFFSITE employees | `clockOut()` validates geofence regardless of workMode — **OFFSITE-mode** employees must be within radius to clock out. This limitation remains. For **ONSITE** employees who are outside the geofence at clock-out, the mixed checkout exception path is available. See [[Mixed Checkout Exception]]. |
 | List visibility org-wide for MANAGER | MANAGER sees all off-site requests; scoping is approve/reject only |
 | No notification on approval | Employee is not notified when their request is approved; they must check status manually |
-| Admin Web review page can't show reviewer name | `GET /attendance/offsite-review`'s `REVIEW_SELECT` projection returns `reviewedById` (UUID) only, not a resolved `reviewedBy` relation — unlike the analogous risk-reviews endpoint. `reviewedAt`/`reviewNote` are still shown. Fix is a Prisma `select`-shape change only (no schema/migration needed, the relation already exists) — see `docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md` §Known Limitations for the exact one-line proposal |
 
 ---
 

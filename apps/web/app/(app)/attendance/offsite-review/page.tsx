@@ -462,9 +462,20 @@ function RecordCard({ rec, lang, t, onApprove, onReject }: CardProps) {
       {/* Review result (if already resolved) */}
       {rec.reviewStatus !== 'PENDING_REVIEW' && rec.reviewedAt && (
         <div className="mt-3 rounded-md bg-zinc-50 dark:bg-zinc-900/40 px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
-          <span>{t('offsite_review_reviewed_at_label')} {formatDateTime(rec.reviewedAt, lang)}</span>
+          <span>
+            {t('offsite_review_reviewed_by_label')}:{' '}
+            <span data-testid="reviewer-name" className="text-zinc-700 dark:text-zinc-300">
+              {rec.reviewedBy ? `${rec.reviewedBy.firstName} ${rec.reviewedBy.lastName}` : t('offsite_review_reviewed_by_unknown')}
+            </span>
+            {' '}· {t('offsite_review_reviewed_at_label')} {formatDateTime(rec.reviewedAt, lang)}
+          </span>
           {rec.reviewNote && <span className="mt-0.5 block">{t('offsite_review_note_label')}: {rec.reviewNote}</span>}
         </div>
+      )}
+      {isPending && (
+        <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
+          {t('offsite_review_reviewed_by_label')}: <span data-testid="reviewer-name">{t('offsite_review_reviewed_by_fallback')}</span>
+        </p>
       )}
 
       {/* Action buttons (PENDING_REVIEW only) */}

@@ -92,4 +92,28 @@ test.describe('Off-site Attendance Review', () => {
     expect(bodyText.toLowerCase()).not.toContain('"latitude"');
     expect(bodyText.toLowerCase()).not.toContain('"longitude"');
   });
+
+  test('shows reviewer identity or a not-reviewed fallback on every card', async ({ page }) => {
+    await page.goto('/attendance/offsite-review');
+    await expect(page.locator('[data-testid="loading-offsite-review"]')).not.toBeVisible({ timeout: 15000 });
+    // Default filter is PENDING_REVIEW — those cards should show the "not reviewed yet" fallback.
+    const cards = page.locator('[data-testid="offsite-review-card"]');
+    const count = await cards.count();
+    for (let i = 0; i < count; i++) {
+      await expect(cards.nth(i).locator('[data-testid="reviewer-name"]')).toHaveText(/Not reviewed yet|ยังไม่มีผู้ตรวจสอบ/);
+    }
+  });
+
+  test('resolved records show a reviewer name or a reviewer-unavailable fallback, never a raw "not reviewed" contradiction', async ({ page }) => {
+    await page.goto('/attendance/offsite-review');
+    await expect(page.locator('[data-testid="loading-offsite-review"]')).not.toBeVisible({ timeout: 15000 });
+    await page.selectOption('[data-testid="filter-review-status"]', 'APPROVED');
+    await expect(page.locator('[data-testid="loading-offsite-review"]')).not.toBeVisible({ timeout: 15000 });
+    const cards = page.locator('[data-testid="offsite-review-card"]');
+    const count = await cards.count();
+    for (let i = 0; i < count; i++) {
+      const text = await cards.nth(i).locator('[data-testid="reviewer-name"]').innerText();
+      expect(text).not.toMatch(/Not reviewed yet|ยังไม่มีผู้ตรวจสอบ/);
+    }
+  });
 });

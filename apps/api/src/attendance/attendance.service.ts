@@ -146,6 +146,11 @@ const REVIEW_SELECT = {
       position: { select: { id: true, title: true } },
     },
   },
+  // Mirrors RISK_REVIEW_SELECT's reviewedBy shape (attendance-risk-review.service.ts) —
+  // privacy-safe identity fields only, no email/hash/token.
+  reviewedBy: {
+    select: { id: true, employeeCode: true, firstName: true, lastName: true },
+  },
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.AttendanceSelect;

@@ -2167,6 +2167,31 @@ describe('AttendanceService', () => {
       expect(result.data).toHaveLength(1);
       expect(result.meta.total).toBe(1);
     });
+
+    it('selects reviewedBy with privacy-safe fields only (id, employeeCode, firstName, lastName)', async () => {
+      prisma.$transaction.mockResolvedValue([[], 0] as any);
+
+      await service.findOffsiteReview({});
+
+      expect(prisma.attendance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            reviewedBy: {
+              select: { id: true, employeeCode: true, firstName: true, lastName: true },
+            },
+          }),
+        }),
+      );
+    });
+
+    it('returns reviewedBy null safely for an unreviewed record', async () => {
+      const unreviewed = { ...mockOffsiteRecord, reviewedById: null, reviewedAt: null, reviewedBy: null };
+      prisma.$transaction.mockResolvedValue([[unreviewed], 1] as any);
+
+      const result = await service.findOffsiteReview({});
+
+      expect(result.data[0].reviewedBy).toBeNull();
+    });
   });
 
   // ── mixedCheckoutException ─────────────────────────────────────────────────
@@ -2623,6 +2648,34 @@ describe('AttendanceService', () => {
 
       expect(result).toBeDefined();
     });
+
+    it('selects reviewedBy with privacy-safe fields only (id, employeeCode, firstName, lastName)', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue(approvedRecord as any);
+
+      await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            reviewedBy: {
+              select: { id: true, employeeCode: true, firstName: true, lastName: true },
+            },
+          }),
+        }),
+      );
+    });
+
+    it('returns reviewedBy null safely when reviewer has no linked employee profile', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.attendance.update.mockResolvedValue({ ...approvedRecord, reviewedById: null, reviewedBy: null } as any);
+
+      const result = await service.approveOffsiteAttendance(attendanceId, userId, {}, ctx);
+
+      expect((result as any).reviewedBy).toBeNull();
+    });
   });
 
   // ── rejectOffsiteAttendance ────────────────────────────────────────────────
@@ -2770,6 +2823,24 @@ describe('AttendanceService', () => {
       const result = await service.rejectOffsiteAttendance(attendanceId, userId, {}, ctx);
 
       expect(result).toBeDefined();
+    });
+
+    it('selects reviewedBy with privacy-safe fields only (id, employeeCode, firstName, lastName)', async () => {
+      prisma.attendance.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'reviewer-emp-id' });
+      prisma.attendance.update.mockResolvedValue(rejectedRecord as any);
+
+      await service.rejectOffsiteAttendance(attendanceId, userId, { reviewNote: 'Reason' }, ctx);
+
+      expect(prisma.attendance.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            reviewedBy: {
+              select: { id: true, employeeCode: true, firstName: true, lastName: true },
+            },
+          }),
+        }),
+      );
     });
   });
 
