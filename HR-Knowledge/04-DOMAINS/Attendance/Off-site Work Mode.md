@@ -2,6 +2,9 @@
 
 > Implemented: T-071 (v1.2.0)
 > See [[ADR-022 Off-site Work Request Workflow]] for the full architectural decision.
+> See [[ADR-033 Off-site Review Access Scope and CI Throttle Policy]] for the REQ-002F Admin Web review decisions below.
+
+**Status (as of `v1.2.89`): CLOSED end-to-end.** Backend foundation (REQ-002C), Mobile/PWA off-site check-in/check-out UI + submit-path normalization (REQ-002E, including a passed real-use QA pass against the deployed mobile build), and the Admin Web off-site review UI (REQ-002F) are all complete. No off-site attendance blocker remains.
 
 ---
 
@@ -137,6 +140,20 @@ Off-site request management is at `/offsite` in the web admin. Supports list vie
 
 ---
 
+## Admin Web Off-site Review UI (REQ-002F)
+
+A separate page, `/attendance/offsite-review` (`apps/web/app/(app)/attendance/offsite-review/page.tsx`), reviews the **attendance-side** off-site/mixed-checkout records produced by clock-in/out — distinct from the `/offsite` pre-approval **request** list above. It consumes the `GET/PATCH /attendance/offsite-review*` endpoints (see [[Attendance Module]]).
+
+- **RBAC:** visible to SUPER_ADMIN, HR_ADMIN, and **MANAGER** (own managed department only, cannot review their own records) — this matches the backend `@Roles` guard exactly. MANAGER access was **deliberately kept**, not narrowed to admin-only, because the backend has authorized it since the endpoint was built; see [[ADR-033 Off-site Review Access Scope and CI Throttle Policy]].
+- **Privacy:** cards show only `checkInAccuracyMeters`/`checkOutAccuracyMeters` and `checkInDistanceFromCompanyMeters`/`checkOutDistanceFromCompanyMeters` (rounded meters) — **never raw latitude/longitude**. The backend's `REVIEW_SELECT` projection doesn't fetch the raw coordinate columns at all, so there is no code path that could leak them.
+- **Filters:** review status, date range, and employee ID (added in REQ-002F).
+- **i18n:** fully localized (Thai/English) via `lib/i18n.ts`, retrofitted in REQ-002F (the page previously hardcoded Thai copy and ignored the language toggle).
+- **Known gap:** the review projection exposes `reviewedById` (UUID) only, not a resolved reviewer name — see Known Limitations below.
+
+See [docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md](../../../docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md) for the full implementation record.
+
+---
+
 ## Mobile UI
 
 Employees submit off-site requests from the `offsite-request` screen. The `GeofenceMapModal` component shows a map view during off-site clock-in for location awareness.
@@ -152,6 +169,7 @@ Off-site **clock-in/clock-out** (as opposed to the pre-approval request above) a
 | Clock-out geofence not bypassed for OFFSITE employees | `clockOut()` validates geofence regardless of workMode — **OFFSITE-mode** employees must be within radius to clock out. This limitation remains. For **ONSITE** employees who are outside the geofence at clock-out, the mixed checkout exception path is available. See [[Mixed Checkout Exception]]. |
 | List visibility org-wide for MANAGER | MANAGER sees all off-site requests; scoping is approve/reject only |
 | No notification on approval | Employee is not notified when their request is approved; they must check status manually |
+| Admin Web review page can't show reviewer name | `GET /attendance/offsite-review`'s `REVIEW_SELECT` projection returns `reviewedById` (UUID) only, not a resolved `reviewedBy` relation — unlike the analogous risk-reviews endpoint. `reviewedAt`/`reviewNote` are still shown. Fix is a Prisma `select`-shape change only (no schema/migration needed, the relation already exists) — see `docs/CTO_SUMMARY_REQ_002F_OFFSITE_ADMIN_REVIEW_UI.md` §Known Limitations for the exact one-line proposal |
 
 ---
 
@@ -162,6 +180,7 @@ Off-site **clock-in/clock-out** (as opposed to the pre-approval request above) a
 - [[Mixed Checkout Exception]]
 - [[ADR-022 Off-site Work Request Workflow]]
 - [[ADR-023 Department Manager Leave Approval Scope]]
+- [[ADR-033 Off-site Review Access Scope and CI Throttle Policy]]
 - [[RBAC Rules]]
 - [docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md](../../../docs/PRODUCTION_INCIDENT_LEAVE_ADJUSTMENTS_MIGRATION.md) — production migration-drift recovery for the extended attendance fields (`attendanceSource`, review fields) this mode depends on
 

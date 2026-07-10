@@ -76,11 +76,31 @@ Scoping uses `Department.managerId` (the `managedDepartment` back-relation on Em
 
 **List access remains org-wide:** MANAGER can view all leave requests via `GET /leave`; only approve/reject is scoped.
 
+## Mobile Display (STEP Connect)
+
+STEP Connect Mobile/PWA overlays **approved** leave onto the day-type label
+across all three relevant screens — home (today-schedule card), calendar
+(grid dots + day-detail card), and the attendance tab header — via a shared,
+unit-tested `findApprovedLeaveForDate()` helper
+(`apps/mobile/src/utils/leaveOverlay.ts`) that does an inclusive client-side
+date-range check against the employee's own `status=APPROVED` leave requests.
+When approved leave covers the displayed date, it replaces the normal
+workday/weekend label with the leave type (e.g. "ลาพักร้อน") and an approved
+status line; pending/rejected leave never overrides. This was closed across
+three sequential hotfixes (home+calendar, then a React version-mismatch
+regression fix, then the attendance tab, which had been missed by the first
+fix) — see
+[docs/CTO_SUMMARY_HOTFIX_MOBILE_LEAVE_CALENDAR_001.md](../../../docs/CTO_SUMMARY_HOTFIX_MOBILE_LEAVE_CALENDAR_001.md)
+and
+[docs/CTO_SUMMARY_HOTFIX_MOBILE_LEAVE_ATTENDANCE_001.md](../../../docs/CTO_SUMMARY_HOTFIX_MOBILE_LEAVE_ATTENDANCE_001.md).
+Frontend-only; no backend/schema change.
+
 ## Known Limitations
 
 - MANAGER list access (`GET /leave`) is org-wide — only approve/reject is department-scoped
 - `rejectReason` not persisted in DB
 - TOCTOU on balance check (pre-transaction) — acceptable for HR load
+- **`GET /leave/me`'s `buildDateFilter` uses containment, not overlap** (`apps/api/src/leave/leave.service.ts`): it filters `startDate >= query.startDate AND endDate <= query.endDate`, so a date-range query can silently miss a multi-day leave request that merely overlaps the queried window (e.g. a single-day query inside a longer approved range). Found during the mobile leave-display hotfixes above; the mobile fix avoided depending on this endpoint's date-range params rather than patching it, to stay frontend-only. **Open — HOTFIX-LEAVE-ME-OVERLAP**: switch to an overlap filter (`startDate: { lte: end }, endDate: { gte: start }`), mirroring `create()`'s existing overlap check.
 
 ## Related ADRs
 

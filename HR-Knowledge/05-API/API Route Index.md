@@ -72,9 +72,11 @@ Auth: All protected routes require `Authorization: Bearer <token>`
 | GET | /attendance | ✅ | SUPER_ADMIN, HR_ADMIN | All records (paginated) |
 | GET | /attendance/:id | ✅ | Any (owner or admin) | Single record |
 | POST | /attendance/offsite/mixed-checkout-exception | ✅ | Any | Mixed checkout exception — ONSITE employee checks out from outside geofence |
-| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN | List pending off-site and mixed checkout records for review |
-| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN | Approve pending record |
-| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN | Reject pending record (reason ≥ 3 chars required) |
+| GET | /attendance/offsite-review | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | List pending off-site and mixed checkout records for review (MANAGER: own managed department only) |
+| PATCH | /attendance/offsite-review/:id/approve | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Approve pending record (MANAGER: own dept, no self-review) |
+| PATCH | /attendance/offsite-review/:id/reject | ✅ | SUPER_ADMIN, HR_ADMIN, MANAGER | Reject pending record (reason ≥ 3 chars required; MANAGER: own dept, no self-review) |
+
+> Note: this table does not yet list the SEC-ATT-004 `POST /attendance/nonce` or the SEC-ATT-007A `/attendance/risk-reviews*` endpoints (both predate this sync's v1.2.85–v1.2.89 range) — see [[Attendance Module]]'s endpoint table and its SEC-ATT-004 section for those (the `/attendance/nonce` endpoint itself is documented there in prose, not yet in that file's table either).
 
 ---
 

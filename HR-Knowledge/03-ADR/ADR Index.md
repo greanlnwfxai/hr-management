@@ -2,7 +2,7 @@
 
 Architecture Decision Records for the HR Management System.
 
-This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.2.67-rotate-default-super-admin-password`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
+This index includes the original backend-v1 ADR pack plus later ADRs added through `v1.2.89-req-002f-offsite-review-ui`. Full documents live in `docs/adr/` in the project repository. This index provides summaries and links.
 
 ## Index
 
@@ -40,10 +40,11 @@ This index includes the original backend-v1 ADR pack plus later ADRs added throu
 | [[ADR-030 Non-destructive Docker Verification]] | Non-Destructive Docker Verification | Process / Infrastructure | `docker-verify.sh` no longer runs `docker compose down`; build/start + health-check only, containers left running; self-check guard prevents regression; corrects stale ADR-003 teardown caveat |
 | [[ADR-031 SUPER_ADMIN Password Rotation and Seed Hardening]] | SUPER_ADMIN Password Rotation and Seed Hardening | Security / Identity | Production admin password rotated via self-service UI; `seed.ts` no longer overwrites an existing admin's password/`mustChangePassword` on re-run; seed safety hardening, not a runtime auth change |
 | [[ADR-032 Manager Employee Dashboard Scope and Personal Summary]] | Manager/Employee Dashboard Scope and Personal Summary | Dashboard / RBAC | EMPLOYEE self-only dashboard; MANAGER team dashboard + embedded "My Summary"; both via existing self-scoped endpoints; `GET /dashboard` guard unchanged; includes v1.2.63 attendance-date-normalization fix |
+| [[ADR-033 Off-site Review Access Scope and CI Throttle Policy]] | Off-site Review Access Scope, GPS Privacy Display, and CI Throttle Policy | Attendance / RBAC / Security / Process | Confirms (does not change) three existing patterns: MANAGER keeps department-scoped off-site review access; review UI never shows raw GPS; CI-only `THROTTLE_LIMIT` raise to 500 for e2e test volume, production stays at 100 |
 
 ## ADR Policy
 
-ADRs in this project are written **after implementation**, not before. The current count is **32 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
+ADRs in this project are written **after implementation**, not before. The current count is **33 ADRs**. This ensures each decision document reflects what was actually built and verified, not what was planned. See [[ADR-004 Backend-First Strategy]].
 
 ## Source Files
 
@@ -82,7 +83,8 @@ docs/adr/
 ├── ADR-029-web-vs-mobile-attendance-clock-policy.md
 ├── ADR-030-non-destructive-docker-verification.md
 ├── ADR-031-super-admin-password-rotation-and-seed-hardening.md
-└── ADR-032-manager-employee-dashboard-scope-and-personal-summary.md
+├── ADR-032-manager-employee-dashboard-scope-and-personal-summary.md
+└── ADR-033-offsite-review-access-scope-and-ci-throttle-policy.md
 ```
 
 ## Related Notes
