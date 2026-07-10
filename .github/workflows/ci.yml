@@ -351,7 +351,12 @@ jobs:
       PORT: "4002"
       TRUST_PROXY: "false"
       THROTTLE_TTL: "60"
-      THROTTLE_LIMIT: "100"
+      # Raised from the production default (100) — the full Playwright suite (incl.
+      # REQ-002F's off-site review tests) makes ~264 authenticated requests within a
+      # single 60s window, tripping the global ThrottlerGuard on unrelated endpoints
+      # (e.g. /auth/me) partway through profile.spec.ts. Measured via request-timestamp
+      # logging against the local stack; see docs/CTO_SUMMARY_HOTFIX_CI_PROFILE_E2E_001.md.
+      THROTTLE_LIMIT: "500"
       LOGIN_THROTTLE_TTL: "60"
       # Raised from the production default (5) to absorb Playwright globalSetup
       # token fetch + login.spec.ts UI login calls without hitting the rate limiter.
