@@ -335,14 +335,19 @@ export class LeaveService {
     return Math.round(ms / (1000 * 60 * 60 * 24)) + 1;
   }
 
+  /**
+   * Overlap filter: a leave request matches a query range if
+   * leave.startDate <= queryEnd AND leave.endDate >= queryStart,
+   * i.e. the two date ranges intersect (not containment).
+   */
   private buildDateFilter(
     startDate?: string,
     endDate?: string,
   ): Prisma.LeaveRequestWhereInput {
     if (!startDate && !endDate) return {};
     return {
-      ...(startDate && { startDate: { gte: new Date(startDate) } }),
-      ...(endDate && { endDate: { lte: new Date(endDate) } }),
+      ...(endDate && { startDate: { lte: new Date(endDate) } }),
+      ...(startDate && { endDate: { gte: new Date(startDate) } }),
     };
   }
 }

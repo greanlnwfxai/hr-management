@@ -25,6 +25,10 @@ Note: `GET /leave/me` must be declared **before** `GET /leave/:id` in the contro
 
 `page` · `limit` · `status` · `leaveType` · `startDate` · `endDate` · `employeeId` (admin list only)
 
+`startDate`/`endDate` use **date-range overlap** semantics (fixed in HOTFIX-LEAVE-ME-OVERLAP-001): a leave
+request matches if `leave.startDate <= queryEnd AND leave.endDate >= queryStart`. If only one of
+`startDate`/`endDate` is given, the range is open-ended on the other side.
+
 ## Leave Request Lifecycle
 
 ```
@@ -100,7 +104,7 @@ Frontend-only; no backend/schema change.
 - MANAGER list access (`GET /leave`) is org-wide — only approve/reject is department-scoped
 - `rejectReason` not persisted in DB
 - TOCTOU on balance check (pre-transaction) — acceptable for HR load
-- **`GET /leave/me`'s `buildDateFilter` uses containment, not overlap** (`apps/api/src/leave/leave.service.ts`): it filters `startDate >= query.startDate AND endDate <= query.endDate`, so a date-range query can silently miss a multi-day leave request that merely overlaps the queried window (e.g. a single-day query inside a longer approved range). Found during the mobile leave-display hotfixes above; the mobile fix avoided depending on this endpoint's date-range params rather than patching it, to stay frontend-only. **Open — HOTFIX-LEAVE-ME-OVERLAP**: switch to an overlap filter (`startDate: { lte: end }, endDate: { gte: start }`), mirroring `create()`'s existing overlap check.
+- ~~`GET /leave/me`'s `buildDateFilter` used containment, not overlap~~ — **fixed in HOTFIX-LEAVE-ME-OVERLAP-001** (`apps/api/src/leave/leave.service.ts`). `buildDateFilter` (shared by `findMy`/`findAll`) now filters `startDate: { lte: queryEnd } AND endDate: { gte: queryStart }`, mirroring `create()`'s existing overlap check, so date-range queries correctly return multi-day leave that merely overlaps the queried window. See [docs/CTO_SUMMARY_HOTFIX_LEAVE_ME_OVERLAP_001.md](../../../docs/CTO_SUMMARY_HOTFIX_LEAVE_ME_OVERLAP_001.md).
 
 ## Related ADRs
 

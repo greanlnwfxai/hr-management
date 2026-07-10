@@ -150,6 +150,125 @@ describe('LeaveService', () => {
     });
   });
 
+  // ── findMy: date range overlap filtering ─────────────────────────────────────
+  // HOTFIX-LEAVE-ME-OVERLAP-001: leave.startDate <= queryEnd AND leave.endDate >= queryStart
+
+  describe('findMy: date range overlap filtering', () => {
+    const leaveJul8to10 = {
+      ...mockLeaveRecord,
+      startDate: new Date('2026-07-08'),
+      endDate: new Date('2026-07-10'),
+    };
+
+    beforeEach(() => {
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId });
+      prisma.$transaction.mockResolvedValue([[leaveJul8to10], 1]);
+    });
+
+    const capturedWhere = () =>
+      (prisma.leaveRequest.findMany as jest.Mock).mock.calls[
+        (prisma.leaveRequest.findMany as jest.Mock).mock.calls.length - 1
+      ][0].where;
+
+    // Evaluate the constructed Prisma where-clause's date conditions against a leave
+    // record's actual dates, the same way Postgres would evaluate lte/gte comparisons.
+    const overlaps = (where: any, leave: { startDate: Date; endDate: Date }) => {
+      const startOk = !where.startDate || leave.startDate.getTime() <= where.startDate.lte.getTime();
+      const endOk = !where.endDate || leave.endDate.getTime() >= where.endDate.gte.getTime();
+      return startOk && endOk;
+    };
+
+    it('1. exact same-day query inside range returns leave (query Jul 9–9 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-09', endDate: '2026-07-09' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(true);
+    });
+
+    it('2. query range inside multi-day leave returns leave (query Jul 9–20 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-09', endDate: '2026-07-20' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(true);
+    });
+
+    it('3. query starts before leave and ends on leave start returns leave (query Jul 7–8 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-07', endDate: '2026-07-08' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(true);
+    });
+
+    it('4. query starts on leave end and ends after leave returns leave (query Jul 10–10 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-10', endDate: '2026-07-10' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(true);
+    });
+
+    it('5. query range fully contains leave returns leave (query Jul 1–31 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-01', endDate: '2026-07-31' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(true);
+    });
+
+    it('6. query range after leave returns no leave (query Jul 11–12 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-11', endDate: '2026-07-12' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(false);
+    });
+
+    it('7. query range before leave returns no leave (query Jul 1–7 vs leave Jul 8–10)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-01', endDate: '2026-07-07' } as any);
+      expect(overlaps(capturedWhere(), leaveJul8to10)).toBe(false);
+    });
+
+    it('only startDate provided filters by endDate >= queryStart (open-ended range)', async () => {
+      await service.findMy(userId, { startDate: '2026-07-09' } as any);
+      const where = capturedWhere();
+      expect(where.startDate).toBeUndefined();
+      expect(where.endDate).toEqual({ gte: new Date('2026-07-09') });
+    });
+
+    it('only endDate provided filters by startDate <= queryEnd (open-ended range)', async () => {
+      await service.findMy(userId, { endDate: '2026-07-09' } as any);
+      const where = capturedWhere();
+      expect(where.endDate).toBeUndefined();
+      expect(where.startDate).toEqual({ lte: new Date('2026-07-09') });
+    });
+
+    it('no date filters provided applies no date constraint', async () => {
+      await service.findMy(userId, { page: 1, limit: 20 } as any);
+      const where = capturedWhere();
+      expect(where.startDate).toBeUndefined();
+      expect(where.endDate).toBeUndefined();
+    });
+
+    it('8. status filter still works alongside overlap date filter', async () => {
+      await service.findMy(userId, {
+        status: 'APPROVED',
+        startDate: '2026-07-09',
+        endDate: '2026-07-20',
+      } as any);
+      const where = capturedWhere();
+      expect(where.status).toBe('APPROVED');
+      expect(overlaps(where, leaveJul8to10)).toBe(true);
+    });
+
+    it('9. auth isolation: findMy always scopes by the caller\'s own employeeId, ignoring any employeeId in the query', async () => {
+      await service.findMy(userId, {
+        employeeId: 'someone-elses-emp-uuid',
+        startDate: '2026-07-09',
+        endDate: '2026-07-09',
+      } as any);
+      const where = capturedWhere();
+      expect(where.employeeId).toBe(employeeId);
+      expect(where.employeeId).not.toBe('someone-elses-emp-uuid');
+    });
+
+    it('10. status filter (e.g. REJECTED) is combined with, not replaced by, the overlap filter', async () => {
+      await service.findMy(userId, {
+        status: 'REJECTED',
+        startDate: '2026-07-09',
+        endDate: '2026-07-09',
+      } as any);
+      const where = capturedWhere();
+      expect(where.status).toBe('REJECTED');
+      expect(where.startDate).toEqual({ lte: new Date('2026-07-09') });
+      expect(where.endDate).toEqual({ gte: new Date('2026-07-09') });
+    });
+  });
+
   // ── findOne ────────────────────────────────────────────────────────────────
 
   describe('findOne', () => {
