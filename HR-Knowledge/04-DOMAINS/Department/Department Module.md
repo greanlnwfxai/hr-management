@@ -48,10 +48,20 @@ The designated manager gains department-scoped leave and off-site request approv
 
 The admin `/departments` page originally had three UI strings hardcoded in Thai regardless of the selected language: the manager table column header, the manager field label, and the "no manager" option placeholder in the create/edit modal. These now use `t('dept_col_manager')`, `t('dept_field_manager')`, and `t('dept_manager_none')` from `apps/web/lib/i18n.ts` (both `en` and `th` dictionaries), matching the rest of the page.
 
+## Total Count / Date Polish (DEPT-POLISH-001)
+
+Two remaining optional polish items from STEP-16A/16B were closed:
+
+- The header's total-count text (`"8 total"`) was a raw hardcoded English JSX literal. Now routed through the existing (previously unused) `total_label` i18n key: `t('total_label').replace('{total}', meta.total.toLocaleString())`, giving `"8 total"` in English and `"ทั้งหมด 8 รายการ"` in Thai.
+- The `Created` column used the browser's locale-less `toLocaleDateString()` (always numeric `M/D/YYYY`). Now uses a local `formatDate(iso, lang)` helper matching the pattern already used by `attendance/offsite-review` and `attendance/risk-reviews`: `toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })`. Thai mode renders the Buddhist-era year (e.g. `11 ก.ค. 2569`).
+
+No backend/schema/RBAC change. See [docs/CTO_SUMMARY_DEPT_POLISH_001.md](../../../docs/CTO_SUMMARY_DEPT_POLISH_001.md).
+
 ## Known Limitations
 
 - No parent/child department hierarchy — flat structure only
 - No active/inactive (archive) flag — a department can only be hard-deleted, and deletion is blocked while any employee or position still references it
+- Pagination text ("Page X of Y") on the admin list page is still hardcoded English — not yet routed through i18n (out of scope for DEPT-POLISH-001)
 
 ## Related ADRs
 

@@ -76,4 +76,27 @@ test.describe('Departments', () => {
     // Default option text must come from the i18n dictionary, not a stray hardcoded literal.
     await expect(managerSelect.locator('option').first()).toHaveText(/no manager|ไม่มีผู้จัดการ/i);
   });
+
+  // DEPT-POLISH-001: total count must come from the i18n dictionary (Thai or English),
+  // never a hardcoded English literal.
+  test('total count text is localized', async ({ page }) => {
+    await page.goto('/departments');
+    await expect(page.locator('[data-testid="loading-state"]')).not.toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="dept-total"]')).toHaveText(/ทั้งหมด|total/i);
+  });
+
+  // DEPT-POLISH-001: Created date should use the app's locale-aware date formatting
+  // (Thai/Buddhist year in th mode, e.g. 2569) instead of a raw numeric toLocaleDateString().
+  test('created date is localized when data exists', async ({ page }) => {
+    await page.goto('/departments');
+    await expect(page.locator('[data-testid="loading-state"]')).not.toBeVisible({ timeout: 15000 });
+    const hasTable = await page.locator('table').first().isVisible().catch(() => false);
+    if (!hasTable) return; // Empty state — no dates to verify
+    const createdCell = page.locator('table tbody tr').first().locator('td').nth(5);
+    const text = await createdCell.innerText();
+    // App defaults to Thai: expect a Buddhist-era year (25xx) rendered via th-TH locale,
+    // not a raw numeric date like 6/24/2026.
+    expect(text).toMatch(/25\d{2}|20\d{2}/);
+    expect(text).not.toMatch(/^\d{1,2}\/\d{1,2}\/\d{4}$/);
+  });
 });

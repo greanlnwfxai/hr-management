@@ -13,11 +13,16 @@ import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
 import { useLanguage } from '@/hooks/useLanguage';
+import { type Language } from '@/lib/i18n';
 
 const INPUT = 'w-full rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400';
 
 type DeptForm = { name: string; description: string; managerId: string };
 const EMPTY_FORM: DeptForm = { name: '', description: '', managerId: '' };
+
+function formatDate(iso: string, lang: Language): string {
+  return new Date(iso).toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -29,7 +34,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 export default function DepartmentsPage() {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const user = getUser();
   const admin = isAdmin(user);
 
@@ -142,7 +147,11 @@ export default function DepartmentsPage() {
           {t('page_departments')}
         </h1>
         <div className="flex items-center gap-3">
-          {meta && <span className="text-sm text-zinc-400 dark:text-zinc-500">{meta.total} total</span>}
+          {meta && (
+            <span data-testid="dept-total" className="text-sm text-zinc-400 dark:text-zinc-500">
+              {t('total_label').replace('{total}', meta.total.toLocaleString())}
+            </span>
+          )}
           {admin && (
             <button data-testid="btn-add-department" onClick={openCreate} className="rounded-md bg-zinc-900 dark:bg-zinc-100 px-3 py-1.5 text-sm font-medium text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-white">
               {t('dept_add')}
@@ -199,7 +208,7 @@ export default function DepartmentsPage() {
                       </td>
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{dept._count.employees}</td>
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{dept._count.positions}</td>
-                      <td className="px-4 py-3 text-xs text-zinc-400 dark:text-zinc-500">{new Date(dept.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-xs text-zinc-400 dark:text-zinc-500">{formatDate(dept.createdAt, lang)}</td>
                       {admin && (
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
