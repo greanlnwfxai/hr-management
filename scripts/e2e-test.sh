@@ -6,6 +6,12 @@ set -euo pipefail
 #   Prerequisites:
 #     1. Docker stack is healthy: ./scripts/docker-verify.sh
 #     2. Playwright browsers installed: cd apps/web && npx playwright install chromium
+#
+#   If root .env holds non-localhost values (e.g. a production
+#   NEXT_PUBLIC_API_URL), data-fetching Playwright specs will fail with CORS
+#   errors against a stack built via docker-verify.sh/plain `docker compose
+#   up --build`. Use ./scripts/e2e-local.sh instead — it forces local-safe
+#   env values for the build without editing .env. See LOCAL-E2E-ENV-001.
 # ─────────────────────────────────────────────────────────────────────────────
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
