@@ -105,5 +105,6 @@ If any script fails:
 
 - [[Development Workflow]]
 - [[Backend QA Checklist]]
+- [docs/QA_T098_PRODUCTION_STABILITY_REGRESSION.md](../../docs/QA_T098_PRODUCTION_STABILITY_REGRESSION.md) — manual pre/post-release production regression checklist (T-098)
 
 #sop #verification #workflow
