@@ -70,10 +70,11 @@ Login as SUPER_ADMIN or HR_ADMIN unless noted.
 
 **Employees**
 - [ ] `/employees` list loads and search/filter returns results
-- [ ] Known limitation (BUG-004, QA_T089): EMPLOYEE role hitting `/employees` directly gets an empty/loading state rather than an explicit "access denied" message — this is expected current behavior, not a new regression, unless it changed
+- [ ] Fixed by `ACCESS-UX-001` (was BUG-004, QA_T089): EMPLOYEE role hitting `/employees` directly now sees an explicit "access denied" card (Thai/English, `access_denied_title`/`access_denied_detail` i18n keys) with a safe link back to `/dashboard`, instead of an empty/loading state or a silent redirect. `GET /employees` backend RBAC unchanged — it was already role-gated to SUPER_ADMIN/HR_ADMIN/MANAGER; MANAGER's team-scoped view is unaffected.
 
-**Departments** (DEPT-POLISH-001, v1.2.93)
-- [ ] `/departments` list loads
+**Departments** (DEPT-POLISH-001, v1.2.93) / **Positions**
+- [ ] `/departments` and `/positions` list load for SUPER_ADMIN/HR_ADMIN
+- [ ] Fixed by `ACCESS-UX-001` (was BUG-003, QA_T089): MANAGER/EMPLOYEE hitting `/departments` or `/positions` directly now see the same explicit "access denied" card instead of a read-only table with hidden CRUD buttons. Both routes' `GET` endpoints remain backend-unrestricted by design (any authenticated role could already read this data server-side); this change only tightens the Admin Web page gate, it does not change backend RBAC.
 - [ ] Total count text is localized (Thai: "ทั้งหมด N รายการ" style, not raw "8 total")
 - [ ] `Created` date column renders as a formatted date; in Thai mode the year is Buddhist-era (+543), not the raw Gregorian ISO string
 - [ ] Manager column/label shows a resolved manager name or the "none assigned" fallback (STEP-16B `dept_manager_none`), never a raw ID or blank
@@ -189,10 +190,7 @@ curl -sI http://172.16.2.31:3004/ | head -1
 
 - **Native attestation (SEC-ATT-005/006) — deferred.** Android Play Integrity and iOS App Attest/DeviceCheck both require a native app build (no PWA/WebKit entry point exists for either API). Both feasibility assessments recommend DEFER until a native-app decision is made. Do not treat their absence as a regression. See [SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md](SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md) and [SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md](SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md).
 - **BUG-001/BUG-002 (MANAGER `/leave` UI scope) — fixed by `HOTFIX-T089A`.** MANAGER can now view and approve/reject department-scoped leave via the `/leave` UI. The audit that preceded the fix also found the backend `GET /leave` was not actually department-scoping MANAGER results (it was reachable org-wide, including via the mobile Manager Approval screen) and that `approve()`/`reject()` didn't block a manager approving/rejecting their own leave request — both are now fixed at the API layer (`leave.service.ts`), not just hidden in the UI. See [CTO_SUMMARY_HOTFIX_T089A_MANAGER_LEAVE_UI_SCOPE.md](CTO_SUMMARY_HOTFIX_T089A_MANAGER_LEAVE_UI_SCOPE.md). `GET /leave/:id` (single-record lookup) was **not** in scope for this hotfix and still returns any record to MANAGER without a department check — tracked as a follow-up, see that CTO Summary's "Remaining risks" section.
-- **Open RBAC UI gaps from QA_T089, not yet fixed (`HOTFIX-T089B`, queued):**
-  - `/departments` and `/positions` render fully for any authenticated non-admin (CRUD buttons hidden only, no access-denied gate) (BUG-003)
-  - `/employees` gives no explicit access-denied message for EMPLOYEE role (BUG-004)
-  - These are **known, pre-existing** conditions — do not report them as new regressions unless behavior has changed from what's documented in [QA_T089_ADMIN_WEB_REAL_USAGE_RESULTS.md](QA_T089_ADMIN_WEB_REAL_USAGE_RESULTS.md).
+- **BUG-003/BUG-004 (RBAC UI gaps from QA_T089, `HOTFIX-T089B`) — fixed by `ACCESS-UX-001`.** `/departments`, `/positions`, and `/employees` (EMPLOYEE role only) now show an explicit, localized "access denied" card instead of a degraded read-only page or a silent redirect. This was a frontend-only UX change — no backend RBAC or route protection changed; MANAGER's existing team-scoped `/employees` view and the intentionally-open `GET /departments`/`GET /positions` read endpoints are unaffected. See [CTO_SUMMARY_ACCESS_UX_001_EXPLICIT_ACCESS_DENIED.md](CTO_SUMMARY_ACCESS_UX_001_EXPLICIT_ACCESS_DENIED.md).
 - **Department pagination i18n** (limitation #22) — "Page X of Y" text on `/departments` is still hardcoded English. Low priority, no functional impact.
 - **Local `.env` `NEXT_PUBLIC_API_URL` question** (limitation #20) — still open whether the sandbox's local `.env` should point at `localhost:4002`. `e2e-local.sh` is a working non-destructive workaround; no `.env` change has been made.
 

@@ -12,6 +12,7 @@ import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import { useLanguage } from '@/hooks/useLanguage';
 import { type Language } from '@/lib/i18n';
 
@@ -55,6 +56,7 @@ export default function DepartmentsPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
 
   const load = useCallback(async () => {
+    if (!admin) return;
     setLoading(true);
     setError(null);
     try {
@@ -65,15 +67,16 @@ export default function DepartmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [admin, page, search]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (!admin) return;
     getEmployees({ limit: 100, status: 'ACTIVE' })
       .then((res) => setEmployees(res.data))
       .catch(() => {});
-  }, []);
+  }, [admin]);
 
   function openCreate() {
     setForm(EMPTY_FORM);
@@ -137,6 +140,10 @@ export default function DepartmentsPage() {
   }
 
   const meta = result?.meta;
+
+  if (!admin) {
+    return <AccessDeniedCard testid="access-denied-departments" />;
+  }
 
   return (
     <div>

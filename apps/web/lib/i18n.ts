@@ -491,6 +491,11 @@ const translations = {
     error_access_denied: 'Access Denied',
     error_access_denied_detail: "You don't have permission to view this resource.",
     error_title: 'Error',
+
+    // Access denied (page-level)
+    access_denied_title: 'You do not have permission to access this page.',
+    access_denied_detail: 'Contact your HR administrator if you believe this is a mistake.',
+    access_denied_back_link: 'Back to Dashboard',
   },
 
   th: {
@@ -980,6 +985,11 @@ const translations = {
     error_access_denied: 'ไม่มีสิทธิ์เข้าถึง',
     error_access_denied_detail: 'คุณไม่มีสิทธิ์ในการเข้าถึงข้อมูลนี้',
     error_title: 'เกิดข้อผิดพลาด',
+
+    // Access denied (page-level)
+    access_denied_title: 'ไม่มีสิทธิ์เข้าถึงหน้านี้',
+    access_denied_detail: 'กรุณาติดต่อผู้ดูแลระบบ HR หากคุณคิดว่านี่เป็นความผิดพลาด',
+    access_denied_back_link: 'กลับไปหน้าแดชบอร์ด',
   },
 } as const;
 

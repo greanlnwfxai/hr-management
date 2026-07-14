@@ -11,6 +11,7 @@ import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import { useLanguage } from '@/hooks/useLanguage';
 
 const INPUT = 'w-full rounded-md border border-zinc-300 dark:border-zinc-600 bg-white dark:bg-zinc-700 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 focus:border-zinc-500 dark:focus:border-zinc-400 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:focus:ring-zinc-400';
@@ -50,6 +51,7 @@ export default function PositionsPage() {
   const [toast, setToast] = useState<ToastData | null>(null);
 
   const load = useCallback(async () => {
+    if (!admin) return;
     setLoading(true);
     setError(null);
     try {
@@ -60,13 +62,14 @@ export default function PositionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, deptFilter]);
+  }, [admin, page, search, deptFilter]);
 
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    if (!admin) return;
     getAllDepartments().then((d) => setDepartments(d.data)).catch(() => {});
-  }, []);
+  }, [admin]);
 
   function openCreate() {
     setForm(EMPTY_FORM);
@@ -131,6 +134,10 @@ export default function PositionsPage() {
   }
 
   const meta = result?.meta;
+
+  if (!admin) {
+    return <AccessDeniedCard testid="access-denied-positions" />;
+  }
 
   return (
     <div>

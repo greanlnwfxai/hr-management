@@ -69,3 +69,40 @@ export async function loginViaUI(page: Page): Promise<void> {
   await page.click('button[type="submit"]');
   await page.waitForURL(/\/dashboard/);
 }
+
+/**
+ * Inject a synthetic (non-admin) role into localStorage without a real login/token.
+ *
+ * The token is not signed by the real backend, so any real API call made with it
+ * would 401. `AppLayout` unconditionally calls `GET /auth/me` on every authenticated
+ * page (for the header display name), and the app's global 401 handler
+ * (`apps/web/lib/api.ts`) reacts to *any* 401 by clearing auth and hard-redirecting
+ * to `/login` — which would stomp the page under test before its own access-denied
+ * gate ever renders. To avoid that race without touching real backend data, this
+ * stubs `GET /auth/me` to return a 200 matching the synthetic user, purely so
+ * `AppLayout` mounts normally. It does not fake authorization for any other
+ * endpoint — pages gated to admin/allowed roles must still fail closed if they
+ * make their own API calls with this token.
+ */
+export async function injectRoleAuth(page: Page, role: 'MANAGER' | 'EMPLOYEE'): Promise<void> {
+  const user = {
+    id: `e2e-${role.toLowerCase()}-id`,
+    email: `${role.toLowerCase()}@e2e.local`,
+    username: role.toLowerCase(),
+    role,
+  };
+
+  await page.route('**/auth/me', (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...user, mustChangePassword: false, employeeId: null, employee: null }),
+    }),
+  );
+
+  await page.goto('/login');
+  await page.evaluate((u) => {
+    localStorage.setItem('hr_access_token', 'e2e-synthetic-token-access-denied-test');
+    localStorage.setItem('hr_user', JSON.stringify(u));
+  }, user);
+}

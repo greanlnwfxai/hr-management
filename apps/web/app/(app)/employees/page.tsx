@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import {
   getEmployees, getEmployee, createEmployee, updateEmployee, deleteEmployee,
   getAllDepartments, getAllPositions,
@@ -15,6 +14,7 @@ import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import { useLanguage } from '@/hooks/useLanguage';
 
 const STATUS_OPTIONS = ['', 'ACTIVE', 'INACTIVE', 'RESIGNED'];
@@ -72,7 +72,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function EmployeesPage() {
   const { t } = useLanguage();
-  const router = useRouter();
   const user = getUser();
   const admin = isAdmin(user);
   const isEmployee = user?.role === 'EMPLOYEE';
@@ -98,13 +97,8 @@ export default function EmployeesPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [positionsFiltered, setPositionsFiltered] = useState<Position[]>([]);
 
-  // Redirect EMPLOYEE away — they have no access to the employee list.
-  useEffect(() => {
-    if (isEmployee) router.replace('/profile');
-  }, [isEmployee, router]);
-
   const load = useCallback(async () => {
-    if (isEmployee) return; // no API call; loading stays true until redirect
+    if (isEmployee) return; // no API call for EMPLOYEE — access-denied card renders instead
     setLoading(true);
     setError(null);
     try {
@@ -212,6 +206,10 @@ export default function EmployeesPage() {
   }
 
   const meta = result?.meta;
+
+  if (isEmployee) {
+    return <AccessDeniedCard testid="access-denied-employees" />;
+  }
 
   return (
     <div>
