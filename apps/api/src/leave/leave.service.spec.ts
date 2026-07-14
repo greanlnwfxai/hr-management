@@ -150,6 +150,81 @@ describe('LeaveService', () => {
     });
   });
 
+  // ── findAll: MANAGER department scoping (HOTFIX-T089A) ───────────────────────
+
+  describe('findAll: MANAGER department scoping', () => {
+    const managerUserId = 'manager-user-uuid';
+    const managerDeptId = 'dept-uuid-managed';
+
+    const capturedWhere = () =>
+      (prisma.leaveRequest.findMany as jest.Mock).mock.calls[
+        (prisma.leaveRequest.findMany as jest.Mock).mock.calls.length - 1
+      ][0].where;
+
+    it('scopes results to the managed department when caller is MANAGER', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: { id: managerDeptId } } as any);
+      prisma.$transaction.mockResolvedValue([[mockLeaveRecord], 1] as any);
+
+      await service.findAll({ page: 1, limit: 20 }, { id: managerUserId, role: 'MANAGER' });
+
+      expect(capturedWhere().employee).toEqual({ departmentId: managerDeptId });
+    });
+
+    it('keeps existing filters (status) alongside the MANAGER department scope', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: { id: managerDeptId } } as any);
+      prisma.$transaction.mockResolvedValue([[mockLeaveRecord], 1] as any);
+
+      await service.findAll({ page: 1, limit: 20, status: 'PENDING' } as any, { id: managerUserId, role: 'MANAGER' });
+
+      const where = capturedWhere();
+      expect(where.status).toBe('PENDING');
+      expect(where.employee).toEqual({ departmentId: managerDeptId });
+    });
+
+    it('does not let a client-supplied employeeId widen MANAGER scope beyond their department', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: { id: managerDeptId } } as any);
+      prisma.$transaction.mockResolvedValue([[], 0] as any);
+
+      await service.findAll(
+        { page: 1, limit: 20, employeeId: 'outside-dept-emp-uuid' } as any,
+        { id: managerUserId, role: 'MANAGER' },
+      );
+
+      const where = capturedWhere();
+      // Both constraints are ANDed together — an outside-department employeeId
+      // narrows to nothing rather than replacing/widening the department scope.
+      expect(where.employeeId).toBe('outside-dept-emp-uuid');
+      expect(where.employee).toEqual({ departmentId: managerDeptId });
+    });
+
+    it('returns an empty page without querying leave requests when MANAGER has no managed department', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ managedDepartment: null } as any);
+
+      const result = await service.findAll({ page: 1, limit: 20 }, { id: managerUserId, role: 'MANAGER' });
+
+      expect(result).toEqual({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } });
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('leaves SUPER_ADMIN results unscoped (no department filter, no employee lookup)', async () => {
+      prisma.$transaction.mockResolvedValue([[mockLeaveRecord], 1] as any);
+
+      await service.findAll({ page: 1, limit: 20 }, { id: 'admin-user-uuid', role: 'SUPER_ADMIN' });
+
+      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+      expect(capturedWhere().employee).toBeUndefined();
+    });
+
+    it('leaves HR_ADMIN results unscoped (no department filter, no employee lookup)', async () => {
+      prisma.$transaction.mockResolvedValue([[mockLeaveRecord], 1] as any);
+
+      await service.findAll({ page: 1, limit: 20 }, { id: 'hr-user-uuid', role: 'HR_ADMIN' });
+
+      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+      expect(capturedWhere().employee).toBeUndefined();
+    });
+  });
+
   // ── findMy: date range overlap filtering ─────────────────────────────────────
   // HOTFIX-LEAVE-ME-OVERLAP-001: leave.startDate <= queryEnd AND leave.endDate >= queryStart
 
@@ -289,13 +364,52 @@ describe('LeaveService', () => {
       expect(result).toMatchObject({ id: leaveId });
     });
 
-    it('returns the record to MANAGER without ownership check', async () => {
-      prisma.leaveRequest.findUnique.mockResolvedValue(mockLeaveRecord as any);
+    // ── MANAGER department scoping (HOTFIX-T089A-FOLLOWUP) ────────────────────
+
+    it('MANAGER reads a same-department subordinate\'s leave detail', async () => {
+      const record = {
+        ...mockLeaveRecord,
+        employee: { ...mockLeaveRecord.employee, id: employeeId, department: { id: 'dept-uuid-1', name: 'Eng' } },
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(record as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
 
       const result = await service.findOne(leaveId, userId, 'MANAGER');
 
       expect(result).toMatchObject({ id: leaveId });
-      expect(prisma.employee.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('MANAGER reading an outside-department leave detail throws ForbiddenException', async () => {
+      const record = {
+        ...mockLeaveRecord,
+        employee: { ...mockLeaveRecord.employee, id: employeeId, department: { id: 'dept-uuid-OTHER', name: 'Sales' } },
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(record as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+
+      await expect(service.findOne(leaveId, userId, 'MANAGER')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER reading their own leave detail through this route throws ForbiddenException', async () => {
+      const record = {
+        ...mockLeaveRecord,
+        employee: { ...mockLeaveRecord.employee, id: 'manager-emp-uuid', department: { id: 'dept-uuid-1', name: 'Eng' } },
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(record as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+
+      await expect(service.findOne(leaveId, userId, 'MANAGER')).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER with no managed department cannot read any leave detail', async () => {
+      const record = {
+        ...mockLeaveRecord,
+        employee: { ...mockLeaveRecord.employee, id: employeeId, department: { id: 'dept-uuid-1', name: 'Eng' } },
+      };
+      prisma.leaveRequest.findUnique.mockResolvedValue(record as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: null } as any);
+
+      await expect(service.findOne(leaveId, userId, 'MANAGER')).rejects.toThrow(ForbiddenException);
     });
 
     it('allows an employee to view their own leave request', async () => {
@@ -389,6 +503,44 @@ describe('LeaveService', () => {
 
       expect(result.status).toBe('APPROVED');
     });
+
+    // ── MANAGER approve scope + self-approval (HOTFIX-T089A) ──────────────────
+
+    it('MANAGER approves a same-department subordinate\'s leave', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-1' } as any);
+      prisma.leaveBalance.findUnique.mockResolvedValue(balance as any);
+      prisma.$transaction.mockImplementation((fn: any) => fn(txMock));
+
+      const result = await service.approve(leaveId, userId, 'MANAGER', {} as any);
+
+      expect(result.status).toBe('APPROVED');
+    });
+
+    it('MANAGER approving an outside-department employee\'s leave throws ForbiddenException', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-OTHER' } as any);
+
+      await expect(service.approve(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER approving their own leave throws ForbiddenException', async () => {
+      // approverEmp.id equals the leave record's employeeId — same department, but self.
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId, managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-1' } as any);
+
+      await expect(service.approve(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER with no managed department cannot approve', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: null } as any);
+
+      await expect(service.approve(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
+    });
   });
 
   // ── reject ─────────────────────────────────────────────────────────────────
@@ -422,6 +574,42 @@ describe('LeaveService', () => {
       prisma.leaveRequest.findUnique.mockResolvedValue({ ...pendingRecord, status: 'APPROVED' } as any);
 
       await expect(service.reject(leaveId, userId, 'HR_ADMIN', {} as any)).rejects.toThrow(BadRequestException);
+    });
+
+    // ── MANAGER reject scope + self-rejection (HOTFIX-T089A) ───────────────────
+
+    it('MANAGER rejects a same-department subordinate\'s leave', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-1' } as any);
+      prisma.leaveRequest.update.mockResolvedValue({ ...mockLeaveRecord, status: 'REJECTED' } as any);
+
+      const result = await service.reject(leaveId, userId, 'MANAGER', {} as any);
+
+      expect(result.status).toBe('REJECTED');
+    });
+
+    it('MANAGER rejecting an outside-department employee\'s leave throws ForbiddenException', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-OTHER' } as any);
+
+      await expect(service.reject(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER rejecting their own leave throws ForbiddenException', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: employeeId, managedDepartment: { id: 'dept-uuid-1' } } as any);
+      prisma.employee.findUnique.mockResolvedValue({ departmentId: 'dept-uuid-1' } as any);
+
+      await expect(service.reject(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('MANAGER with no managed department cannot reject', async () => {
+      prisma.leaveRequest.findUnique.mockResolvedValue(pendingRecord as any);
+      prisma.employee.findFirst.mockResolvedValue({ id: 'manager-emp-uuid', managedDepartment: null } as any);
+
+      await expect(service.reject(leaveId, userId, 'MANAGER', {} as any)).rejects.toThrow(ForbiddenException);
     });
   });
 

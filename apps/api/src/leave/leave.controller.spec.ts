@@ -58,11 +58,11 @@ describe('LeaveController', () => {
     expect(result).toEqual(mockPaginated);
   });
 
-  it('findAll delegates to service with query', async () => {
+  it('findAll delegates to service with query and current user', async () => {
     const query = {} as any;
-    const result = await controller.findAll(query);
+    const result = await controller.findAll(query, mockUser as any);
 
-    expect(service.findAll).toHaveBeenCalledWith(query);
+    expect(service.findAll).toHaveBeenCalledWith(query, mockUser);
     expect(result).toEqual(mockPaginated);
   });
 

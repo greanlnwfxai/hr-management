@@ -82,7 +82,8 @@ Login as SUPER_ADMIN or HR_ADMIN unless noted.
 **Leave admin**
 - [ ] `/leave` list loads for SUPER_ADMIN/HR_ADMIN with all-employee records visible
 - [ ] Leave balance / adjustment ledger UI is visible and usable for SUPER_ADMIN/HR_ADMIN (Vacation Balance Setup modal, `POST /leave-balances/:id/adjustments`)
-- [ ] **Known limitation — do not treat as a regression:** MANAGER role does **not** see team leave or Approve/Reject buttons on `/leave` (BUG-001/BUG-002, QA_T089; `HOTFIX-T089A` is queued, not shipped). If MANAGER suddenly *does* see these, that's a change worth flagging, not a bug.
+- [ ] `/leave` now loads for MANAGER too (`HOTFIX-T089A`, shipped): the list and Approve/Reject controls are visible, scoped server-side to the manager's own managed department. MANAGER cannot approve/reject their own leave request (self-approval is blocked with a 403). Leave Balance Admin panel stays SUPER_ADMIN/HR_ADMIN-only and must remain hidden for MANAGER — this did not change.
+- [ ] BUG-001/BUG-002 from QA_T089 are fixed by `HOTFIX-T089A` — do not re-report "MANAGER sees no team leave / no Approve-Reject buttons on `/leave`" as a bug going forward.
 
 **Off-site review** (`/attendance/offsite-review`, REQ-002F, closed v1.2.89; reviewer-name polish v1.2.92)
 - [ ] Route loads for SUPER_ADMIN/HR_ADMIN/MANAGER (department-scoped for MANAGER, no self-review — this is the one MANAGER RBAC path that IS fully shipped)
@@ -187,8 +188,8 @@ curl -sI http://172.16.2.31:3004/ | head -1
 ## I. Known deferred work
 
 - **Native attestation (SEC-ATT-005/006) — deferred.** Android Play Integrity and iOS App Attest/DeviceCheck both require a native app build (no PWA/WebKit entry point exists for either API). Both feasibility assessments recommend DEFER until a native-app decision is made. Do not treat their absence as a regression. See [SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md](SEC_ATT_005A_ANDROID_PLAY_INTEGRITY_FEASIBILITY.md) and [SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md](SEC_ATT_006A_IOS_APP_ATTEST_DEVICECHECK_FEASIBILITY.md).
-- **Open RBAC UI gaps from QA_T089, not yet fixed (`HOTFIX-T089A`/`HOTFIX-T089B`, paused/queued):**
-  - MANAGER cannot approve/reject or view team leave via the `/leave` UI, despite the API supporting department-scoped access (BUG-001/BUG-002)
+- **BUG-001/BUG-002 (MANAGER `/leave` UI scope) — fixed by `HOTFIX-T089A`.** MANAGER can now view and approve/reject department-scoped leave via the `/leave` UI. The audit that preceded the fix also found the backend `GET /leave` was not actually department-scoping MANAGER results (it was reachable org-wide, including via the mobile Manager Approval screen) and that `approve()`/`reject()` didn't block a manager approving/rejecting their own leave request — both are now fixed at the API layer (`leave.service.ts`), not just hidden in the UI. See [CTO_SUMMARY_HOTFIX_T089A_MANAGER_LEAVE_UI_SCOPE.md](CTO_SUMMARY_HOTFIX_T089A_MANAGER_LEAVE_UI_SCOPE.md). `GET /leave/:id` (single-record lookup) was **not** in scope for this hotfix and still returns any record to MANAGER without a department check — tracked as a follow-up, see that CTO Summary's "Remaining risks" section.
+- **Open RBAC UI gaps from QA_T089, not yet fixed (`HOTFIX-T089B`, queued):**
   - `/departments` and `/positions` render fully for any authenticated non-admin (CRUD buttons hidden only, no access-denied gate) (BUG-003)
   - `/employees` gives no explicit access-denied message for EMPLOYEE role (BUG-004)
   - These are **known, pre-existing** conditions — do not report them as new regressions unless behavior has changed from what's documented in [QA_T089_ADMIN_WEB_REAL_USAGE_RESULTS.md](QA_T089_ADMIN_WEB_REAL_USAGE_RESULTS.md).

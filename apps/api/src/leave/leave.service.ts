@@ -109,7 +109,7 @@ export class LeaveService {
     return this.findAll({ ...query, employeeId });
   }
 
-  async findAll(query: QueryLeaveRequestDto) {
+  async findAll(query: QueryLeaveRequestDto, currentUser?: { id: string; role: string }) {
     const { page = 1, limit = 20, employeeId, status, leaveType, startDate, endDate } = query;
     const skip = (page - 1) * limit;
 
@@ -119,6 +119,21 @@ export class LeaveService {
       ...(leaveType && { leaveType: leaveType as unknown as PrismaLeaveType }),
       ...this.buildDateFilter(startDate, endDate),
     };
+
+    // MANAGER scope: intersect with the manager's managed department so no
+    // query param (e.g. employeeId) can widen results beyond it. SUPER_ADMIN
+    // and HR_ADMIN are unaffected; findMy() never passes currentUser so the
+    // employee's own /leave/me scope is untouched by this branch.
+    if (currentUser?.role === UserRole.MANAGER) {
+      const managerEmp = await this.prisma.employee.findFirst({
+        where: { userId: currentUser.id },
+        select: { managedDepartment: { select: { id: true } } },
+      });
+      if (!managerEmp?.managedDepartment) {
+        return { data: [], meta: { total: 0, page, limit, totalPages: 0 } };
+      }
+      where.employee = { departmentId: managerEmp.managedDepartment.id };
+    }
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.leaveRequest.findMany({
@@ -141,7 +156,26 @@ export class LeaveService {
     });
     if (!record) throw new NotFoundException(`Leave request ${id} not found`);
 
-    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.HR_ADMIN || userRole === UserRole.MANAGER) {
+    if (userRole === UserRole.SUPER_ADMIN || userRole === UserRole.HR_ADMIN) {
+      return record;
+    }
+
+    // MANAGER detail read follows the same department scope as findAll/approve/reject
+    // (HOTFIX-T089A-FOLLOWUP): only same-department subordinate leave is readable here,
+    // never the manager's own leave (that goes through /leave/me) and never another
+    // department's, regardless of the requested id.
+    if (userRole === UserRole.MANAGER) {
+      const managerEmp = await this.prisma.employee.findFirst({
+        where: { userId },
+        select: { id: true, managedDepartment: { select: { id: true } } },
+      });
+      if (
+        !managerEmp?.managedDepartment ||
+        managerEmp.managedDepartment.id !== record.employee.department?.id ||
+        managerEmp.id === record.employee.id
+      ) {
+        throw new ForbiddenException('Access denied');
+      }
       return record;
     }
 
@@ -169,12 +203,18 @@ export class LeaveService {
     });
 
     if (userRole === UserRole.MANAGER) {
+      if (!approverEmp?.managedDepartment) {
+        throw new ForbiddenException('คุณสามารถอนุมัติลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
       const leaveEmployee = await this.prisma.employee.findUnique({
         where: { id: record.employeeId },
         select: { departmentId: true },
       });
-      if (!approverEmp?.managedDepartment || approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
+      if (approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
         throw new ForbiddenException('คุณสามารถอนุมัติลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
+      if (approverEmp.id === record.employeeId) {
+        throw new ForbiddenException('ไม่สามารถอนุมัติคำขอลาของตัวเองได้');
       }
     }
 
@@ -268,12 +308,18 @@ export class LeaveService {
     });
 
     if (userRole === UserRole.MANAGER) {
+      if (!approverEmp?.managedDepartment) {
+        throw new ForbiddenException('คุณสามารถปฏิเสธลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
       const leaveEmployee = await this.prisma.employee.findUnique({
         where: { id: record.employeeId },
         select: { departmentId: true },
       });
-      if (!approverEmp?.managedDepartment || approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
+      if (approverEmp.managedDepartment.id !== leaveEmployee?.departmentId) {
         throw new ForbiddenException('คุณสามารถปฏิเสธลาได้เฉพาะพนักงานในแผนกของคุณเท่านั้น');
+      }
+      if (approverEmp.id === record.employeeId) {
+        throw new ForbiddenException('ไม่สามารถปฏิเสธคำขอลาของตัวเองได้');
       }
     }
 

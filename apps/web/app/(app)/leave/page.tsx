@@ -10,7 +10,7 @@ import {
   type LeaveRequest, type LeaveBalance, type LeaveAdjustment, type Employee,
   type VacationSetupSuggest, type PaginatedResponse, ApiError,
 } from '@/lib/api';
-import { getUser, isAdmin } from '@/lib/auth';
+import { getUser, isAdmin, isAdminOrManager } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
 import EmptyState from '@/components/EmptyState';
@@ -60,6 +60,10 @@ const EMPTY_ADJUST: AdjustForm = { deltaDays: '', reason: '' };
 export default function LeavePage() {
   const { t } = useLanguage();
   const user = getUser();
+  // canManageLeave gates the org-wide/department leave list and approve/reject
+  // controls (SUPER_ADMIN, HR_ADMIN, MANAGER). admin stays isAdmin-only for the
+  // Leave Balance Admin panel, which must not widen to MANAGER.
+  const canManageLeave = isAdminOrManager(user);
   const admin = isAdmin(user);
 
   const [toast, setToast] = useState<ToastData | null>(null);
@@ -79,7 +83,7 @@ export default function LeavePage() {
     setLoading(true);
     setError(null);
     try {
-      const fetcher = admin ? getLeave : getMyLeave;
+      const fetcher = canManageLeave ? getLeave : getMyLeave;
       const data = await fetcher({ page, limit: 20 });
       setResult(data);
     } catch (err) {
@@ -96,7 +100,7 @@ export default function LeavePage() {
     } finally {
       setLoading(false);
     }
-  }, [page, admin]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, canManageLeave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadBalances() {
     try {
@@ -472,7 +476,7 @@ export default function LeavePage() {
                     {[
                       t('leave_col_employee'), t('leave_col_type'), t('leave_col_start'), t('leave_col_end'),
                       t('leave_col_days'), t('leave_col_status'), t('leave_col_reason'),
-                      ...(admin ? [t('leave_col_actions')] : []),
+                      ...(canManageLeave ? [t('leave_col_actions')] : []),
                     ].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{h}</th>
                     ))}
@@ -490,9 +494,11 @@ export default function LeavePage() {
                       <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{req.totalDays}</td>
                       <td className="px-4 py-3">{statusBadge(req.status)}</td>
                       <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{req.reason ?? '—'}</td>
-                      {admin && (
+                      {canManageLeave && (
                         <td className="px-4 py-3">
-                          {req.status === 'PENDING' && (
+                          {/* Defense-in-depth only: hides the buttons on the caller's own row.
+                              The server is the real boundary (self-approval throws ForbiddenException). */}
+                          {req.status === 'PENDING' && !(user?.employeeId && req.employee?.id === user.employeeId) && (
                             <div className="flex gap-1">
                               <button onClick={() => handleApprove(req.id)} className="rounded bg-green-600 px-2 py-1 text-xs text-white hover:bg-green-700">{t('leave_approve')}</button>
                               <button onClick={() => handleReject(req.id)} className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700">{t('leave_reject')}</button>

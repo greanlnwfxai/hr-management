@@ -63,18 +63,21 @@ export class LeaveController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
-  @ApiOperation({ summary: 'All leave requests (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
+  @ApiOperation({ summary: 'All leave requests (SUPER_ADMIN, HR_ADMIN, MANAGER — MANAGER scoped to managed department)' })
   @ApiResponse({ status: 200, description: 'Paginated leave request list' })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
-  findAll(@Query() query: QueryLeaveRequestDto) {
-    return this.leave.findAll(query);
+  findAll(
+    @Query() query: QueryLeaveRequestDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.leave.findAll(query, user);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get leave request by ID (owner or admin)' })
+  @ApiOperation({ summary: 'Get leave request by ID (owner, admin, or department-scoped manager)' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request record' })
-  @ApiResponse({ status: 403, description: 'Not the owner and not an admin' })
+  @ApiResponse({ status: 403, description: 'Not the owner, not an admin, and not the managing manager for this employee' })
   @ApiResponse({ status: 404, description: 'Leave request not found' })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
