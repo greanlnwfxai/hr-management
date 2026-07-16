@@ -60,6 +60,10 @@ export function mockPrisma() {
     offSiteRequest: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      count: jest.fn(),
     },
     geofenceConfig: {
       findUnique: jest.fn(),

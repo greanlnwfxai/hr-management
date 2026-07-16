@@ -20,6 +20,8 @@ Scope: Admin Web (`apps/web`) and Mobile/PWA "STEP Connect" (`apps/mobile`) post
 
 ## ⚠ SECURITY FINDING (not a polish item — do not fold into the backlog below)
 
+> **RESOLVED by `SEC-OFFSITE-001`** — see [docs/CTO_SUMMARY_SEC_OFFSITE_001_MANAGER_SCOPE.md](CTO_SUMMARY_SEC_OFFSITE_001_MANAGER_SCOPE.md). `findAll()`/`findOne()` in `off-site.service.ts` now intersect the MANAGER's managed department (mirroring `leave.service.ts`), and `approve()`/`reject()` now also block self-review. The finding below is left as-written for audit-trail accuracy; it describes the pre-fix state.
+
 **`GET /off-site` (list) and `GET /off-site/:id` (detail) are not department-scoped for the MANAGER role**, unlike the equivalent `GET /leave` / `GET /leave/:id` endpoints, which were scoped in `HOTFIX-T089A` (`v1.2.96`).
 
 - **Verified in code:** `apps/api/src/off-site/off-site.service.ts` — `findAll()` (lines 98–118) builds its Prisma `where` clause from query params only (`employeeId`, `status`, `date`); it never intersects the caller's managed department. `findOne()` (lines 121–140) returns any record to `SUPER_ADMIN`, `HR_ADMIN`, **or `MANAGER`** with no department comparison at all (contrast `apps/api/src/leave/leave.service.ts:163–174`, which explicitly checks `managerEmp.managedDepartment.id !== record.employee.department?.id` for MANAGER).
@@ -167,11 +169,11 @@ Only two test files exist in `apps/mobile`, both pure-function/utility level (`l
 
 ## D. Prioritized Polish Backlog
 
-Security item (`SEC-OFFSITE-001`) is listed for completeness but is **not** a polish task — see the boxed finding above.
+Security item (`SEC-OFFSITE-001`) is listed for completeness but is **not** a polish task — see the boxed finding above. **Status: RESOLVED** — see [docs/CTO_SUMMARY_SEC_OFFSITE_001_MANAGER_SCOPE.md](CTO_SUMMARY_SEC_OFFSITE_001_MANAGER_SCOPE.md).
 
 | ID | Title | App | Value | Risk | Type | Redeploy? | Suggested verification |
 |---|---|---|---|---|---|---|---|
-| SEC-OFFSITE-001 | Department-scope `GET /off-site` list + detail for MANAGER, mirroring `HOTFIX-T089A` | API | — (security, not polish) | Medium | API+frontend (backend fix; frontend already correct once scoped) | Yes | New Jest unit tests mirroring `leave.service.spec.ts`'s MANAGER-scoping cases; `./scripts/security-review.sh` |
+| SEC-OFFSITE-001 | ~~Department-scope~~ **DONE** — `GET /off-site` list + detail scoped to MANAGER's managed department, mirroring `HOTFIX-T089A`; approve/reject self-review also blocked | API | — (security, not polish) | Medium | API+frontend (backend fix; frontend already correct once scoped) | Yes | New Jest unit tests mirroring `leave.service.spec.ts`'s MANAGER-scoping cases; `./scripts/security-review.sh` |
 | UX-POLISH-001 | Mobile Home: surface `useHomeSummaries` error state (error+retry banner instead of silent zeros); remove or wire the currently-discarded `useDashboard()` fetch | Mobile | High | Low | frontend-only | Yes (mobile bundle) | Manual QA on real device/PWA; consider a minimal RTL/Jest render test if component testing is introduced |
 | UX-POLISH-002 | Admin Web: consolidate the 4 access-denied variants into `AccessDeniedCard`; fix `ErrorState`'s hardcoded-English 403 branch to route through `t()` | Admin Web | Medium | Low | frontend-only | Yes (web bundle) | Extend `access-denied.spec.ts` to cover `/attendance/offsite-review`, `/audit-logs`, `/attendance/geofence-settings`, both languages |
 | UX-POLISH-003 | Admin Web: i18n retrofit of `/offsite` page (route hardcoded Thai through `t()`, use `formatDate(iso, lang)` instead of raw ISO split) + add `offsite.spec.ts` e2e coverage | Admin Web | Medium | Low | frontend-only | Yes (web bundle) | New e2e spec, both languages; visual check against the already-done `offsite-review` pattern |

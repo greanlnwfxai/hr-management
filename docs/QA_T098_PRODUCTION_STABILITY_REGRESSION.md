@@ -157,6 +157,11 @@ Test on the deployed mobile build (`https://mobilehr.eds-center.com` or LAN `172
 - [ ] Admin off-site review workflow: approve/reject from `/attendance/offsite-review` updates status and is reflected on next list load
 - [ ] `reviewedBy` displays a resolved name after review, not a raw UUID
 - [ ] **Privacy rule, both off-site review and risk review:** no raw GPS coordinates are ever rendered in the Admin Web UI — only distance/accuracy or categorical risk reason codes
+- [ ] **MANAGER department scope (SEC-OFFSITE-001, this task):** a MANAGER account visiting `/offsite` (`GET /off-site`) sees only off-site requests from employees in their own managed department, never other departments' requests
+- [ ] MANAGER `GET /off-site/:id` on an outside-department record returns 403, not the record
+- [ ] MANAGER cannot approve/reject their own off-site request (self-review is blocked, same as leave `HOTFIX-T089A`)
+- [ ] MANAGER cannot approve/reject an outside-department off-site request
+- [ ] SUPER_ADMIN/HR_ADMIN off-site list/detail/approve/reject remain org-wide and unaffected by the MANAGER scoping change
 
 ---
 

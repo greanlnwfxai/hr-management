@@ -61,10 +61,13 @@ export class OffSiteController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.HR_ADMIN, UserRole.MANAGER)
-  @ApiOperation({ summary: 'All off-site requests (SUPER_ADMIN, HR_ADMIN, MANAGER)' })
+  @ApiOperation({ summary: 'All off-site requests (SUPER_ADMIN, HR_ADMIN, MANAGER — MANAGER scoped to managed department)' })
   @ApiForbiddenResponse({ description: 'Insufficient role' })
-  findAll(@Query() query: QueryOffSiteRequestDto) {
-    return this.offSite.findAll(query);
+  findAll(
+    @Query() query: QueryOffSiteRequestDto,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    return this.offSite.findAll(query, user);
   }
 
   @Get(':id')
