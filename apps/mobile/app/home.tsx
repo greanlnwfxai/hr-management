@@ -253,6 +253,7 @@ export default function HomeScreen() {
     overtime,
     monthAttendance,
     approvedLeave,
+    error: summaryError,
     refresh: summaryRefresh,
   } = useHomeSummaries();
   const [mapModalVisible, setMapModalVisible] = useState(false);
@@ -641,89 +642,109 @@ export default function HomeScreen() {
             <View style={styles.dashSectionHeader}>
               <Text style={styles.dashSectionTitle}>แดชบอร์ด</Text>
             </View>
-            <Text style={styles.dashSubtitle}>
-              สรุปการเข้าทำงาน (เดือนนี้ - ปัจจุบัน)
-            </Text>
 
-            {/* ── Horizontal stat cards ────────────────────────────────── */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cardScrollContent}
-              style={styles.cardScrollView}
-              decelerationRate="fast"
-              snapToAlignment="start"
-            >
-              <AttendanceStatCard
-                label="ปฏิบัติงาน"
-                valueMinutes={stats.workMinutes}
-                totalMinutes={stats.totalMinutes}
-                color="#1a56db"
-              />
-              <AttendanceStatCard
-                label="เข้าสาย"
-                valueMinutes={stats.lateMinutes}
-                totalMinutes={stats.totalMinutes}
-                color="#1a56db"
-              />
-              <AttendanceStatCard
-                label="ออกก่อน"
-                valueMinutes={stats.earlyOutMinutes}
-                totalMinutes={stats.totalMinutes}
-                color="#1a56db"
-              />
-              <AttendanceStatCard
-                label="ขาดงาน"
-                valueMinutes={stats.absentMinutes}
-                totalMinutes={stats.totalMinutes}
-                color="#1a56db"
-              />
-              <AttendanceStatCard
-                label="ลางาน"
-                valueMinutes={0}
-                totalMinutes={stats.totalMinutes}
-                color="#1a56db"
-              />
-            </ScrollView>
+            {summaryLoadState === 'error' ? (
+              <View style={styles.summaryErrorBox}>
+                <Text style={styles.summaryErrorText}>
+                  {summaryError ?? 'ไม่สามารถโหลดข้อมูลสรุปได้'}
+                </Text>
+                <Text style={styles.summaryErrorSubText}>กรุณาลองใหม่อีกครั้ง</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.summaryRetryBtn, pressed && styles.pressed]}
+                  onPress={summaryRefresh}
+                  accessibilityRole="button"
+                  accessibilityLabel="ลองใหม่"
+                >
+                  <Text style={styles.summaryRetryBtnText}>ลองใหม่</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.dashSubtitle}>
+                  สรุปการเข้าทำงาน (เดือนนี้ - ปัจจุบัน)
+                </Text>
 
-            <View style={styles.summarySectionHeader}>
-              <Text style={styles.summarySectionTitle}>สรุปการลา (ปีนี้)</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cardScrollContent}
-              style={styles.cardScrollView}
-              decelerationRate="fast"
-              snapToAlignment="start"
-            >
-              {leaveCards.map((card) => (
-                <LeaveSummaryCard
-                  key={card.key}
-                  title={card.title}
-                  availableDays={card.availableDays}
-                  totalDays={card.totalDays}
-                  usedDays={card.usedDays}
-                />
-              ))}
-            </ScrollView>
+                {/* ── Horizontal stat cards ────────────────────────────────── */}
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.cardScrollContent}
+                  style={styles.cardScrollView}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                >
+                  <AttendanceStatCard
+                    label="ปฏิบัติงาน"
+                    valueMinutes={stats.workMinutes}
+                    totalMinutes={stats.totalMinutes}
+                    color="#1a56db"
+                  />
+                  <AttendanceStatCard
+                    label="เข้าสาย"
+                    valueMinutes={stats.lateMinutes}
+                    totalMinutes={stats.totalMinutes}
+                    color="#1a56db"
+                  />
+                  <AttendanceStatCard
+                    label="ออกก่อน"
+                    valueMinutes={stats.earlyOutMinutes}
+                    totalMinutes={stats.totalMinutes}
+                    color="#1a56db"
+                  />
+                  <AttendanceStatCard
+                    label="ขาดงาน"
+                    valueMinutes={stats.absentMinutes}
+                    totalMinutes={stats.totalMinutes}
+                    color="#1a56db"
+                  />
+                  <AttendanceStatCard
+                    label="ลางาน"
+                    valueMinutes={0}
+                    totalMinutes={stats.totalMinutes}
+                    color="#1a56db"
+                  />
+                </ScrollView>
 
-            <View style={styles.summarySectionHeader}>
-              <Text style={styles.summarySectionTitle}>สรุปการทำงานล่วงเวลา (เดือนนี้)</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.cardScrollContent}
-              style={styles.cardScrollView}
-              decelerationRate="fast"
-              snapToAlignment="start"
-            >
-              <OvertimeSummaryCard
-                overtimeMinutes={overtime.overtimeMinutes}
-                totalWorkMinutes={overtime.totalWorkMinutes}
-              />
-            </ScrollView>
+                <View style={styles.summarySectionHeader}>
+                  <Text style={styles.summarySectionTitle}>สรุปการลา (ปีนี้)</Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.cardScrollContent}
+                  style={styles.cardScrollView}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                >
+                  {leaveCards.map((card) => (
+                    <LeaveSummaryCard
+                      key={card.key}
+                      title={card.title}
+                      availableDays={card.availableDays}
+                      totalDays={card.totalDays}
+                      usedDays={card.usedDays}
+                    />
+                  ))}
+                </ScrollView>
+
+                <View style={styles.summarySectionHeader}>
+                  <Text style={styles.summarySectionTitle}>สรุปการทำงานล่วงเวลา (เดือนนี้)</Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.cardScrollContent}
+                  style={styles.cardScrollView}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                >
+                  <OvertimeSummaryCard
+                    overtimeMinutes={overtime.overtimeMinutes}
+                    totalWorkMinutes={overtime.totalWorkMinutes}
+                  />
+                </ScrollView>
+              </>
+            )}
           </>
         )}
       </ScrollView>
@@ -936,6 +957,28 @@ const styles = StyleSheet.create({
   },
   dashSectionTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   dashSubtitle: { fontSize: 13, color: '#6b7280', paddingHorizontal: 2, marginTop: -10 },
+
+  // Summary load error (แดชบอร์ด / สรุปการลา / สรุปการทำงานล่วงเวลา)
+  summaryErrorBox: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    alignItems: 'center',
+  },
+  summaryErrorText: { fontSize: 13, color: '#dc2626', textAlign: 'center' },
+  summaryErrorSubText: { fontSize: 12, color: '#b91c1c', textAlign: 'center' },
+  summaryRetryBtn: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  summaryRetryBtnText: { fontSize: 13, fontWeight: '500', color: '#1a56db' },
 
   // Horizontal card scroller
   cardScrollView: { marginHorizontal: -16 },

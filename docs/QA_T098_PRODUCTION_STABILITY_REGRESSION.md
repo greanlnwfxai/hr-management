@@ -130,6 +130,12 @@ Test on the deployed mobile build (`https://mobilehr.eds-center.com` or LAN `172
 - [ ] Off-site check-out requires a note (≥3 chars) — this became required in v1.2.88, was previously optional
 - [ ] Submission goes through without error (confirms `timezoneOffsetMinutes`/nonce are included — a prior bug silently omitted these when screens bypassed the shared hook)
 
+**Home summary error/retry state** (UX-POLISH-001 — must show an explicit error, never silent zeros)
+- [ ] Normal condition: Home's แดชบอร์ด/สรุปการลา/สรุปการทำงานล่วงเวลา stat cards load with real data (no error card shown)
+- [ ] Simulate a failed summary fetch (e.g. disconnect network/airplane mode right after login, or briefly stop the `api` container) then open/refresh Home: a Thai error card ("ไม่สามารถโหลดข้อมูลสรุปได้" / "กรุณาลองใหม่อีกครั้ง") appears in place of the stat cards — **not** zeroed-looking stat cards presented as real data
+- [ ] The error card's "ลองใหม่" button, tapped after restoring connectivity, successfully reloads real data and the error card disappears
+- [ ] No stack trace, raw HTTP status/URL, or token ever appears in the error card text
+
 **General**
 - [ ] No blank white screen at any point during normal navigation
 - [ ] No visible React error overlay / minified error number (React error #527 was a real prior production incident — HOTFIX-MOBILE-REACT-MISMATCH-001, v1.2.86 — caused by a `react`/`react-dom` version mismatch)

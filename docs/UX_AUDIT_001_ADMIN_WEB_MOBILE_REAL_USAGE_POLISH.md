@@ -4,6 +4,8 @@
 
 Scope: Admin Web (`apps/web`) and Mobile/PWA "STEP Connect" (`apps/mobile`) post-`v1.2.97-access-denied-ux`. Method: static code inspection (own reads + three parallel code-search passes), cross-checked against `docs/QA_T098_*`, `docs/QA_T089_*`, `docs/QA_T086_*`, recent CTO summaries, and `HR-Knowledge/01-START-HERE/Current Status.md`. No live environment was driven (see Section H).
 
+> **Status update:** `UX-POLISH-001` (Mobile Home silent error state — Section F, and the table row in Section D) is **RESOLVED**. See `docs/CTO_SUMMARY_UX_POLISH_001_MOBILE_HOME_ERROR_STATE.md`. All other findings in this audit remain open/unaddressed as of this update.
+
 ---
 
 ## A. Executive Summary
