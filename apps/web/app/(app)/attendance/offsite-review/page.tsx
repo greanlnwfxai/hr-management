@@ -13,6 +13,7 @@ import {
 import { getUser, isAdminOrManager } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
@@ -181,13 +182,13 @@ export default function OffsiteReviewPage() {
 
   if (!isAdminOrManager(user)) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <p className="text-lg font-semibold text-zinc-700 dark:text-zinc-300">{t('offsite_review_access_denied_title')}</p>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t('offsite_review_access_denied_detail')}</p>
-        <Link href="/attendance" className="mt-4 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-          {t('offsite_review_back_link')}
-        </Link>
-      </div>
+      <AccessDeniedCard
+        testid="access-denied-offsite-review"
+        backHref="/attendance"
+        title={t('offsite_review_access_denied_title')}
+        description={t('offsite_review_access_denied_detail')}
+        backLabel={t('offsite_review_back_link')}
+      />
     );
   }
 

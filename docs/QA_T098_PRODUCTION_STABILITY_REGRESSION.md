@@ -68,6 +68,13 @@ Login as SUPER_ADMIN or HR_ADMIN unless noted.
 - [ ] Valid login redirects to `/dashboard`
 - [ ] Dashboard KPI cards load without error
 
+**Access-denied consistency** (`UX-POLISH-002`, consolidated onto the shared `AccessDeniedCard`)
+- [ ] EMPLOYEE hitting any of `/departments`, `/positions`, `/employees`, `/attendance/risk-reviews`, `/audit-logs`, `/attendance/geofence-settings` sees the same shared card UI (icon-free, title + detail + "back to dashboard" link), not a bare div, a raw `ErrorState` 403 box, or a route-specific hand-rolled block
+- [ ] Card copy is localized and follows the language toggle live — switch EN/TH while the card is visible and confirm the text updates without a reload
+- [ ] `/attendance/offsite-review` denial (EMPLOYEE only; MANAGER is authorized — SEC-OFFSITE-001) uses the shared card with its route-specific copy and links back to `/attendance`, not `/dashboard`
+- [ ] No admin-only table, filter, or action button is present in the DOM (inspect, don't just eyeball) while any of the above cards is shown
+- [ ] `/attendance/risk-reviews` and `/audit-logs` no longer render `ErrorState`'s 403 branch for a non-admin route visit — that variant is now inline-error-only (e.g. a sub-fetch failing inside an otherwise-authorized page), and even there its copy is localized, not hardcoded English
+
 **Employees**
 - [ ] `/employees` list loads and search/filter returns results
 - [ ] Fixed by `ACCESS-UX-001` (was BUG-004, QA_T089): EMPLOYEE role hitting `/employees` directly now sees an explicit "access denied" card (Thai/English, `access_denied_title`/`access_denied_detail` i18n keys) with a safe link back to `/dashboard`, instead of an empty/loading state or a silent redirect. `GET /employees` backend RBAC unchanged — it was already role-gated to SUPER_ADMIN/HR_ADMIN/MANAGER; MANAGER's team-scoped view is unaffected.

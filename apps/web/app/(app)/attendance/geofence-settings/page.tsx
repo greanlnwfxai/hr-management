@@ -5,6 +5,7 @@ import { getGeofenceConfig, updateGeofenceConfig, type GeofenceConfig, ApiError 
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import Toast, { type ToastData } from '@/components/Toast';
 import { useLanguage } from '@/hooks/useLanguage';
 
@@ -55,11 +56,7 @@ export default function GeofenceSettingsPage() {
   }, [adminUser, load]);
 
   if (!adminUser) {
-    return (
-      <div className="flex items-center justify-center h-64 text-zinc-500 dark:text-zinc-400 text-sm">
-        {t('error_access_denied')}
-      </div>
-    );
+    return <AccessDeniedCard testid="access-denied-geofence-settings" />;
   }
 
   async function handleSubmit(e: React.FormEvent) {

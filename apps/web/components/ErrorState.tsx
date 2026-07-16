@@ -1,3 +1,7 @@
+'use client';
+
+import { useLanguage } from '@/hooks/useLanguage';
+
 type Props = {
   message?: string;
   status?: number;
@@ -6,15 +10,17 @@ type Props = {
 };
 
 export default function ErrorState({ message = 'Something went wrong.', status, onRetry, testid }: Props) {
+  const { t } = useLanguage();
+
   if (status === 403) {
     return (
       <div
         data-testid={testid ?? 'error-state'}
         className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-900/20 p-6 text-center"
       >
-        <p className="font-medium text-amber-800 dark:text-amber-300">Access Denied</p>
+        <p className="font-medium text-amber-800 dark:text-amber-300">{t('error_access_denied')}</p>
         <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
-          You don't have permission to view this resource.
+          {t('error_access_denied_detail')}
         </p>
       </div>
     );

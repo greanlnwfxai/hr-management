@@ -11,6 +11,7 @@ import {
 import { getUser, isAdmin } from '@/lib/auth';
 import LoadingState from '@/components/LoadingState';
 import ErrorState from '@/components/ErrorState';
+import AccessDeniedCard from '@/components/AccessDeniedCard';
 import EmptyState from '@/components/EmptyState';
 import Modal from '@/components/Modal';
 import Toast, { type ToastData } from '@/components/Toast';
@@ -199,12 +200,7 @@ export default function RiskReviewsPage() {
   const hasFilters = Object.values(applied).some(Boolean);
 
   if (!admin) {
-    return (
-      <div>
-        <h1 className="mb-6 text-xl font-semibold text-zinc-900 dark:text-zinc-50">{t('page_risk_reviews')}</h1>
-        <ErrorState status={403} />
-      </div>
-    );
+    return <AccessDeniedCard testid="access-denied-risk-reviews" />;
   }
 
   return (
